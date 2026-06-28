@@ -304,8 +304,62 @@ export async function run(ctx) {
 
 ### 返回值
 
-- `run` 的返回值会作为 session.result 展示
-- 抛出 Error 则标记为 failed
+- `run` 的返回值会写入 `session.result`，并在详情 **运行参数** Tab 的「运行结果」区域展示
+- 抛出 `Error` 则标记为 `failed`，不会更新成功运行的结果
+- UI 展示的是该脚本**最近一次成功运行**的返回值（按 `finishedAt` 取最新一条 `status === 'success'` 的 session）
+
+#### 展示格式
+
+| 返回值类型 | UI 展示方式 |
+|-----------|------------|
+| 对象、数组 | 格式化为 JSON（缩进 2 空格） |
+| 字符串 | 原样文本 |
+| `null` / `undefined` | 不显示「运行结果」区块 |
+
+#### 产物目录
+
+若希望 UI 显示「产物目录」快捷入口（含路径与「打开」按钮），请在返回值对象中提供**本机绝对路径**字符串。Autoforge 按下列字段名**优先级**读取，取第一个非空字符串：
+
+1. `outputDir`（推荐）
+2. `outputPath`
+3. `artifactDir`
+4. `artifactsDir`
+5. `exportDir`
+6. `savedTo`
+
+**显示条件：**
+
+- 返回值必须是**普通对象**（不能是数组、字符串、数字等）
+- 对应字段值为非空字符串（空白字符串视为无效）
+- 仅**成功**运行的 session 参与；失败或停止的运行不会触发
+
+**示例：**
+
+```javascript
+import { mkdirSync, writeFileSync } from 'fs'
+import { join } from 'path'
+
+export async function run(ctx) {
+  const outDir = join(ctx.sdk.paths.scriptDir, 'output', new Date().toISOString().slice(0, 19).replace(/:/g, '-'))
+  mkdirSync(outDir, { recursive: true })
+  writeFileSync(join(outDir, 'result.json'), JSON.stringify({ ok: true }))
+
+  ctx.log('INFO', `已写入 ${outDir}`)
+
+  return {
+    outputDir: outDir,
+    files: ['result.json']
+  }
+}
+```
+
+上例中 `outputDir` 会出现在「产物目录」区域；完整返回值（含 `files` 等字段）仍会在下方 JSON 区域展示。
+
+**不会显示产物目录的情况：**
+
+- `run()` 无返回值，或返回字符串 / 数组 / 原始值
+- 返回对象中未包含上述字段，或路径为空字符串
+- 最近一次运行失败（即使更早的成功记录仍保留，UI 仍展示那次成功的 result）
 
 ### 取消
 
