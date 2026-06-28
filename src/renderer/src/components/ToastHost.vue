@@ -15,19 +15,22 @@ const styleMap = {
     border: 'border-red-500/25',
     bg: 'bg-red-500/10',
     icon: 'text-red-400',
-    title: 'text-red-300'
+    title: 'text-red-300',
+    action: 'text-red-300 hover:text-red-200'
   },
   success: {
     border: 'border-emerald-500/25',
     bg: 'bg-emerald-500/10',
     icon: 'text-emerald-400',
-    title: 'text-emerald-300'
+    title: 'text-emerald-300',
+    action: 'text-emerald-300 hover:text-emerald-200'
   },
   info: {
     border: 'border-blue-500/25',
     bg: 'bg-blue-500/10',
     icon: 'text-blue-400',
-    title: 'text-blue-300'
+    title: 'text-blue-300',
+    action: 'text-blue-300 hover:text-blue-200'
   }
 } as const
 </script>
@@ -68,6 +71,15 @@ const styleMap = {
             <p class="mt-1 text-[12px] sb-text-muted leading-relaxed whitespace-pre-wrap break-words max-h-32 overflow-y-auto">
               {{ toast.message }}
             </p>
+            <button
+              v-if="toast.action"
+              type="button"
+              class="mt-2 text-[12px] font-medium transition-colors"
+              :class="styleMap[toast.type].action"
+              @click="toast.action!.onClick(); dismissToast(toast.id)"
+            >
+              {{ toast.action.label }}
+            </button>
           </div>
           <button
             type="button"

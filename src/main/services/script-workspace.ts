@@ -17,6 +17,7 @@ import {
   AUTOFORGE_MANIFEST_VERSION,
   LEGACY_MANIFEST_FILENAME,
   MANIFEST_FILENAME,
+  normalizeAutoforgeManifestVersion,
   validateManifest,
   type ScriptIcon,
   type ScriptManifest
@@ -93,6 +94,30 @@ export class ScriptWorkspace {
     return result.manifest
   }
 
+  /** 读取 manifest，并尝试修复常见的 autoforge / name 字段问题 */
+  readManifestRelaxed(scriptDir: string): ScriptManifest {
+    try {
+      return this.readManifest(scriptDir)
+    } catch {
+      const manifestPath = resolveManifestPath(scriptDir)
+      const raw = JSON.parse(readFileSync(manifestPath, UTF8))
+      if (raw && typeof raw === 'object') {
+        const obj = raw as Record<string, unknown>
+        if (obj.name != null && typeof obj.name !== 'string') {
+          obj.name = String(obj.name)
+        }
+        const autoforgeVersion = normalizeAutoforgeManifestVersion(obj.autoforge ?? obj.scriptbox)
+        if (autoforgeVersion) {
+          obj.autoforge = autoforgeVersion
+          delete obj.scriptbox
+        }
+      }
+      const result = validateManifest(raw)
+      if (!result.ok) throw new Error(result.error)
+      return result.manifest
+    }
+  }
+
   manifestToMeta(
     scriptId: string,
     manifest: ScriptManifest,
@@ -132,12 +157,13 @@ export class ScriptWorkspace {
       browser?: { headless?: boolean }
     }
   ): ScriptManifest {
-    const manifest = this.readManifest(script.workspacePath)
+    const manifest = this.readManifestRelaxed(script.workspacePath)
     if (fields.name !== undefined) {
       const trimmed = fields.name.trim()
       if (!trimmed) throw new Error('脚本名称不能为空')
       manifest.name = trimmed
     }
+    manifest.autoforge = manifest.autoforge ?? AUTOFORGE_MANIFEST_VERSION
     if (fields.icon !== undefined) manifest.icon = fields.icon
     if (fields.category !== undefined) manifest.category = fields.category
     if (fields.categoryLabel !== undefined) manifest.categoryLabel = fields.categoryLabel

@@ -14,6 +14,7 @@ import SettingsPanel from './components/SettingsPanel.vue'
 import DevGuidePanel from './components/DevGuidePanel.vue'
 import ExecutionHistoryPanel from './components/ExecutionHistoryPanel.vue'
 import CategoryManagerModal from './components/CategoryManagerModal.vue'
+import RunResultModal from './components/RunResultModal.vue'
 import ToastHost from './components/ToastHost.vue'
 import ConfirmDialogHost from './components/ConfirmDialogHost.vue'
 import PromptDialogHost from './components/PromptDialogHost.vue'
@@ -58,12 +59,32 @@ const runner = useScriptRunner(
   () => {
     void refresh()
   },
-  (scriptId) => filteredScripts.value.find((s) => s.id === scriptId)?.name
+  (scriptId) => filteredScripts.value.find((s) => s.id === scriptId)?.name,
+  (scriptId, sessionId) => openRunResultModal(scriptId, sessionId)
 )
+
+const runResultModalOpen = ref(false)
+const runResultModalScriptId = ref<string | null>(null)
+const runResultModalSessionId = ref<string | null>(null)
+
+const runResultModalScript = computed(
+  () => filteredScripts.value.find((s) => s.id === runResultModalScriptId.value) ?? null
+)
+
+const runResultModalSession = computed(() => {
+  const sessionId = runResultModalSessionId.value
+  if (sessionId) {
+    return runner.sessions.value.find((s) => s.id === sessionId) ?? null
+  }
+  const scriptId = runResultModalScriptId.value
+  if (!scriptId) return null
+  return runner.lastSuccessSessionForScript(scriptId) ?? null
+})
 
 const selectedScriptId = ref<string | null>(null)
 const detailVisible = ref(true)
 const detailInitialTab = ref<'detail' | 'params' | 'edit' | 'log' | 'config'>('detail')
+const detailTabRequest = ref(0)
 const logConsoleMode = ref<LogConsoleDisplayMode>('hidden')
 const logConsoleActiveSessionId = ref<string | undefined>()
 const trackedSessionIds = ref<string[]>([])
@@ -143,20 +164,37 @@ watch(
   }
 )
 
+function navigateDetailTab(tab: 'detail' | 'params' | 'edit' | 'log' | 'config'): void {
+  detailInitialTab.value = tab
+  detailTabRequest.value += 1
+}
+
+function openRunResultModal(scriptId: string, sessionId?: string): void {
+  runResultModalScriptId.value = scriptId
+  runResultModalSessionId.value =
+    sessionId ?? runner.lastSuccessSessionForScript(scriptId)?.id ?? null
+  runResultModalOpen.value = true
+}
+
+function closeRunResultModal(): void {
+  runResultModalOpen.value = false
+  runResultModalScriptId.value = null
+  runResultModalSessionId.value = null
+}
+
 function selectScript(script: ScriptItem, tab: 'detail' | 'params' | 'edit' | 'log' | 'config' = 'detail'): void {
   selectedScriptId.value = script.id
-  detailInitialTab.value = tab === 'edit' ? 'detail' : tab
+  navigateDetailTab(tab)
   detailVisible.value = true
-  if (tab === 'edit') {
-    requestAnimationFrame(() => {
-      detailInitialTab.value = 'edit'
-    })
-  }
+}
+
+function viewRunResult(scriptId: string, sessionId?: string): void {
+  openRunResultModal(scriptId, sessionId)
 }
 
 function viewScriptLog(script: ScriptItem): void {
   selectedScriptId.value = script.id
-  detailInitialTab.value = 'log'
+  navigateDetailTab('log')
   detailVisible.value = true
   const sessionId = script.activeSessionId ?? runner.sessions.value.find((s) => s.scriptId === script.id)?.id
   if (sessionId) {
@@ -168,7 +206,7 @@ function viewScriptLog(script: ScriptItem): void {
 
 async function handleStart(scriptId: string): Promise<void> {
   selectedScriptId.value = scriptId
-  detailInitialTab.value = 'params'
+  navigateDetailTab('params')
   detailVisible.value = true
   const session = await runner.start(scriptId)
   if (session) {
@@ -347,17 +385,25 @@ onUnmounted(() => {
             :script="selectedScript"
             :runner="runner"
             :initial-tab="detailInitialTab"
+            :tab-request="detailTabRequest"
             :category-definitions="categoryDefinitions"
             @close="detailVisible = false"
             @refresh="refresh()"
             @delete="handleDelete(selectedScript.id)"
             @keep-script="selectedScriptId = $event"
             @view-log="openLogConsoleNormal()"
+            @navigate-tab="navigateDetailTab"
           />
         </div>
       </template>
     </div>
     <StatusBar :running-count="stats.running" />
+    <RunResultModal
+      :open="runResultModalOpen"
+      :script="runResultModalScript"
+      :session="runResultModalSession"
+      @close="closeRunResultModal"
+    />
     <ToastHost />
     <ConfirmDialogHost />
     <PromptDialogHost />

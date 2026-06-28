@@ -219,7 +219,7 @@ export function registerIpcHandlers(getWindow: () => BrowserWindow | null): void
     IPC.SCRIPTS_UPDATE_META,
     (_event, id: string, patch: { name?: string; icon?: ScriptIcon; category?: string; categoryLabel?: string; browser?: { headless?: boolean } }) => {
       const script = scriptRegistry.getById(id)
-      if (!script) return null
+      if (!script) throw new Error('脚本不存在')
       const definitions = scriptStore.getCategoryDefinitions()
       let categoryLabel = patch.categoryLabel
       if (patch.category !== undefined && categoryLabel === undefined) {
@@ -235,7 +235,8 @@ export function registerIpcHandlers(getWindow: () => BrowserWindow | null): void
       })
       const metaPatch = scriptWorkspace.manifestToMeta(id, manifest, definitions)
       const updated = scriptRegistry.update(id, metaPatch)
-      return updated ? enrichScriptItem(updated, runner.listSessions()) : null
+      if (!updated) throw new Error('无法更新脚本元数据')
+      return enrichScriptItem(updated, runner.listSessions())
     }
   )
 

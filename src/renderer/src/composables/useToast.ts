@@ -2,11 +2,17 @@ import { ref } from 'vue'
 
 export type ToastType = 'error' | 'success' | 'info'
 
+export interface ToastAction {
+  label: string
+  onClick: () => void
+}
+
 export interface ToastItem {
   id: string
   type: ToastType
   title: string
   message: string
+  action?: ToastAction
 }
 
 const toasts = ref<ToastItem[]>([])
@@ -27,13 +33,15 @@ function pushToast(options: {
   title: string
   message: string
   duration?: number
+  action?: ToastAction
 }): string {
   const id = crypto.randomUUID()
   toasts.value.push({
     id,
     type: options.type ?? 'info',
     title: options.title,
-    message: options.message
+    message: options.message,
+    action: options.action
   })
 
   const duration = options.duration ?? (options.type === 'error' ? 10000 : 5000)

@@ -16,7 +16,15 @@ export async function renameScript(scriptId: string, currentName: string): Promi
   if (!trimmed || trimmed === currentName.trim()) return false
 
   try {
-    await window.autoforge.scripts.updateMeta(scriptId, { name: trimmed })
+    const updated = await window.autoforge.scripts.updateMeta(scriptId, { name: trimmed })
+    if (!updated) {
+      pushToast({
+        type: 'error',
+        title: '重命名失败',
+        message: '无法更新脚本元数据'
+      })
+      return false
+    }
     return true
   } catch (err) {
     pushToast({

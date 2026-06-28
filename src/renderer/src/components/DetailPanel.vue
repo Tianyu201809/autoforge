@@ -32,10 +32,13 @@ import { extractRunResultOutputDir, formatRunResult } from '../../../shared/run-
 import { parseParamAttachments } from '../../../shared/param-attachments'
 import { promptUnsavedFiles } from '../utils/unsaved-files-prompt'
 
+type DetailPanelTab = 'detail' | 'params' | 'edit' | 'log' | 'config'
+
 const props = defineProps<{
   script: ScriptItem
   runner: ReturnType<typeof useScriptRunner>
   initialTab?: DetailPanelTab
+  tabRequest?: number
   categoryDefinitions?: import('../../../shared/types/script').CategoryDefinition[]
 }>()
 
@@ -107,9 +110,8 @@ const emit = defineEmits<{
   delete: []
   viewLog: []
   'keep-script': [scriptId: string]
+  'navigate-tab': [tab: DetailPanelTab]
 }>()
-
-type DetailPanelTab = 'detail' | 'params' | 'edit' | 'log' | 'config'
 
 const activeTab = ref<DetailPanelTab>('detail')
 const environments = ref<EnvironmentProfile[]>([])
@@ -453,15 +455,16 @@ watch(
     editModeActive.value = false
     syncScheduleFromScript()
     resetFileEditor()
+    if (props.initialTab) activeTab.value = props.initialTab
     await Promise.all([loadContent(), loadEnvironments()])
     syncDetailDraft()
   }
 )
 
 watch(
-  () => [props.script.id, props.initialTab] as const,
-  ([, tab]) => {
-    if (tab) activeTab.value = tab
+  () => props.tabRequest,
+  () => {
+    if (props.initialTab) activeTab.value = props.initialTab
   },
   { immediate: true }
 )
@@ -591,7 +594,7 @@ async function saveConfig(): Promise<void> {
 async function runWithEnv(): Promise<void> {
   const params = plainParamVars()
   await props.runner.start(props.script.id, selectedEnvId.value, params)
-  activeTab.value = 'params'
+  emit('navigate-tab', 'params')
   emit('viewLog')
   emit('refresh')
 }
@@ -781,7 +784,7 @@ async function handleRename(): Promise<void> {
       <button
         type="button"
         class="flex-1 flex items-center justify-center gap-1.5 h-8 rounded-lg sb-bg-inset sb-text-secondary border sb-border-subtle text-[12px] font-medium sb-bg-hover transition-colors"
-        @click="runner.restart(script.id, selectedEnvId, plainParamVars()).then(() => emit('refresh'))"
+        @click="runner.restart(script.id, selectedEnvId, plainParamVars()).then(() => { emit('navigate-tab', 'params'); emit('refresh') })"
       >
         <RotateCw class="w-3.5 h-3.5" :stroke-width="1.5" />
         重启

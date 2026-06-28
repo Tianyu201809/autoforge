@@ -64,7 +64,8 @@ function resultForScript(scriptId: string): unknown {
 
 export function useScriptRunner(
   onSessionChange?: () => void,
-  getScriptName?: (scriptId: string) => string | undefined
+  getScriptName?: (scriptId: string) => string | undefined,
+  onViewRunResult?: (scriptId: string, sessionId: string) => void
 ) {
   const { pushToast } = useToast()
 
@@ -132,7 +133,14 @@ export function useScriptRunner(
         pushToast({
           type: 'success',
           title: `${name} 运行完成`,
-          message: '脚本已成功执行完毕'
+          message: '脚本已成功执行完毕',
+          duration: 15000,
+          action: onViewRunResult
+            ? {
+                label: '查看',
+                onClick: () => onViewRunResult(ev.scriptId, ev.sessionId)
+              }
+            : undefined
         })
       } else if (ev.phase === 'failed' && ev.message) {
         pushToast({

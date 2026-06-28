@@ -189,6 +189,15 @@ export function normalizeAutoforgeManifestVersion(raw: unknown): string | null {
   if (raw === AUTOFORGE_MANIFEST_VERSION || raw === '1' || raw === 1) {
     return AUTOFORGE_MANIFEST_VERSION
   }
+  if (typeof raw === 'string') {
+    const normalized = raw.trim()
+    if (normalized === '1.0' || normalized === '1') {
+      return AUTOFORGE_MANIFEST_VERSION
+    }
+    if (/^1\.0(\.0)*$/.test(normalized)) {
+      return AUTOFORGE_MANIFEST_VERSION
+    }
+  }
   return null
 }
 
@@ -201,12 +210,14 @@ export function validateManifest(raw: unknown): { ok: true; manifest: ScriptMani
   if (!autoforgeVersion) {
     return { ok: false, error: `autoforge 版本必须为 "${AUTOFORGE_MANIFEST_VERSION}"` }
   }
-  if (typeof obj.name !== 'string' || !obj.name.trim()) {
+  const nameStr =
+    typeof obj.name === 'string' ? obj.name : obj.name != null ? String(obj.name) : ''
+  if (!nameStr.trim()) {
     return { ok: false, error: 'name 为必填字符串' }
   }
   const manifest: ScriptManifest = {
     autoforge: autoforgeVersion,
-    name: obj.name.trim(),
+    name: nameStr.trim(),
     description: typeof obj.description === 'string' ? obj.description : undefined,
     version: typeof obj.version === 'string' ? obj.version : '1.0.0',
     entry: typeof obj.entry === 'string' ? obj.entry : 'index.mjs',
