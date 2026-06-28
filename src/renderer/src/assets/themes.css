@@ -1,0 +1,193 @@
+/* Autoforge 双主题 — 深色「锻炉」/ 浅色「砂纸」 */
+
+:root,
+[data-theme='dark'] {
+  color-scheme: dark;
+
+  --sb-bg-base: #0c0a09;
+  --sb-bg-panel: #100e0c;
+  --sb-bg-surface: rgba(28, 25, 23, 0.35);
+  --sb-bg-elevated: rgba(41, 37, 36, 0.45);
+  --sb-bg-input: rgba(28, 25, 23, 0.7);
+  --sb-bg-card: rgba(28, 25, 23, 0.28);
+  --sb-bg-card-hover: rgba(41, 37, 36, 0.5);
+  --sb-bg-log: #080706;
+  --sb-bg-hover: rgba(68, 64, 60, 0.45);
+  --sb-bg-muted: rgba(41, 37, 36, 0.35);
+  --sb-bg-inset: rgba(41, 37, 36, 0.55);
+
+  --sb-text-primary: #fafaf9;
+  --sb-text-secondary: #d6d3d1;
+  --sb-text-muted: #a8a29e;
+  --sb-text-faint: #78716c;
+  --sb-text-inverse: #1c1917;
+
+  --sb-border: rgba(120, 113, 108, 0.72);
+  --sb-border-subtle: rgba(87, 83, 78, 0.58);
+  --sb-border-input: rgba(120, 113, 108, 0.78);
+
+  --sb-accent-bg: linear-gradient(135deg, #ea580c 0%, #c2410c 100%);
+  --sb-accent-solid: #ea580c;
+  --sb-accent-text: #fff7ed;
+  --sb-accent-hover: #f97316;
+
+  --sb-titlebar: rgba(12, 10, 9, 0.94);
+  --sb-logo-bg: linear-gradient(145deg, #fb923c 0%, #ea580c 55%, #9a3412 100%);
+  --sb-logo-text: #fff7ed;
+  --sb-ring: #78716c;
+
+  --sb-grain-opacity: 0.05;
+  --sb-glow: rgba(234, 88, 12, 0.12);
+
+  --sb-editor-bg: #0a0908;
+  --sb-editor-toolbar: #100e0c;
+  --sb-editor-gutter: #0e0c0b;
+  --sb-editor-gutter-text: #57534e;
+  --sb-editor-gutter-active: #a8a29e;
+  --sb-editor-line-active: rgba(234, 88, 12, 0.06);
+  --sb-editor-badge: rgba(41, 37, 36, 0.8);
+  --sb-editor-text: #d6d3d1;
+  --sb-editor-caret: #fb923c;
+  --sb-editor-selection-bg: rgba(234, 88, 12, 0.22);
+  --sb-hl-keyword: #fbbf24;
+  --sb-hl-string: #86efac;
+  --sb-hl-comment: #78716c;
+  --sb-hl-number: #fdba74;
+  --sb-hl-boolean: #c4b5fd;
+  --sb-hl-fn: #7dd3fc;
+  --sb-hl-key: #fcd34d;
+}
+
+[data-theme='light'] {
+  color-scheme: light;
+
+  --sb-bg-base: #f5f0e8;
+  --sb-bg-panel: #faf6ef;
+  --sb-bg-surface: rgba(255, 252, 247, 0.82);
+  --sb-bg-elevated: #ffffff;
+  --sb-bg-input: #ffffff;
+  --sb-bg-card: rgba(255, 252, 247, 0.9);
+  --sb-bg-card-hover: #ffffff;
+  --sb-bg-log: #ebe4d8;
+  --sb-bg-hover: rgba(28, 25, 23, 0.06);
+  --sb-bg-muted: rgba(28, 25, 23, 0.04);
+  --sb-bg-inset: rgba(28, 25, 23, 0.05);
+
+  --sb-text-primary: #1c1917;
+  --sb-text-secondary: #57534e;
+  --sb-text-muted: #78716c;
+  --sb-text-faint: #a8a29e;
+  --sb-text-inverse: #faf6ef;
+
+  --sb-border: #b8a892;
+  --sb-border-subtle: #cdc0ad;
+  --sb-border-input: #ad9d85;
+
+  --sb-accent-bg: linear-gradient(135deg, #c2410c 0%, #9a3412 100%);
+  --sb-accent-solid: #c2410c;
+  --sb-accent-text: #fff7ed;
+  --sb-accent-hover: #ea580c;
+
+  --sb-titlebar: rgba(250, 246, 239, 0.92);
+  --sb-logo-bg: linear-gradient(145deg, #ea580c 0%, #9a3412 100%);
+  --sb-logo-text: #fff7ed;
+  --sb-ring: #c4b9a3;
+
+  --sb-grain-opacity: 0.07;
+  --sb-glow: rgba(194, 65, 12, 0.08);
+
+  --sb-editor-bg: #f3ede3;
+  --sb-editor-toolbar: #ebe4d8;
+  --sb-editor-gutter: #e8e0d4;
+  --sb-editor-gutter-text: #a8a29e;
+  --sb-editor-gutter-active: #57534e;
+  --sb-editor-line-active: rgba(194, 65, 12, 0.08);
+  --sb-editor-badge: rgba(28, 25, 23, 0.06);
+  --sb-editor-text: #44403c;
+  --sb-editor-caret: #c2410c;
+  --sb-editor-selection-bg: rgba(194, 65, 12, 0.18);
+  --sb-hl-keyword: #b45309;
+  --sb-hl-string: #15803d;
+  --sb-hl-comment: #a8a29e;
+  --sb-hl-number: #c2410c;
+  --sb-hl-boolean: #7c3aed;
+  --sb-hl-fn: #0369a1;
+  --sb-hl-key: #92400e;
+}
+
+/* 语义化工具类 */
+@layer utilities {
+  .sb-bg-base { background-color: var(--sb-bg-base); }
+  .sb-bg-panel { background-color: var(--sb-bg-panel); }
+  .sb-bg-surface { background-color: var(--sb-bg-surface); }
+  .sb-bg-elevated { background-color: var(--sb-bg-elevated); }
+  .sb-bg-input { background-color: var(--sb-bg-input); }
+  .sb-bg-card { background-color: var(--sb-bg-card); }
+  .sb-bg-log { background-color: var(--sb-bg-log); }
+  .sb-bg-hover:hover { background-color: var(--sb-bg-hover); }
+  .hover\:sb-bg-hover:hover { background-color: var(--sb-bg-hover); }
+  .hover\:sb-text-secondary:hover { color: var(--sb-text-secondary); }
+  .hover\:sb-text-primary:hover { color: var(--sb-text-primary); }
+  .sb-bg-muted { background-color: var(--sb-bg-muted); }
+  .sb-bg-inset { background-color: var(--sb-bg-inset); }
+
+  .sb-text-primary { color: var(--sb-text-primary); }
+  .sb-text-secondary { color: var(--sb-text-secondary); }
+  .sb-text-muted { color: var(--sb-text-muted); }
+  .sb-text-faint { color: var(--sb-text-faint); }
+
+  .sb-border { border-color: var(--sb-border); }
+  .sb-border-subtle { border-color: var(--sb-border-subtle); }
+  .sb-border-input { border-color: var(--sb-border-input); }
+
+  .sb-input {
+    background-color: var(--sb-bg-input);
+    border-color: var(--sb-border-input);
+    color: var(--sb-text-primary);
+  }
+  .sb-input:focus { border-color: var(--sb-accent-solid); }
+
+  .sb-btn-accent {
+    background: var(--sb-accent-bg);
+    color: var(--sb-accent-text);
+  }
+  .sb-btn-accent:hover { filter: brightness(1.08); }
+
+  .sb-nav-active,
+  .sb-category-active {
+    background-color: color-mix(in srgb, var(--sb-accent-solid) 14%, var(--sb-bg-inset));
+    box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--sb-accent-solid) 28%, transparent);
+  }
+
+  .sb-titlebar { background-color: var(--sb-titlebar); }
+  .sb-logo {
+    background: var(--sb-logo-bg);
+    color: var(--sb-logo-text);
+    box-shadow: 0 0 12px var(--sb-glow);
+  }
+}
+
+/* 纸纹 / 锻炉质感 */
+body::before {
+  content: '';
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  z-index: 9999;
+  opacity: var(--sb-grain-opacity);
+  background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+  background-repeat: repeat;
+  background-size: 128px 128px;
+}
+
+/* 主题切换过渡 */
+html.theme-transition,
+html.theme-transition *,
+html.theme-transition *::before,
+html.theme-transition *::after {
+  transition:
+    background-color 0.35s ease,
+    border-color 0.35s ease,
+    color 0.25s ease,
+    box-shadow 0.35s ease !important;
+}

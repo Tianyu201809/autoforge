@@ -1,0 +1,88 @@
+import type { Component } from 'vue'
+import {
+  AppWindow,
+  BarChart,
+  Bell,
+  Bot,
+  Calendar,
+  Camera,
+  Clock,
+  Cloud,
+  Code,
+  Cpu,
+  Database,
+  DownloadCloud,
+  FileSpreadsheet,
+  FileText,
+  FolderSync,
+  Globe,
+  Home,
+  Image,
+  KeyRound,
+  Link,
+  Lock,
+  Mail,
+  Map,
+  Monitor,
+  Package,
+  Search,
+  Send,
+  Server,
+  Settings,
+  Shield,
+  ShoppingCart,
+  Table,
+  Terminal,
+  Upload,
+  Workflow,
+  Wrench,
+  Zap
+} from 'lucide-vue-next'
+import type { ScriptIcon } from '../../../shared/script-contract'
+
+export const scriptIconMap: Record<ScriptIcon, Component> = {
+  globe: Globe,
+  'download-cloud': DownloadCloud,
+  upload: Upload,
+  'app-window': AppWindow,
+  monitor: Monitor,
+  'folder-sync': FolderSync,
+  cloud: Cloud,
+  server: Server,
+  database: Database,
+  terminal: Terminal,
+  code: Code,
+  bot: Bot,
+  workflow: Workflow,
+  zap: Zap,
+  cpu: Cpu,
+  settings: Settings,
+  wrench: Wrench,
+  mail: Mail,
+  send: Send,
+  bell: Bell,
+  'key-round': KeyRound,
+  shield: Shield,
+  lock: Lock,
+  search: Search,
+  link: Link,
+  clock: Clock,
+  calendar: Calendar,
+  'file-text': FileText,
+  table: Table,
+  'file-spreadsheet': FileSpreadsheet,
+  image: Image,
+  camera: Camera,
+  'bar-chart': BarChart,
+  map: Map,
+  home: Home,
+  'shopping-cart': ShoppingCart,
+  package: Package
+}
+
+export function resolveScriptIcon(icon: ScriptIcon | string | undefined): Component {
+  if (icon && icon in scriptIconMap) {
+    return scriptIconMap[icon as ScriptIcon]
+  }
+  return AppWindow
+}

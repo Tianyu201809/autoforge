@@ -1,0 +1,81 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1024 1024" width="1024" height="1024">
+  <defs>
+    <radialGradient id="bg" cx="36%" cy="30%" r="78%">
+      <stop offset="0%" stop-color="#303f82"/>
+      <stop offset="50%" stop-color="#222d62"/>
+      <stop offset="100%" stop-color="#141b3d"/>
+    </radialGradient>
+    <linearGradient id="orangeStroke" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#ffc46b"/>
+      <stop offset="35%" stop-color="#ff9220"/>
+      <stop offset="100%" stop-color="#b85600"/>
+    </linearGradient>
+  </defs>
+
+  <circle cx="512" cy="512" r="512" fill="url(#bg)"/>
+
+  <g transform="translate(512 530) scale(1.22)">
+    <!-- Anvil -->
+    <g transform="translate(0 108)">
+      <path
+        d="M-182 0 L182 0 L158 38 L124 38 L124 88 L-124 88 L-124 38 L-158 38 Z"
+        fill="none"
+        stroke="url(#orangeStroke)"
+        stroke-width="36"
+        stroke-linejoin="round"
+        stroke-linecap="round"
+      />
+      <path
+        d="M124 0 L196 -8 L196 18 L124 38"
+        fill="none"
+        stroke="url(#orangeStroke)"
+        stroke-width="36"
+        stroke-linejoin="round"
+        stroke-linecap="round"
+      />
+      <path
+        d="M-124 38 L124 38"
+        fill="none"
+        stroke="#ffad55"
+        stroke-width="12"
+        stroke-linecap="round"
+        opacity="0.5"
+      />
+    </g>
+
+    <!-- Hammer -->
+    <g transform="translate(84 -98) rotate(42)">
+      <rect
+        x="-28"
+        y="-124"
+        width="56"
+        height="210"
+        rx="28"
+        fill="none"
+        stroke="url(#orangeStroke)"
+        stroke-width="36"
+        stroke-linejoin="round"
+      />
+      <rect
+        x="-104"
+        y="-176"
+        width="208"
+        height="84"
+        rx="30"
+        fill="none"
+        stroke="url(#orangeStroke)"
+        stroke-width="36"
+        stroke-linejoin="round"
+      />
+      <rect
+        x="-82"
+        y="-162"
+        width="164"
+        height="20"
+        rx="10"
+        fill="#ffd699"
+        opacity="0.42"
+      />
+    </g>
+  </g>
+</svg>

@@ -1,0 +1,344 @@
+# 脚本包规范（autoforge.json）
+
+## 概述
+
+Autoforge 脚本是一个**目录包**，必须包含 `autoforge.json` 清单和入口文件。入口文件必须导出 `run` 函数。
+
+## 最小示例
+
+```
+my-script/
+├── autoforge.json
+└── index.mjs
+```
+
+**autoforge.json**
+
+```json
+{
+  "autoforge": "1.0",
+  "name": "我的脚本",
+  "description": "脚本说明",
+  "version": "1.0.0",
+  "entry": "index.mjs"
+}
+```
+
+**index.mjs**
+
+```javascript
+export async function run(ctx) {
+  ctx.log('INFO', '开始执行')
+  return { ok: true }
+}
+```
+
+## autoforge.json 字段
+
+| 字段 | 类型 | 必填 | 说明 |
+|------|------|------|------|
+| `autoforge` | string | ✅ | 规范版本，当前 `"1.0"` |
+| `name` | string | ✅ | 显示名称 |
+| `description` | string | | 描述 |
+| `version` | string | | 语义化版本，默认 `1.0.0` |
+| `entry` | string | | 入口文件，默认 `index.mjs` |
+| `category` | string | | 分类 key：`browser` / `local` / `scrape` / `file` / `system` |
+| `categoryLabel` | string | | 分类显示名 |
+| `icon` | string | | UI 图标 |
+| `env` | EnvVarDefinition[] | | 环境变量 schema（固定环境配置） |
+| `params` | ParamDefinition[] | | 运行业务参数 schema（每次运行可不同） |
+| `dependencies` | Record<string,string> | | npm 依赖，运行前自动安装 |
+| `browser` | `{ headless?: boolean }` | | 浏览器启动选项；`headless: true` 为无头模式，默认 `false` |
+
+### 浏览器无头模式
+
+在 `autoforge.json` 中声明，或在脚本详情 → 概览中切换：
+
+```json
+{
+  "browser": { "headless": true }
+}
+```
+
+脚本调用 `ctx.sdk.browser.launch()` 时会应用此设置。需要人工验证码或 2FA 的场景应设为 `false`。
+
+## 环境变量 vs 运行参数
+
+Autoforge 将脚本输入分为两个维度，**不要在脚本中混用**：
+
+| | **环境变量 `env`** | **运行参数 `params`** |
+|---|---|---|
+| **用途** | 固定环境配置：账号、密码、API 地址、Token 等 | 业务处理输入：订单号、日期范围、任务 ID 等 |
+| **变化频率** | 按环境（开发/测试/生产）长期固定 | 每次运行可能不同 |
+| **声明字段** | `env` | `params` |
+| **平台配置位置** | 脚本详情 → **配置** Tab | 脚本详情 → **详情** Tab（运行前填写） |
+| **脚本内访问** | `ctx.env.KEY` | `ctx.params.KEY` |
+| **持久化** | 按环境保存（`configByEnv`） | 按脚本保存上次值（`savedParams`，不区分环境） |
+
+**选用原则：**
+
+- 换环境才变的值 → 放 `env`（例如测试服/生产服 URL、各环境账号）
+- 每次任务/业务才变的值 → 放 `params`（例如本次要处理的单号、导出日期）
+- 每次运行需上传的本地文件 → 放 `params` 并设置 `type: "attachment"`（例如待导入的 Excel、本次处理的图片）
+
+## 环境变量 schema
+
+```json
+{
+  "env": [
+    {
+      "key": "API_URL",
+      "label": "API 地址",
+      "description": "后端服务根 URL",
+      "required": true,
+      "secret": false,
+      "default": "https://api.example.com"
+    },
+    {
+      "key": "API_TOKEN",
+      "label": "访问令牌",
+      "required": true,
+      "secret": true
+    }
+  ]
+}
+```
+
+实际值在 **脚本详情 → 配置 Tab** 中按环境填写，保存在本机，不会写入脚本包。
+
+合并优先级：`autoforge.json 默认值` → `全局 Profile 共享变量（可选）` → `脚本专属配置（最高）`
+
+## 运行参数 schema
+
+每个参数项（`ParamDefinition`）支持以下字段：
+
+| 字段 | 类型 | 说明 |
+|------|------|------|
+| `key` | string | 参数名，脚本内通过 `ctx.params[key]` 访问 |
+| `label` | string | UI 展示标签 |
+| `description` | string | 说明文字 |
+| `required` | boolean | 是否必填 |
+| `secret` | boolean | 敏感值（仅 `text` 类型有效，UI 掩码显示） |
+| `type` | `"text"` \| `"attachment"` | 参数类型，默认 `text` |
+| `default` | string | 默认值（`text` 为字符串；`attachment` 为 JSON 数组字符串，默认 `[]`） |
+
+```json
+{
+  "params": [
+    {
+      "key": "ORDER_ID",
+      "label": "订单号",
+      "description": "本次要处理的业务单号",
+      "required": true
+    },
+    {
+      "key": "DRY_RUN",
+      "label": "试运行",
+      "default": "false"
+    },
+    {
+      "key": "SOURCE_FILES",
+      "label": "待处理文件",
+      "description": "本次要导入的 Excel / CSV",
+      "type": "attachment",
+      "required": true
+    }
+  ]
+}
+```
+
+实际值在 **脚本详情 → 详情 Tab** 中运行前填写。点击「运行」后，平台会校验必填项并将参数传入脚本；**上次填写的值会自动保存**，下次打开可继续编辑。
+
+合并优先级：`autoforge.json 默认值` → `上次保存值` → `本次运行传入（最高）`
+
+> 定时任务、从脚本卡片快捷启动时，使用上次保存的参数值。若必填参数未填写，运行会失败并提示在「详情」Tab 补全。
+
+### 附件类型参数（`type: "attachment"`）
+
+用于每次运行传入一个或多个本地文件（如 Excel、CSV、图片、PDF 等）。UI 提供多选文件上传，适合「本次要处理的文件列表」这类业务输入。
+
+**与 `text` 类型的区别：**
+
+| | **`text`（默认）** | **`attachment`** |
+|---|---|---|
+| UI 控件 | 单行文本输入框 | 文件选择 + 附件列表 |
+| `ctx.params[key]` 的值 | 普通字符串 | **JSON 数组字符串** |
+| 必填校验 | 字符串非空 | 至少包含 1 个有效附件 |
+| `secret` | 支持 | 不适用 |
+
+**存储与传递：**
+
+1. 用户在详情 Tab 选择文件后，平台会将文件**复制**到本机缓存目录：
+   `{userData}/script-inputs/{scriptId}/{paramKey}/`
+2. 同名文件会自动重命名（如 `data (1).xlsx`）
+3. 参数值序列化为 JSON 字符串传入脚本，每项结构如下：
+
+```typescript
+interface ParamAttachmentItem {
+  name: string   // 文件名（缓存目录中的名称）
+  path: string   // 绝对路径，脚本可直接 fs.readFile / 打开
+  size?: number  // 字节大小（可选）
+}
+```
+
+**示例值（`ctx.params.SOURCE_FILES`）：**
+
+```json
+[
+  { "name": "orders.xlsx", "path": "C:\\Users\\...\\script-inputs\\abc123\\SOURCE_FILES\\orders.xlsx", "size": 20480 },
+  { "name": "extra.csv", "path": "C:\\Users\\...\\script-inputs\\abc123\\SOURCE_FILES\\extra.csv", "size": 1024 }
+]
+```
+
+**脚本内解析：**
+
+```javascript
+function parseAttachments(raw) {
+  if (!raw?.trim()) return []
+  try {
+    const items = JSON.parse(raw)
+    return Array.isArray(items) ? items.filter((i) => i?.path) : []
+  } catch {
+    return []
+  }
+}
+
+export async function run(ctx) {
+  const files = parseAttachments(ctx.params.SOURCE_FILES)
+  if (!files.length) {
+    throw new Error('请上传待处理文件')
+  }
+
+  for (const file of files) {
+    ctx.log('INFO', `处理文件: ${file.name} (${file.path})`)
+    // 使用 fs.readFile(file.path) 或 playwright 等读取
+  }
+
+  return { processed: files.length }
+}
+```
+
+> 平台运行前会校验附件路径是否仍然存在；若缓存文件被手动删除，会提示重新上传。取消编辑或移除附件时，平台会清理不再引用的缓存文件。
+
+## 在平台上配置
+
+### 环境变量（配置 Tab）
+
+1. 导入脚本后，打开脚本详情 → **配置** Tab
+2. 选择运行环境（开发 / 测试 / 生产）
+3. 填写账号、密码、URL 等**固定环境配置**
+4. 点击「保存配置」
+
+每个脚本、每个环境的 env 配置相互独立。
+
+### 运行参数（详情 Tab）
+
+1. 打开脚本详情 → **详情** Tab
+2. 选择运行环境（决定使用哪套 env 配置）
+3. 在「运行参数」区域填写本次业务的参数值
+   - **文本参数**：直接输入字符串
+   - **附件参数**：点击「选择文件」可多选上传；已添加的附件可单独移除
+4. 点击「运行」或「重启」（有未保存的详情修改时会先保存参数）
+
+参数不区分环境；仅 env 随环境 Profile 切换而变化。附件文件保存在本机 `userData/script-inputs/` 下，不会写入脚本包。
+
+## run(ctx) 上下文
+
+```typescript
+interface ScriptRunContext {
+  sessionId: string
+  scriptId: string
+  env: Record<string, string>     // 合并后的环境变量（固定环境配置）
+  params: Record<string, string> // 本次运行的业务参数（attachment 类型为 JSON 数组字符串）
+  signal: AbortSignal            // 用户停止时 abort
+  log: (level, message) => void
+  sdk: {
+    browser: { launch: () => Promise<Browser> }
+    paths: { userData: string; scriptDir: string }
+  }
+}
+```
+
+### 使用示例
+
+**文本参数：**
+
+```javascript
+export async function run(ctx) {
+  const baseUrl = ctx.env.API_URL
+  const token = ctx.env.API_TOKEN
+  const orderId = ctx.params.ORDER_ID
+
+  if (!orderId) {
+    throw new Error('缺少订单号')
+  }
+
+  ctx.log('INFO', `处理订单 ${orderId} @ ${baseUrl}`)
+  // ...
+  return { orderId, ok: true }
+}
+```
+
+**附件参数：**
+
+```javascript
+import { readFileSync } from 'fs'
+
+export async function run(ctx) {
+  const raw = ctx.params.SOURCE_FILES
+  const files = JSON.parse(raw || '[]')
+
+  for (const { name, path } of files) {
+    const buf = readFileSync(path)
+    ctx.log('INFO', `读取 ${name}，${buf.length} 字节`)
+  }
+
+  return { count: files.length }
+}
+```
+
+### 日志约定
+
+- 使用 `ctx.log('INFO'|'WARN'|'ERROR', message)` 输出
+- 日志会实时推送到 UI 日志面板
+
+### 返回值
+
+- `run` 的返回值会作为 session.result 展示
+- 抛出 Error 则标记为 failed
+
+### 取消
+
+- 监听 `ctx.signal.aborted` 或在 async 操作中检查
+- 浏览器脚本应在 abort 时关闭 browser
+
+## 依赖管理
+
+### 脚本级依赖
+
+在 `autoforge.json` 中声明：
+
+```json
+{
+  "dependencies": {
+    "playwright-core": "^1.50.1",
+    "axios": "^1.7.0"
+  }
+}
+```
+
+首次运行前 Autoforge 会在脚本目录执行 `npm install`。
+
+### 全局依赖
+
+在 **设置 → 全局 npm 依赖** 中安装，存入 `userData/runtime/node_modules`，所有脚本共享。
+
+## 上传方式
+
+1. **脚本包目录**：包含 `autoforge.json` 的文件夹
+2. **单文件**：`.js` / `.mjs` / `.cjs`，会自动包装为脚本包
+
+## 示例
+
+- `examples/hello-world/` — 最小示例，含 `env` 与 `params` 区分演示
+- `examples/crowdsourcing-token/` — 浏览器自动化 + 环境变量 + 依赖

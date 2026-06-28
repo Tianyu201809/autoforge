@@ -1,0 +1,40 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=72, height=72, initial-scale=1, minimum-scale=1, maximum-scale=1, user-scalable=no" />
+    <title>Autoforge</title>
+    <script>
+      ;(function () {
+        var t =
+          localStorage.getItem('autoforge-theme') ||
+          localStorage.getItem('scriptbox-theme')
+        document.documentElement.setAttribute('data-theme', t === 'light' ? 'light' : 'dark')
+      })()
+    </script>
+  </head>
+  <body class="overflow-hidden select-none bg-transparent">
+    <style>
+      html,
+      body,
+      #app {
+        width: 72px;
+        height: 72px;
+        margin: 0;
+        padding: 0;
+        overflow: hidden;
+        border-radius: 50%;
+        background: transparent !important;
+        touch-action: none;
+        user-select: none;
+        isolation: isolate;
+      }
+
+      * {
+        -webkit-user-drag: none;
+      }
+    </style>
+    <div id="app"></div>
+    <script type="module" src="./src/floating-ball-main.ts"></script>
+  </body>
+</html>

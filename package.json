@@ -1,0 +1,102 @@
+{
+  "name": "autoforge",
+  "version": "1.0.0",
+  "description": "Autoforge — 本机自动化脚本锻造与管理桌面应用",
+  "main": "./out/main/index.js",
+  "license": "MIT",
+  "scripts": {
+    "dev": "node scripts/run-utf8.mjs electron-vite dev",
+    "build": "node scripts/run-utf8.mjs electron-vite build",
+    "preview": "node scripts/run-utf8.mjs electron-vite preview",
+    "generate:detailpanel": "node scripts/write-detailpanel.mjs",
+    "install:browsers": "node scripts/install-browsers.mjs",
+    "postinstall": "node scripts/install-browsers.mjs",
+    "generate:icons": "node scripts/generate-icons.mjs",
+    "dist": "npm run generate:icons && npm run build && electron-builder",
+    "dist:win": "npm run generate:icons && npm run build && electron-builder --win"
+  },
+  "dependencies": {
+    "lucide-vue-next": "^0.469.0",
+    "node-cron": "^3.0.3",
+    "pinyin-pro": "^3.28.1",
+    "playwright-core": "^1.50.1",
+    "vue": "^3.5.13"
+  },
+  "devDependencies": {
+    "@tailwindcss/vite": "^4.1.4",
+    "@types/node": "^22.13.10",
+    "@types/node-cron": "^3.0.11",
+    "@vitejs/plugin-vue": "^5.2.1",
+    "electron": "^34.2.0",
+    "electron-builder": "^25.1.8",
+    "electron-vite": "^3.0.0",
+    "playwright": "^1.50.1",
+    "png-to-ico": "^3.0.1",
+    "sharp": "^0.35.2",
+    "tailwindcss": "^4.1.4",
+    "typescript": "^5.8.2",
+    "vite": "^6.2.0"
+  },
+  "build": {
+    "appId": "com.autoforge.app",
+    "productName": "Autoforge",
+    "directories": {
+      "output": "release",
+      "buildResources": "build"
+    },
+    "icon": "build/icon.png",
+    "files": [
+      "out/**/*"
+    ],
+    "extraResources": [
+      {
+        "from": "resources/browsers",
+        "to": "browsers",
+        "filter": [
+          "**/*"
+        ]
+      },
+      {
+        "from": "build/icon.ico",
+        "to": "icon.ico"
+      },
+      {
+        "from": "build/icon-tray.png",
+        "to": "icon-tray.png"
+      },
+      {
+        "from": "examples",
+        "to": "examples",
+        "filter": [
+          "**/*"
+        ]
+      },
+      {
+        "from": "docs/script-spec.md",
+        "to": "docs/script-spec.md"
+      }
+    ],
+    "win": {
+      "icon": "build/icon.ico",
+      "target": [
+        {
+          "target": "nsis",
+          "arch": [
+            "x64"
+          ]
+        }
+      ]
+    },
+    "nsis": {
+      "oneClick": false,
+      "allowToChangeInstallationDirectory": true,
+      "allowElevation": true,
+      "createDesktopShortcut": true,
+      "createStartMenuShortcut": true,
+      "shortcutName": "Autoforge",
+      "installerIcon": "build/icon.ico",
+      "uninstallerIcon": "build/icon.ico",
+      "installerHeaderIcon": "build/icon.ico"
+    }
+  }
+}

@@ -1,0 +1,14 @@
+# 强制 UTF-8 编码
+root = true
+
+[*]
+charset = utf-8
+end_of_line = lf
+insert_final_newline = true
+trim_trailing_whitespace = true
+
+[*.{vue,ts,tsx,js,mjs,cjs,json,md,html,css}]
+charset = utf-8
+
+[package-lock.json]
+charset = unset

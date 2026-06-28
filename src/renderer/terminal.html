@@ -1,0 +1,20 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Autoforge 终端</title>
+    <script>
+      ;(function () {
+        var t =
+          localStorage.getItem('autoforge-theme') ||
+          localStorage.getItem('scriptbox-theme')
+        document.documentElement.setAttribute('data-theme', t === 'light' ? 'light' : 'dark')
+      })()
+    </script>
+  </head>
+  <body class="font-sans antialiased overflow-hidden select-none">
+    <div id="app"></div>
+    <script type="module" src="./src/terminal-main.ts"></script>
+  </body>
+</html>
