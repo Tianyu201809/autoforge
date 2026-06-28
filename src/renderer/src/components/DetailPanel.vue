@@ -3,7 +3,6 @@ import { computed, onMounted, onUnmounted, ref, toRaw, watch } from 'vue'
 import {
   Check,
   CheckCircle2,
-  Clock,
   Copy,
   FolderOpen,
   Package,
@@ -990,24 +989,23 @@ async function handleRename(): Promise<void> {
           </div>
         </div>
 
-        <div v-if="runResult">
-          <div class="flex items-start justify-between gap-3 mb-2">
+        <div v-if="runResult" class="run-result">
+          <div class="flex items-center justify-between gap-3 mb-2.5">
             <div class="min-w-0">
-              <label class="text-[11px] font-medium sb-text-faint uppercase tracking-wider">运行结果</label>
+              <p class="text-[12px] font-medium sb-text-secondary">运行结果</p>
               <p
                 v-if="runResultFinishedAt"
-                class="run-result-finished mt-2 inline-flex items-center gap-2 max-w-full"
+                class="run-result-meta mt-0.5"
                 :title="runResultFinishedAt"
               >
-                <Clock class="run-result-finished-icon w-3.5 h-3.5 flex-shrink-0" :stroke-width="1.5" />
-                <span class="run-result-finished-label">上次完成</span>
-                <time class="run-result-finished-time">{{ formatRunFinishedAt(runResultFinishedAt) }}</time>
+                上次完成
+                <time>{{ formatRunFinishedAt(runResultFinishedAt) }}</time>
               </p>
             </div>
             <button
               type="button"
-              class="flex items-center gap-1 h-6 px-2 rounded-md border sb-border-subtle text-[10px] transition-colors flex-shrink-0"
-              :class="resultCopied ? 'sb-text-primary sb-bg-inset' : 'sb-text-muted hover:sb-text-secondary hover:sb-bg-hover'"
+              class="run-result-action flex-shrink-0"
+              :class="resultCopied && 'is-copied'"
               @click="copyResult"
             >
               <Check v-if="resultCopied" class="w-3 h-3" :stroke-width="1.5" />
@@ -1016,46 +1014,29 @@ async function handleRename(): Promise<void> {
             </button>
           </div>
 
-          <div
-            class="rounded-lg border sb-border-subtle overflow-hidden"
-            :class="runResultOutputDir ? 'sb-nav-active' : 'sb-bg-surface'"
-          >
-            <div
-              v-if="runResultOutputDir"
-              class="flex border-b sb-border-subtle"
-            >
-              <div class="w-0.5 flex-shrink-0 bg-[var(--sb-accent-solid)]" aria-hidden="true" />
-              <div class="flex-1 min-w-0 p-3">
-                <div class="flex items-start justify-between gap-2">
-                  <div class="flex items-center gap-2 min-w-0">
-                    <div class="w-7 h-7 rounded-md sb-bg-inset border sb-border-subtle flex items-center justify-center flex-shrink-0">
-                      <FolderOpen class="w-3.5 h-3.5 sb-text-secondary" :stroke-width="1.5" />
-                    </div>
-                    <div class="min-w-0">
-                      <p class="text-[12px] font-medium sb-text-primary">产物目录</p>
-                      <p class="text-[10px] sb-text-faint mt-0.5">脚本输出文件保存位置</p>
-                    </div>
-                  </div>
-                  <button
-                    type="button"
-                    class="flex-shrink-0 flex items-center gap-1 h-7 px-2.5 rounded-md sb-btn-accent text-[11px] font-medium hover:opacity-90 transition-opacity"
-                    @click="openOutputDir"
-                  >
-                    <FolderOpen class="w-3 h-3" :stroke-width="1.5" />
-                    打开目录
-                  </button>
-                </div>
-                <p
-                  class="mt-2.5 text-[11px] font-mono sb-text-muted leading-relaxed break-all select-text rounded-md sb-bg-inset border sb-border-subtle px-2.5 py-2"
-                  :title="runResultOutputDir"
+          <div class="run-result-body rounded-lg border overflow-hidden">
+            <div v-if="runResultOutputDir" class="run-result-output px-3 py-2.5 border-b sb-border-subtle">
+              <div class="flex items-center justify-between gap-3">
+                <span class="text-[11px] font-medium sb-text-secondary">产物目录</span>
+                <button
+                  type="button"
+                  class="run-result-open"
+                  @click="openOutputDir"
                 >
-                  {{ runResultOutputDir }}
-                </p>
+                  <FolderOpen class="w-3 h-3" :stroke-width="1.5" />
+                  打开
+                </button>
               </div>
+              <p
+                class="run-result-path mt-1.5"
+                :title="runResultOutputDir"
+              >
+                {{ runResultOutputDir }}
+              </p>
             </div>
 
-            <div class="max-h-48 overflow-y-auto overscroll-contain sb-bg-log">
-              <pre class="p-3 text-[11px] font-mono sb-text-secondary leading-relaxed whitespace-pre-wrap break-all select-text cursor-text">{{ runResultText }}</pre>
+            <div class="run-result-scroll max-h-48 overflow-y-auto overscroll-contain">
+              <pre class="run-result-pre">{{ runResultText }}</pre>
             </div>
           </div>
         </div>

@@ -173,8 +173,10 @@
 
   .sb-nav-active,
   .sb-category-active {
-    background-color: color-mix(in srgb, var(--sb-accent-solid) 14%, var(--sb-bg-inset));
-    box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--sb-accent-solid) 28%, transparent);
+    background-color: color-mix(in srgb, var(--sb-accent-solid) 11%, var(--sb-bg-inset));
+    box-shadow:
+      inset 2px 0 0 var(--sb-accent-solid),
+      inset 0 0 0 1px color-mix(in srgb, var(--sb-accent-solid) 22%, var(--sb-border-subtle));
   }
 
   .sb-titlebar { background-color: var(--sb-titlebar); }

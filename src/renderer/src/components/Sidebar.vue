@@ -94,12 +94,12 @@ onUnmounted(() => window.removeEventListener('keydown', onKeydown))
         class="w-full flex items-center gap-2.5 px-2.5 py-1.5 rounded-md text-[13px] transition-colors text-left"
         :class="
           item.active
-            ? 'sb-bg-inset sb-text-primary font-medium border-l-2 border-[var(--sb-accent-solid)] pl-[calc(0.625rem-2px)] shadow-[inset_0_0_0_1px_rgba(234,88,12,0.12)]'
-            : 'sb-text-muted hover:sb-text-secondary sb-bg-hover border-l-2 border-transparent pl-2.5'
+            ? 'sb-nav-active sb-text-primary font-medium'
+            : 'sb-text-muted hover:sb-text-secondary sb-bg-hover'
         "
         @click="emit('navigate', item.id as NavFilter)"
       >
-        <component :is="navIcons[item.icon]" class="w-4 h-4" :class="item.active ? 'sb-text-muted' : ''" :stroke-width="1.5" />
+        <component :is="navIcons[item.icon]" class="w-4 h-4" :class="item.active ? 'text-[var(--sb-accent-solid)]' : ''" :stroke-width="1.5" />
         {{ item.label }}
         <span v-if="item.count !== undefined" class="ml-auto text-[11px] sb-text-muted font-normal">{{ item.count }}</span>
         <span v-else-if="item.badge" class="ml-auto flex items-center gap-1">
@@ -126,15 +126,21 @@ onUnmounted(() => window.removeEventListener('keydown', onKeydown))
           v-for="cat in categories"
           :key="cat.key"
           type="button"
-          class="w-full flex items-center gap-2 px-2 py-1.5 rounded-md text-[13px] transition-colors text-left border-l-2"
+          class="w-full flex items-center gap-2 px-2 py-1.5 rounded-md text-[13px] transition-colors text-left"
           :class="
             activeCategoryKey === cat.key
-              ? 'sb-category-active sb-text-primary font-semibold border-[var(--sb-accent-solid)] pl-[calc(0.5rem-2px)]'
-              : 'sb-text-muted hover:sb-text-secondary sb-bg-hover border-transparent'
+              ? 'sb-category-active sb-text-primary font-medium'
+              : 'sb-text-muted hover:sb-text-secondary sb-bg-hover'
           "
           @click="emit('category', cat.key)"
         >
-          <span class="w-2 h-2 rounded-full" :class="cat.color"></span>
+          <span
+            class="w-2 h-2 rounded-full shrink-0"
+            :class="[
+              cat.color,
+              activeCategoryKey === cat.key && 'ring-2 ring-[var(--sb-accent-solid)] ring-offset-1 ring-offset-[var(--sb-bg-panel)]'
+            ]"
+          ></span>
           {{ cat.name }}
           <span class="ml-auto text-[11px] sb-text-faint">{{ cat.count }}</span>
         </button>

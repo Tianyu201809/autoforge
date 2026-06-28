@@ -131,7 +131,8 @@ const navItems = computed(() =>
       navFilter.value === item.id &&
       !showSettings.value &&
       !showDevGuide.value &&
-      !showExecutionHistory.value,
+      !showExecutionHistory.value &&
+      !(activeCategoryKey.value && item.id === 'all'),
     count: item.id === 'all' ? stats.value.total : item.id === 'starred' ? scripts.value.filter((s) => s.starred).length : undefined,
     badge: item.id === 'running' ? String(stats.value.running) : undefined
   }))
