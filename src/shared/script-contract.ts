@@ -191,12 +191,13 @@ export function normalizeAutoforgeManifestVersion(raw: unknown): string | null {
   }
   if (typeof raw === 'string') {
     const normalized = raw.trim()
-    if (normalized === '1.0' || normalized === '1') {
+    // 兼容 1.0 / 1.0.0 / 1.2 等所有 1.x 清单版本，写入时统一规范为 1.0
+    if (/^1(\.\d+)*$/.test(normalized)) {
       return AUTOFORGE_MANIFEST_VERSION
     }
-    if (/^1\.0(\.0)*$/.test(normalized)) {
-      return AUTOFORGE_MANIFEST_VERSION
-    }
+  }
+  if (typeof raw === 'number' && Number.isFinite(raw) && raw >= 1 && raw < 2) {
+    return AUTOFORGE_MANIFEST_VERSION
   }
   return null
 }

@@ -107,10 +107,8 @@ export class ScriptWorkspace {
           obj.name = String(obj.name)
         }
         const autoforgeVersion = normalizeAutoforgeManifestVersion(obj.autoforge ?? obj.scriptbox)
-        if (autoforgeVersion) {
-          obj.autoforge = autoforgeVersion
-          delete obj.scriptbox
-        }
+        obj.autoforge = autoforgeVersion ?? AUTOFORGE_MANIFEST_VERSION
+        delete obj.scriptbox
       }
       const result = validateManifest(raw)
       if (!result.ok) throw new Error(result.error)
