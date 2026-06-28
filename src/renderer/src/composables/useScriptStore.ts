@@ -11,7 +11,7 @@ import type {
 } from '../../../shared/types/script'
 
 const navItemsBase = [
-  { id: 'all' as NavFilter, label: '全部脚本', icon: 'layout-grid' as const },
+  { id: 'all' as NavFilter, label: '全部', icon: 'layout-grid' as const },
   { id: 'running' as NavFilter, label: '运行中', icon: 'play-circle' as const },
   { id: 'starred' as NavFilter, label: '收藏', icon: 'star' as const },
   { id: 'recent' as NavFilter, label: '最近运行', icon: 'clock' as const },
@@ -142,7 +142,7 @@ const breadcrumb = computed(() => {
   if (showDevGuide.value) return '开发指南'
   if (showSettings.value) return '设置'
   const current = navItemsBase.find((n) => n.id === navFilter.value)
-  return current?.label ?? '全部脚本'
+  return current?.label ?? '全部'
 })
 
 async function importScript(): Promise<void> {

@@ -1,10 +1,11 @@
 <script setup lang="ts">
-import { computed, nextTick, ref, watch } from 'vue'
+import { computed, nextTick, onMounted, onUnmounted, ref, watch } from 'vue'
 import {
   ChevronDown,
   ChevronUp,
   Eraser,
   ExternalLink,
+  ListX,
   Loader2,
   Maximize2,
   Minimize2,
@@ -44,15 +45,39 @@ const props = withDefaults(
 const emit = defineEmits<{
   clear: [sessionId?: string]
   close: [sessionId: string]
+  closeAll: []
   popout: []
 }>()
 
 const displayMode = defineModel<LogConsoleDisplayMode>('displayMode', { default: 'hidden' })
 const activeSessionId = defineModel<string | undefined>('activeSessionId')
 
+const PANEL_HEIGHT_KEY = 'autoforge-terminal-height'
+const SIDEBAR_WIDTH_KEY = 'autoforge-terminal-sidebar-width'
+const DEFAULT_PANEL_HEIGHT = 208
+const DEFAULT_SIDEBAR_WIDTH = 176
+const MIN_PANEL_HEIGHT = 112
+const MIN_SIDEBAR_WIDTH = 120
+const MIN_LOG_WIDTH = 200
+const MIN_MAIN_HEIGHT = 200
+const MIN_SCRIPT_VIEW_HEIGHT = 64
+const PANEL_HEADER_HEIGHT = 36
+const RESIZE_HANDLE_HEIGHT = 5
+const SIDEBAR_RESIZE_HANDLE_WIDTH = 5
+
 const fontSize = ref(11)
 const logBodyRef = ref<HTMLDivElement | null>(null)
+const panelRef = ref<HTMLElement | null>(null)
+const terminalBodyRef = ref<HTMLElement | null>(null)
 const autoScroll = ref(true)
+const panelHeight = ref(DEFAULT_PANEL_HEIGHT)
+const sidebarWidth = ref(DEFAULT_SIDEBAR_WIDTH)
+const resizing = ref(false)
+const resizingSidebar = ref(false)
+const parentHeight = ref(0)
+const mainChromeHeight = ref(MIN_MAIN_HEIGHT)
+
+let layoutObserver: ResizeObserver | undefined
 
 const isVisible = computed(() => props.standalone || displayMode.value !== 'hidden')
 const isMini = computed(() => !props.standalone && displayMode.value === 'mini')
@@ -87,14 +112,14 @@ function formatLogTime(iso: string): string {
 }
 
 function logLevelClass(level: string): string {
-  if (level === 'WARN') return 'text-amber-400/80'
-  if (level === 'ERROR') return 'text-red-400/80'
-  return 'text-emerald-400/80'
+  if (level === 'WARN') return 'terminal-log-level-warn'
+  if (level === 'ERROR') return 'terminal-log-level-error'
+  return 'terminal-log-level-info'
 }
 
 function sessionStatusIconClass(status?: SessionStatus): string {
-  if (status === 'running') return 'text-emerald-400'
-  if (status === 'error') return 'text-red-400'
+  if (status === 'running') return 'terminal-status-running'
+  if (status === 'error') return 'terminal-log-level-error'
   if (status === 'success') return 'sb-text-muted'
   return 'sb-text-faint'
 }
@@ -127,6 +152,157 @@ function hide(): void {
   displayMode.value = 'hidden'
 }
 
+function measureMainChrome(mainEl: HTMLElement): number {
+  const children = Array.from(mainEl.children) as HTMLElement[]
+  if (children.length <= 1) return MIN_MAIN_HEIGHT
+  const fixedChrome = children.slice(0, -1).reduce((sum, el) => sum + el.offsetHeight, 0)
+  return fixedChrome + MIN_SCRIPT_VIEW_HEIGHT
+}
+
+function measureLayout(): void {
+  if (!props.standalone) {
+    const parent = panelRef.value?.parentElement
+    if (parent) {
+      parentHeight.value = parent.clientHeight
+      const mainEl = parent.firstElementChild
+      if (mainEl instanceof HTMLElement) {
+        mainChromeHeight.value = Math.max(MIN_MAIN_HEIGHT, measureMainChrome(mainEl))
+      }
+      panelHeight.value = clampPanelHeight(panelHeight.value)
+    }
+  }
+  sidebarWidth.value = clampSidebarWidth(sidebarWidth.value)
+}
+
+function getMaxSidebarWidth(): number {
+  const body = terminalBodyRef.value
+  if (!body) return 320
+  return Math.max(MIN_SIDEBAR_WIDTH, body.clientWidth - MIN_LOG_WIDTH - SIDEBAR_RESIZE_HANDLE_WIDTH)
+}
+
+function clampSidebarWidth(width: number): number {
+  return Math.min(getMaxSidebarWidth(), Math.max(MIN_SIDEBAR_WIDTH, width))
+}
+
+function loadSidebarWidth(): void {
+  const stored = Number(localStorage.getItem(SIDEBAR_WIDTH_KEY))
+  sidebarWidth.value = clampSidebarWidth(
+    Number.isFinite(stored) && stored > 0 ? stored : DEFAULT_SIDEBAR_WIDTH
+  )
+}
+
+function persistSidebarWidth(): void {
+  localStorage.setItem(SIDEBAR_WIDTH_KEY, String(sidebarWidth.value))
+}
+
+function resetSidebarWidth(): void {
+  sidebarWidth.value = clampSidebarWidth(DEFAULT_SIDEBAR_WIDTH)
+  persistSidebarWidth()
+}
+
+function onSidebarResizeStart(e: MouseEvent): void {
+  if (!isMulti.value || !isVisible.value) return
+  e.preventDefault()
+  resizingSidebar.value = true
+  const startX = e.clientX
+  const startWidth = sidebarWidth.value
+
+  const onMove = (ev: MouseEvent): void => {
+    sidebarWidth.value = clampSidebarWidth(startWidth + (startX - ev.clientX))
+  }
+
+  const onUp = (): void => {
+    resizingSidebar.value = false
+    persistSidebarWidth()
+    document.removeEventListener('mousemove', onMove)
+    document.removeEventListener('mouseup', onUp)
+    document.body.style.cursor = ''
+    document.body.style.userSelect = ''
+  }
+
+  document.body.style.cursor = 'col-resize'
+  document.body.style.userSelect = 'none'
+  document.addEventListener('mousemove', onMove)
+  document.addEventListener('mouseup', onUp)
+}
+
+function getMaxPanelHeight(): number {
+  const available =
+    parentHeight.value || panelRef.value?.parentElement?.clientHeight || Math.floor(window.innerHeight * 0.55)
+  const chrome = PANEL_HEADER_HEIGHT + (isVisible.value && !isMini.value ? RESIZE_HANDLE_HEIGHT : 0)
+  return Math.max(MIN_PANEL_HEIGHT, available - mainChromeHeight.value - chrome)
+}
+
+function clampPanelHeight(height: number): number {
+  return Math.min(getMaxPanelHeight(), Math.max(MIN_PANEL_HEIGHT, height))
+}
+
+function loadPanelHeight(): void {
+  const stored = Number(localStorage.getItem(PANEL_HEIGHT_KEY))
+  panelHeight.value = clampPanelHeight(
+    Number.isFinite(stored) && stored > 0 ? stored : DEFAULT_PANEL_HEIGHT
+  )
+}
+
+function persistPanelHeight(): void {
+  localStorage.setItem(PANEL_HEIGHT_KEY, String(panelHeight.value))
+}
+
+function resetPanelHeight(): void {
+  panelHeight.value = clampPanelHeight(DEFAULT_PANEL_HEIGHT)
+  persistPanelHeight()
+}
+
+function onPanelResizeStart(e: MouseEvent): void {
+  if (props.standalone || isMini.value || !isVisible.value) return
+  e.preventDefault()
+  resizing.value = true
+  const startY = e.clientY
+  const startHeight = panelHeight.value
+
+  const onMove = (ev: MouseEvent): void => {
+    panelHeight.value = clampPanelHeight(startHeight + (startY - ev.clientY))
+  }
+
+  const onUp = (): void => {
+    resizing.value = false
+    persistPanelHeight()
+    document.removeEventListener('mousemove', onMove)
+    document.removeEventListener('mouseup', onUp)
+    document.body.style.cursor = ''
+    document.body.style.userSelect = ''
+  }
+
+  document.body.style.cursor = 'row-resize'
+  document.body.style.userSelect = 'none'
+  document.addEventListener('mousemove', onMove)
+  document.addEventListener('mouseup', onUp)
+}
+
+function onWindowResize(): void {
+  measureLayout()
+}
+
+const effectiveBodyHeight = computed(() => clampPanelHeight(panelHeight.value))
+
+const panelSectionStyle = computed(() => {
+  if (props.standalone) return {}
+  if (!isVisible.value) {
+    return { height: `${PANEL_HEADER_HEIGHT}px` }
+  }
+  if (isMini.value) {
+    return { height: `${PANEL_HEADER_HEIGHT + 112}px` }
+  }
+  const body = effectiveBodyHeight.value
+  return { height: `${body + PANEL_HEADER_HEIGHT + RESIZE_HANDLE_HEIGHT}px` }
+})
+
+const panelBodyStyle = computed(() => {
+  if (props.standalone) return {}
+  if (isMini.value) return { height: '7rem' }
+  return { flex: '1 1 0', minHeight: '0' }
+})
+
 function clearLogs(sessionId?: string): void {
   emit('clear', sessionId ?? activeSessionId.value)
 }
@@ -134,6 +310,10 @@ function clearLogs(sessionId?: string): void {
 function closeSession(sessionId: string, e: Event): void {
   e.stopPropagation()
   emit('close', sessionId)
+}
+
+function closeAllSessions(): void {
+  emit('closeAll')
 }
 
 async function scrollToBottom(): Promise<void> {
@@ -184,12 +364,42 @@ watch(
   () => displayMode.value,
   (mode) => {
     if (mode !== 'hidden') void scrollToBottom()
+    if (!props.standalone) {
+      void nextTick(() => measureLayout())
+    }
   }
 )
 
 watch(activeSessionId, () => {
   autoScroll.value = true
   void scrollToBottom()
+})
+
+onMounted(() => {
+  window.addEventListener('resize', onWindowResize)
+  void nextTick(() => {
+    loadSidebarWidth()
+    if (!props.standalone) {
+      loadPanelHeight()
+    }
+    layoutObserver = new ResizeObserver(() => measureLayout())
+    const body = terminalBodyRef.value
+    if (body) layoutObserver.observe(body)
+    if (!props.standalone) {
+      const parent = panelRef.value?.parentElement
+      if (parent) {
+        layoutObserver!.observe(parent)
+        const mainEl = parent.firstElementChild
+        if (mainEl) layoutObserver!.observe(mainEl)
+        measureLayout()
+      }
+    }
+  })
+})
+
+onUnmounted(() => {
+  window.removeEventListener('resize', onWindowResize)
+  layoutObserver?.disconnect()
 })
 </script>
 
@@ -227,14 +437,20 @@ watch(activeSessionId, () => {
   </div>
 
   <!-- 底部终端面板（VS Code 风格） -->
-  <section v-else class="flex-shrink-0 border-t sb-border-subtle sb-bg-panel flex flex-col" :class="standalone && 'flex-1 min-h-0 border-t-0'">
-    <!-- 顶栏 -->
-    <header v-if="!standalone" class="flex items-center justify-between px-2 h-9 flex-shrink-0 gap-2 border-b sb-border-subtle">
+  <section
+    v-else
+    ref="panelRef"
+    class="terminal-panel relative z-[1] flex-shrink-0 flex flex-col min-h-0 overflow-hidden"
+    :class="[standalone && 'flex-1 min-h-0 border-t-0 shadow-none', (resizing || resizingSidebar) && 'select-none']"
+    :style="panelSectionStyle"
+  >
+    <!-- 顶栏：紧贴主内容区下方，拉高时不被遮挡 -->
+    <header v-if="!standalone" class="terminal-header relative z-[2] flex items-center justify-between px-2 h-9 flex-shrink-0 gap-2">
       <div class="flex items-center min-w-0">
-        <button type="button" class="flex items-center gap-1.5 px-2 h-7 rounded text-[12px] sb-text-primary sb-bg-inset font-medium" @click="toggleVisible">
+        <button type="button" class="flex items-center gap-1.5 px-2 h-7 rounded text-[12px] font-medium terminal-tab-active" @click="toggleVisible">
           <Terminal class="w-3.5 h-3.5" :stroke-width="1.5" />
           <span>终端</span>
-          <span v-if="runningCount" class="text-[10px] text-emerald-400 tabular-nums">({{ runningCount }})</span>
+          <span v-if="runningCount" class="text-[10px] terminal-status-running tabular-nums">({{ runningCount }})</span>
         </button>
         <button
           type="button"
@@ -243,7 +459,7 @@ watch(activeSessionId, () => {
         >
           <component :is="isVisible ? ChevronDown : ChevronUp" class="w-3.5 h-3.5" :stroke-width="1.5" />
         </button>
-        <span v-if="isVisible && activeSession" class="ml-2 text-[11px] sb-text-faint truncate hidden md:inline">
+        <span v-if="isVisible && activeSession" class="terminal-header-subtitle ml-2 text-[11px] truncate hidden md:inline">
           {{ activeSession.scriptName }}
         </span>
       </div>
@@ -273,6 +489,15 @@ watch(activeSessionId, () => {
           <button type="button" class="w-7 h-7 flex items-center justify-center rounded sb-text-muted hover:sb-text-primary sb-bg-hover" title="清除当前终端" @click="clearLogs()">
             <Eraser class="w-3.5 h-3.5" :stroke-width="1.5" />
           </button>
+          <button
+            v-if="isMulti && (sessions?.length ?? 0) > 0"
+            type="button"
+            class="w-7 h-7 flex items-center justify-center rounded sb-text-muted hover:text-red-400 sb-bg-hover transition-colors"
+            title="关闭全部终端"
+            @click="closeAllSessions"
+          >
+            <ListX class="w-3.5 h-3.5" :stroke-width="1.5" />
+          </button>
           <button type="button" class="w-7 h-7 flex items-center justify-center rounded sb-text-muted hover:sb-text-primary sb-bg-hover" title="弹出独立窗口" @click="emit('popout')">
             <ExternalLink class="w-3.5 h-3.5" :stroke-width="1.5" />
           </button>
@@ -286,37 +511,73 @@ watch(activeSessionId, () => {
       </div>
     </header>
 
+    <div
+      v-if="!standalone && isVisible && !isMini"
+      class="terminal-resize-handle relative z-[2] flex-shrink-0"
+      :class="resizing && 'is-active'"
+      title="拖拽调节高度，双击恢复默认"
+      @mousedown="onPanelResizeStart"
+      @dblclick="resetPanelHeight"
+    />
+
     <!-- 主体：日志区 + 右侧终端列表 -->
-    <div v-show="isVisible" class="flex min-h-0 border-t sb-border-subtle" :class="standalone ? 'flex-1 h-full border-t-0' : isMini ? 'h-28' : 'h-52'">
+    <div
+      v-show="isVisible"
+      ref="terminalBodyRef"
+      class="terminal-body flex min-h-0 flex-1 overflow-hidden border-t border-transparent"
+      :class="standalone ? 'border-t-0' : ''"
+      :style="panelBodyStyle"
+    >
       <!-- 日志输出 -->
       <div
         ref="logBodyRef"
-        class="flex-1 min-w-0 font-mono leading-relaxed overflow-y-auto sb-bg-log px-4 py-2"
+        class="terminal-log flex-1 min-w-0 font-mono leading-relaxed overflow-y-auto px-4 py-2"
         :style="{ fontSize: `${fontSize}px` }"
         @scroll="onScroll"
       >
-        <p v-if="!activeLogs.length" class="sb-text-faint py-2">
+        <p v-if="!activeLogs.length" class="terminal-log-message py-2 opacity-70">
           {{ activeSession ? '等待输出…' : '暂无日志，运行脚本后将在此显示输出' }}
         </p>
         <p v-for="(log, i) in activeLogs" :key="`${activeSessionId}-${log.ts}-${i}`" class="py-0.5 whitespace-pre-wrap break-all">
-          <span class="sb-text-faint">{{ formatLogTime(log.ts) }}</span>
+          <span class="terminal-log-time">{{ formatLogTime(log.ts) }}</span>
           <span class="ml-1.5" :class="logLevelClass(log.level)">{{ log.level }}</span>
-          <span class="sb-text-muted ml-1.5">{{ log.message }}</span>
+          <span class="terminal-log-message ml-1.5">{{ log.message }}</span>
         </p>
       </div>
 
       <!-- 右侧终端列表（VS Code 风格） -->
-      <aside
-        v-if="isMulti && !isMini"
-        class="w-44 flex-shrink-0 border-l sb-border-subtle sb-bg-panel overflow-y-auto"
-      >
+      <div v-if="isMulti && !isMini" class="flex flex-shrink-0 min-h-0 self-stretch">
+        <div
+          class="terminal-sidebar-resize-handle"
+          :class="resizingSidebar && 'is-active'"
+          title="拖拽调节宽度，双击恢复默认"
+          @mousedown="onSidebarResizeStart"
+          @dblclick="resetSidebarWidth"
+        />
+        <aside
+          class="terminal-sidebar flex flex-col min-h-0 overflow-hidden"
+          :style="{ width: `${sidebarWidth}px` }"
+        >
+        <div class="flex items-center justify-between px-2 py-1.5 border-b border-[var(--sb-border-subtle)] flex-shrink-0">
+          <span class="text-[10px] sb-text-faint uppercase tracking-wider">会话</span>
+          <button
+            type="button"
+            class="flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] sb-text-muted hover:text-red-400 hover:sb-bg-hover transition-colors"
+            title="关闭全部终端"
+            @click="closeAllSessions"
+          >
+            <ListX class="w-3 h-3" :stroke-width="1.5" />
+            <span>全部关闭</span>
+          </button>
+        </div>
+        <div class="flex-1 min-h-0 overflow-y-auto">
         <div
           v-for="session in sessions"
           :key="session.sessionId"
           class="terminal-item group flex items-center gap-1.5 px-2 py-1.5 cursor-pointer border-l-2 transition-colors"
           :class="session.sessionId === activeSessionId
-            ? 'border-[var(--sb-accent-solid)] sb-bg-inset'
-            : 'border-transparent hover:sb-bg-hover'"
+            ? 'is-active border-[var(--sb-accent-solid)]'
+            : 'border-transparent'"
           @click="selectSession(session.sessionId)"
         >
           <Terminal class="w-3.5 h-3.5 flex-shrink-0" :class="sessionStatusIconClass(session.status)" :stroke-width="1.5" />
@@ -325,7 +586,7 @@ watch(activeSessionId, () => {
           </span>
           <Loader2
             v-if="session.status === 'running'"
-            class="w-3 h-3 text-emerald-400 animate-spin flex-shrink-0"
+            class="w-3 h-3 terminal-status-running animate-spin flex-shrink-0"
             :stroke-width="1.5"
           />
           <button
@@ -337,11 +598,21 @@ watch(activeSessionId, () => {
             <X class="w-3 h-3" :stroke-width="1.5" />
           </button>
         </div>
-      </aside>
+        </div>
+        </aside>
+      </div>
 
       <!-- 迷你模式：横向 tab -->
-      <div v-else-if="isMulti && isMini" class="flex-shrink-0 border-l sb-border-subtle sb-bg-panel overflow-x-auto max-w-[40%]">
-        <div class="flex h-full">
+      <div v-else-if="isMulti && isMini" class="flex flex-shrink-0 min-h-0 self-stretch" :style="{ width: `${sidebarWidth + SIDEBAR_RESIZE_HANDLE_WIDTH}px` }">
+        <div
+          class="terminal-sidebar-resize-handle"
+          :class="resizingSidebar && 'is-active'"
+          title="拖拽调节宽度，双击恢复默认"
+          @mousedown="onSidebarResizeStart"
+          @dblclick="resetSidebarWidth"
+        />
+        <div class="terminal-sidebar flex-1 min-w-0 overflow-x-auto border-l">
+        <div class="flex h-full items-stretch">
           <button
             v-for="session in sessions"
             :key="session.sessionId"
@@ -352,9 +623,18 @@ watch(activeSessionId, () => {
               : 'border-transparent sb-text-muted hover:sb-bg-hover'"
             @click="selectSession(session.sessionId)"
           >
-            <Loader2 v-if="session.status === 'running'" class="w-2.5 h-2.5 text-emerald-400 animate-spin" :stroke-width="1.5" />
+            <Loader2 v-if="session.status === 'running'" class="w-2.5 h-2.5 terminal-status-running animate-spin" :stroke-width="1.5" />
             <span class="truncate max-w-[72px]">{{ session.scriptName }}</span>
           </button>
+          <button
+            type="button"
+            class="flex items-center justify-center px-2 h-full border-l border-[var(--sb-border-subtle)] sb-text-muted hover:text-red-400 hover:sb-bg-hover flex-shrink-0 transition-colors"
+            title="关闭全部终端"
+            @click="closeAllSessions"
+          >
+            <ListX class="w-3 h-3" :stroke-width="1.5" />
+          </button>
+        </div>
         </div>
       </div>
     </div>

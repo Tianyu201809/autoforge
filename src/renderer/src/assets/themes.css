@@ -16,6 +16,15 @@
   --sb-bg-muted: rgba(41, 37, 36, 0.35);
   --sb-bg-inset: rgba(41, 37, 36, 0.55);
 
+  --sb-terminal-bg: var(--sb-editor-bg);
+  --sb-terminal-header: var(--sb-bg-panel);
+  --sb-terminal-sidebar: var(--sb-editor-toolbar);
+  --sb-terminal-border: var(--sb-border-subtle);
+  --sb-terminal-highlight: color-mix(in srgb, var(--sb-accent-solid) 6%, var(--sb-editor-bg));
+  --sb-terminal-text: var(--sb-editor-text);
+  --sb-terminal-text-muted: var(--sb-text-muted);
+  --sb-terminal-text-faint: var(--sb-text-faint);
+
   --sb-text-primary: #fafaf9;
   --sb-text-secondary: #d6d3d1;
   --sb-text-muted: #a8a29e;
@@ -72,6 +81,15 @@
   --sb-bg-hover: rgba(28, 25, 23, 0.06);
   --sb-bg-muted: rgba(28, 25, 23, 0.04);
   --sb-bg-inset: rgba(28, 25, 23, 0.05);
+
+  --sb-terminal-bg: var(--sb-editor-bg);
+  --sb-terminal-header: var(--sb-bg-panel);
+  --sb-terminal-sidebar: var(--sb-editor-toolbar);
+  --sb-terminal-border: var(--sb-border-subtle);
+  --sb-terminal-highlight: color-mix(in srgb, var(--sb-accent-solid) 5%, var(--sb-editor-bg));
+  --sb-terminal-text: var(--sb-editor-text);
+  --sb-terminal-text-muted: var(--sb-text-muted);
+  --sb-terminal-text-faint: var(--sb-text-faint);
 
   --sb-text-primary: #1c1917;
   --sb-text-secondary: #57534e;

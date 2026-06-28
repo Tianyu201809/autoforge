@@ -115,8 +115,8 @@ onUnmounted(() => {
 </script>
 
 <template>
-  <main ref="mainRef" class="@container flex-1 flex flex-col min-w-0 min-h-0 sb-bg-base">
-    <div class="flex flex-col gap-3 px-5 py-3 border-b sb-border-subtle @lg:flex-row @lg:items-center @lg:justify-between">
+  <main ref="mainRef" class="@container flex-1 flex flex-col min-w-0 min-h-0 overflow-hidden sb-bg-base">
+    <div class="flex-shrink-0 flex flex-col gap-3 px-5 py-3 border-b sb-border-subtle @lg:flex-row @lg:items-center @lg:justify-between">
       <div class="min-w-0">
         <h1 class="text-xl font-semibold sb-text-primary tracking-tight truncate">{{ title ?? '全部脚本' }}</h1>
         <p class="text-[13px] sb-text-muted mt-0.5">管理本机自动化脚本，常驻运行与调度</p>
@@ -256,32 +256,32 @@ onUnmounted(() => {
       </div>
     </div>
 
-    <div class="grid grid-cols-1 @sm:grid-cols-2 @2xl:grid-cols-4 gap-3 px-5 py-4 border-b sb-border">
+    <div class="flex-shrink-0 grid grid-cols-2 @lg:grid-cols-4 gap-2 px-5 py-2 border-b sb-border">
       <template v-for="stat in statCards" :key="stat.label">
         <button
           v-if="stat.key === 'todayRuns'"
           type="button"
-          class="flex items-center gap-3 px-3.5 py-2.5 rounded-lg border sb-border sb-bg-surface text-left transition-colors hover:border-[var(--sb-accent-solid)] cursor-pointer"
+          class="flex items-center gap-2 px-2.5 py-1.5 rounded-md border sb-border sb-bg-surface text-left transition-colors hover:border-[var(--sb-accent-solid)] cursor-pointer min-w-0"
           @click="emit('openHistory')"
         >
-          <div class="w-8 h-8 rounded-lg flex items-center justify-center" :class="stat.bgClass">
-            <component :is="stat.icon" class="w-4 h-4" :class="stat.iconClass" :stroke-width="1.5" />
+          <div class="w-6 h-6 rounded-md flex items-center justify-center shrink-0" :class="stat.bgClass">
+            <component :is="stat.icon" class="w-3.5 h-3.5" :class="stat.iconClass" :stroke-width="1.5" />
           </div>
-          <div>
-            <p class="text-[11px] sb-text-muted">{{ stat.label }}</p>
-            <p class="text-lg font-medium tracking-tight" :class="stat.valueClass">{{ stats[stat.key] }}</p>
+          <div class="min-w-0">
+            <p class="text-[10px] sb-text-muted leading-tight">{{ stat.label }}</p>
+            <p class="text-base font-medium tracking-tight leading-tight" :class="stat.valueClass">{{ stats[stat.key] }}</p>
           </div>
         </button>
         <div
           v-else
-          class="flex items-center gap-3 px-3.5 py-2.5 rounded-lg border sb-border sb-bg-surface"
+          class="flex items-center gap-2 px-2.5 py-1.5 rounded-md border sb-border sb-bg-surface min-w-0"
         >
-          <div class="w-8 h-8 rounded-lg flex items-center justify-center" :class="stat.bgClass">
-            <component :is="stat.icon" class="w-4 h-4" :class="stat.iconClass" :stroke-width="1.5" />
+          <div class="w-6 h-6 rounded-md flex items-center justify-center shrink-0" :class="stat.bgClass">
+            <component :is="stat.icon" class="w-3.5 h-3.5" :class="stat.iconClass" :stroke-width="1.5" />
           </div>
-          <div>
-            <p class="text-[11px] sb-text-muted">{{ stat.label }}</p>
-            <p class="text-lg font-medium tracking-tight" :class="stat.valueClass">{{ stats[stat.key] }}</p>
+          <div class="min-w-0">
+            <p class="text-[10px] sb-text-muted leading-tight">{{ stat.label }}</p>
+            <p class="text-base font-medium tracking-tight leading-tight" :class="stat.valueClass">{{ stats[stat.key] }}</p>
           </div>
         </div>
       </template>

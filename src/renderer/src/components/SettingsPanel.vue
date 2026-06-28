@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { onMounted, onUnmounted, ref, watch } from 'vue'
+import { onMounted, onUnmounted, ref, toRaw, watch } from 'vue'
 import { CheckCircle2, Plus, Trash2, X, XCircle } from 'lucide-vue-next'
 import type { BrowserStatusInfo, EnvironmentProfile } from '../../../shared/types/script'
 import ThemeToggle from './ThemeToggle.vue'
@@ -21,6 +21,8 @@ const environments = ref<EnvironmentProfile[]>([])
 const editingEnv = ref<EnvironmentProfile | null>(null)
 const envVarKey = ref('')
 const envVarValue = ref('')
+const savingEnv = ref(false)
+const envSaved = ref(false)
 
 let offModeChange: (() => void) | undefined
 let syncingFromEvent = false
@@ -84,15 +86,45 @@ async function save(): Promise<void> {
   }
 }
 
+function syncEditingEnv(id?: string): void {
+  const targetId = id ?? editingEnv.value?.id
+  if (!targetId) {
+    editingEnv.value = environments.value[0] ?? null
+    return
+  }
+  editingEnv.value = environments.value.find((e) => e.id === targetId) ?? null
+}
+
+function selectEnv(id: string): void {
+  if (editingEnv.value?.id !== id) {
+    envSaved.value = false
+  }
+  syncEditingEnv(id)
+}
+
 async function saveEnv(): Promise<void> {
   if (!editingEnv.value) return
-  await window.autoforge.env.update(editingEnv.value.id, {
-    name: editingEnv.value.name,
-    description: editingEnv.value.description,
-    variables: editingEnv.value.variables,
-    isDefault: editingEnv.value.isDefault
-  })
-  environments.value = await window.autoforge.env.list()
+  const env = toRaw(editingEnv.value)
+  const envId = env.id
+  savingEnv.value = true
+  envSaved.value = false
+  try {
+    // IPC 需要纯 JSON 对象，Vue reactive Proxy 无法 structured clone
+    const updated = await window.autoforge.env.update(envId, {
+      name: env.name,
+      description: env.description,
+      variables: Object.fromEntries(
+        Object.entries(env.variables).map(([k, v]) => [k, v ?? ''])
+      ),
+      isDefault: env.isDefault
+    })
+    if (!updated) return
+    environments.value = await window.autoforge.env.list()
+    syncEditingEnv(envId)
+    envSaved.value = true
+  } finally {
+    savingEnv.value = false
+  }
 }
 
 async function createEnv(): Promise<void> {
@@ -102,7 +134,8 @@ async function createEnv(): Promise<void> {
     isDefault: false
   })
   environments.value = await window.autoforge.env.list()
-  editingEnv.value = env
+  syncEditingEnv(env.id)
+  envSaved.value = false
 }
 
 async function deleteEnv(id: string): Promise<void> {
@@ -118,7 +151,8 @@ async function deleteEnv(id: string): Promise<void> {
   if (!confirmed) return
   await window.autoforge.env.delete(id)
   environments.value = await window.autoforge.env.list()
-  editingEnv.value = environments.value[0] ?? null
+  syncEditingEnv()
+  envSaved.value = false
 }
 
 function addEnvVar(): void {
@@ -206,7 +240,7 @@ async function openUserDataDir(): Promise<void> {
             type="button"
             class="px-3 py-1.5 rounded-lg text-[12px] border transition-colors"
             :class="editingEnv?.id === env.id ? 'sb-bg-inset sb-border sb-text-primary' : 'sb-border sb-text-muted hover:border-[var(--sb-text-faint)]'"
-            @click="editingEnv = env"
+            @click="selectEnv(env.id)"
           >
             {{ env.name }}
             <span v-if="env.isDefault" class="sb-text-faint ml-1">(默认)</span>
@@ -241,8 +275,16 @@ async function openUserDataDir(): Promise<void> {
             </div>
           </div>
 
-          <div class="flex gap-2">
-            <button type="button" class="h-8 px-4 rounded-lg sb-btn-accent text-[12px] font-medium" @click="saveEnv">保存环境</button>
+          <div class="flex items-center gap-3">
+            <button
+              type="button"
+              class="h-8 px-4 rounded-lg sb-btn-accent text-[12px] font-medium disabled:opacity-50"
+              :disabled="savingEnv"
+              @click="saveEnv"
+            >
+              {{ savingEnv ? '保存中…' : '保存环境' }}
+            </button>
+            <p v-if="envSaved" class="text-[12px] text-emerald-400">环境已保存</p>
             <button
               v-if="environments.length > 1"
               type="button"

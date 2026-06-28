@@ -182,6 +182,19 @@ async function handleStart(scriptId: string): Promise<void> {
 function handleCloseTerminal(sessionId: string): void {
   trackedSessionIds.value = trackedSessionIds.value.filter((id) => id !== sessionId)
   runner.clearLogs(sessionId)
+  if (!trackedSessionIds.value.length) {
+    logConsoleActiveSessionId.value = undefined
+    logConsoleMode.value = 'hidden'
+  }
+}
+
+function handleCloseAllTerminals(): void {
+  for (const id of trackedSessionIds.value) {
+    runner.clearLogs(id)
+  }
+  trackedSessionIds.value = []
+  logConsoleActiveSessionId.value = undefined
+  logConsoleMode.value = 'hidden'
 }
 
 function handleClearLogs(sessionId?: string): void {
@@ -276,7 +289,7 @@ onUnmounted(() => {
       <SettingsPanel v-else-if="showSettings" @close="closeSettings" />
       <template v-else>
         <div class="flex flex-1 min-h-0 min-w-0 overflow-x-auto">
-          <div class="flex flex-1 flex-col min-w-0 min-h-0">
+          <div class="flex flex-1 flex-col min-w-0 min-h-0 overflow-hidden">
             <MainContent
               :scripts="filteredScripts"
               :stats="stats"
@@ -312,6 +325,7 @@ onUnmounted(() => {
               :sessions="logConsoleSessions"
               @clear="handleClearLogs"
               @close="handleCloseTerminal"
+              @close-all="handleCloseAllTerminals"
               @popout="handlePopoutTerminal"
             />
             <div

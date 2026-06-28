@@ -96,3 +96,169 @@ body {
   background: color-mix(in srgb, var(--sb-accent-solid) 10%, var(--sb-bg-panel));
   box-shadow: inset 3px 0 0 var(--sb-accent-solid);
 }
+
+/* 底部终端面板 — 与编辑器 / 面板同色系 */
+.terminal-panel {
+  position: relative;
+  z-index: 1;
+  background: var(--sb-bg-panel);
+  border-top: 1px solid var(--sb-border-subtle);
+  overflow: hidden;
+  isolation: isolate;
+}
+
+.terminal-header {
+  background: color-mix(in srgb, var(--sb-accent-solid) 6%, var(--sb-bg-panel));
+  border-bottom: 1px solid var(--sb-border-subtle);
+  flex-shrink: 0;
+}
+
+.terminal-tab-active {
+  color: var(--sb-text-primary);
+  background: var(--sb-bg-inset);
+  box-shadow: inset 0 -2px 0 var(--sb-accent-solid);
+}
+
+.terminal-header button:not(.terminal-tab-active) {
+  color: var(--sb-text-muted);
+}
+
+.terminal-header button:not(.terminal-tab-active):hover {
+  color: var(--sb-text-secondary);
+  background: var(--sb-bg-hover);
+}
+
+.terminal-header-subtitle {
+  color: var(--sb-text-faint);
+}
+
+.terminal-resize-handle {
+  flex-shrink: 0;
+  height: 5px;
+  cursor: row-resize;
+  touch-action: none;
+  position: relative;
+  background: var(--sb-bg-panel);
+}
+
+.terminal-resize-handle::before {
+  content: '';
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: 50%;
+  height: 1px;
+  transform: translateY(-50%);
+  background: var(--sb-border-subtle);
+  transition: background-color 0.15s ease;
+}
+
+.terminal-resize-handle:hover::before,
+.terminal-resize-handle.is-active::before {
+  height: 2px;
+  background: var(--sb-accent-solid);
+}
+
+.terminal-sidebar-resize-handle {
+  flex-shrink: 0;
+  width: 5px;
+  cursor: col-resize;
+  touch-action: none;
+  position: relative;
+  background: transparent;
+}
+
+.terminal-sidebar-resize-handle::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: 50%;
+  width: 1px;
+  transform: translateX(-50%);
+  background: var(--sb-border-subtle);
+  transition: background-color 0.15s ease, width 0.15s ease;
+}
+
+.terminal-sidebar-resize-handle:hover::before,
+.terminal-sidebar-resize-handle.is-active::before {
+  width: 2px;
+  background: var(--sb-accent-solid);
+}
+
+.terminal-body {
+  background: var(--sb-terminal-bg);
+}
+
+.terminal-log {
+  background: var(--sb-terminal-bg);
+  color: var(--sb-terminal-text);
+}
+
+.terminal-log .terminal-log-time {
+  color: var(--sb-text-faint);
+}
+
+.terminal-log .terminal-log-message {
+  color: var(--sb-terminal-text);
+}
+
+.terminal-log-level-info {
+  color: var(--sb-hl-string);
+}
+
+.terminal-log-level-warn {
+  color: var(--sb-hl-keyword);
+}
+
+.terminal-log-level-error {
+  color: #ef4444;
+}
+
+[data-theme='dark'] .terminal-log-level-error {
+  color: #f87171;
+}
+
+.terminal-sidebar {
+  background: var(--sb-terminal-sidebar);
+  border-left: 1px solid var(--sb-border-subtle);
+}
+
+.terminal-sidebar .terminal-item.is-active {
+  background: color-mix(in srgb, var(--sb-accent-solid) 10%, var(--sb-bg-inset));
+}
+
+.terminal-sidebar .terminal-item:not(.is-active):hover {
+  background: var(--sb-bg-hover);
+}
+
+.terminal-status-running {
+  color: var(--sb-hl-string);
+}
+
+.run-result-finished {
+  padding: 0.375rem 0.625rem;
+  border-radius: 0.375rem;
+  border: 1px solid color-mix(in srgb, var(--sb-accent-solid) 32%, var(--sb-border-subtle));
+  background: color-mix(in srgb, var(--sb-accent-solid) 11%, var(--sb-bg-inset));
+  box-shadow: inset 3px 0 0 var(--sb-accent-solid);
+}
+
+.run-result-finished-icon {
+  color: var(--sb-accent-solid);
+}
+
+.run-result-finished-label {
+  font-size: 11px;
+  font-weight: 500;
+  color: var(--sb-text-muted);
+  flex-shrink: 0;
+}
+
+.run-result-finished-time {
+  font-size: 12px;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  color: var(--sb-accent-solid);
+  letter-spacing: 0.02em;
+}

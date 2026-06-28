@@ -98,6 +98,17 @@ function handleClear(sessionId?: string): void {
 function handleClose(sessionId: string): void {
   trackedSessionIds.value = trackedSessionIds.value.filter((id) => id !== sessionId)
   runner.clearLogs(sessionId)
+  if (!trackedSessionIds.value.length) {
+    activeSessionId.value = undefined
+  }
+}
+
+function handleCloseAll(): void {
+  for (const id of trackedSessionIds.value) {
+    runner.clearLogs(id)
+  }
+  trackedSessionIds.value = []
+  activeSessionId.value = undefined
 }
 </script>
 
@@ -118,6 +129,7 @@ function handleClose(sessionId: string): void {
         standalone
         @clear="handleClear"
         @close="handleClose"
+        @close-all="handleCloseAll"
       />
     </div>
   </div>
