@@ -196,7 +196,7 @@ function triggerLabel(trigger: ExecutionRecord['trigger']): string {
 
     <div v-else class="flex-1 overflow-y-auto px-6 py-4 space-y-6">
       <section v-for="day in filteredSummaries" :key="day.date">
-        <div class="flex items-center gap-3 mb-3 sticky top-0 sb-bg-base py-1 z-10">
+        <div class="flex items-center gap-3 mb-3 pb-2 border-b sb-border-subtle">
           <h2 class="text-[14px] font-semibold sb-text-primary">{{ formatDateLabel(day.date) }}</h2>
           <span class="text-[11px] sb-text-muted tabular-nums">{{ day.date }}</span>
           <div class="flex items-center gap-2 ml-auto text-[11px]">

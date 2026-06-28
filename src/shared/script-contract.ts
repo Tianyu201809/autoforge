@@ -182,20 +182,30 @@ export const CATEGORY_DEFAULTS: Record<
   }
 }
 
+export function normalizeAutoforgeManifestVersion(raw: unknown): string | null {
+  if (raw === undefined || raw === null || raw === '') {
+    return AUTOFORGE_MANIFEST_VERSION
+  }
+  if (raw === AUTOFORGE_MANIFEST_VERSION || raw === '1' || raw === 1) {
+    return AUTOFORGE_MANIFEST_VERSION
+  }
+  return null
+}
+
 export function validateManifest(raw: unknown): { ok: true; manifest: ScriptManifest } | { ok: false; error: string } {
   if (!raw || typeof raw !== 'object') {
     return { ok: false, error: 'autoforge.json 必须是 JSON 对象' }
   }
   const obj = raw as Record<string, unknown>
-  const version = obj.autoforge ?? obj.scriptbox
-  if (version !== AUTOFORGE_MANIFEST_VERSION) {
+  const autoforgeVersion = normalizeAutoforgeManifestVersion(obj.autoforge ?? obj.scriptbox)
+  if (!autoforgeVersion) {
     return { ok: false, error: `autoforge 版本必须为 "${AUTOFORGE_MANIFEST_VERSION}"` }
   }
   if (typeof obj.name !== 'string' || !obj.name.trim()) {
     return { ok: false, error: 'name 为必填字符串' }
   }
   const manifest: ScriptManifest = {
-    autoforge: AUTOFORGE_MANIFEST_VERSION,
+    autoforge: autoforgeVersion,
     name: obj.name.trim(),
     description: typeof obj.description === 'string' ? obj.description : undefined,
     version: typeof obj.version === 'string' ? obj.version : '1.0.0',

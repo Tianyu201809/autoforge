@@ -1,6 +1,8 @@
 import { askPrompt } from './usePromptDialog'
+import { useToast } from './useToast'
 
 export async function renameScript(scriptId: string, currentName: string): Promise<boolean> {
+  const { pushToast } = useToast()
   const name = await askPrompt({
     title: '重命名脚本',
     message: '名称将写入 autoforge.json，并在列表与详情中同步显示。',
@@ -13,6 +15,15 @@ export async function renameScript(scriptId: string, currentName: string): Promi
   const trimmed = name.trim()
   if (!trimmed || trimmed === currentName.trim()) return false
 
-  await window.autoforge.scripts.updateMeta(scriptId, { name: trimmed })
-  return true
+  try {
+    await window.autoforge.scripts.updateMeta(scriptId, { name: trimmed })
+    return true
+  } catch (err) {
+    pushToast({
+      type: 'error',
+      title: '重命名失败',
+      message: err instanceof Error ? err.message : '无法更新 autoforge.json'
+    })
+    return false
+  }
 }

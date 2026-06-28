@@ -11,9 +11,11 @@ import {
   Search,
   Settings,
   Star,
+  Store,
   Upload
 } from 'lucide-vue-next'
 import type { CategoryItem, NavFilter, NavItem } from '../../../shared/types/script'
+import { useToast } from '../composables/useToast'
 
 defineProps<{
   navItems: NavItem[]
@@ -22,6 +24,8 @@ defineProps<{
 }>()
 
 const searchQuery = defineModel<string>('searchQuery', { required: true })
+
+const { pushToast } = useToast()
 
 const emit = defineEmits<{
   navigate: [filter: NavFilter]
@@ -47,6 +51,14 @@ function onKeydown(e: KeyboardEvent): void {
     const input = document.getElementById('sidebar-search') as HTMLInputElement | null
     input?.focus()
   }
+}
+
+function openScriptMarket(): void {
+  pushToast({
+    type: 'info',
+    title: '脚本市场',
+    message: '建设中，敬请期待'
+  })
 }
 
 onMounted(() => window.addEventListener('keydown', onKeydown))
@@ -137,6 +149,15 @@ onUnmounted(() => window.removeEventListener('keydown', onKeydown))
       >
         <Upload class="w-3.5 h-3.5" :stroke-width="1.5" />
         上传脚本
+      </button>
+      <button
+        type="button"
+        class="w-full flex items-center gap-2.5 px-2 py-1.5 rounded-md sb-text-muted hover:sb-text-secondary sb-bg-hover text-[13px] transition-colors"
+        @click="openScriptMarket"
+      >
+        <Store class="w-4 h-4" :stroke-width="1.5" />
+        <span>脚本市场</span>
+        <span class="ml-auto text-[10px] sb-text-faint sb-bg-inset px-1.5 py-0.5 rounded border sb-border-subtle">Soon</span>
       </button>
       <button
         type="button"
