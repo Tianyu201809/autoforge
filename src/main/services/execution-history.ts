@@ -120,6 +120,7 @@ export class ExecutionHistoryService {
     finishedAt: string
     exitCode?: number
     errorMessage?: string
+    result?: unknown
   }): ExecutionRecord | null {
     this.ensureInitialized()
     const record = this.records.find((r) => r.id === input.sessionId)
@@ -129,6 +130,9 @@ export class ExecutionHistoryService {
     record.finishedAt = input.finishedAt
     record.exitCode = input.exitCode
     record.errorMessage = input.errorMessage
+    if (input.result !== undefined) {
+      record.result = input.result
+    }
     record.durationMs = durationMs(record.startedAt, input.finishedAt)
     this.save()
     return record

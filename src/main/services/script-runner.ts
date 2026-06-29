@@ -22,6 +22,7 @@ import { buildCategorySidebarItems } from './category-service'
 import { scriptStore } from './script-store'
 import { scriptWorkspace } from './script-workspace'
 import { formatScriptRunProgressSummary } from '../../shared/script-progress'
+import { broadcastToRenderers } from './window-broadcast'
 
 interface ActiveSession {
   session: RunSession
@@ -266,7 +267,8 @@ export class ScriptRunnerService {
       sessionId: active.session.id,
       status: 'success',
       finishedAt: active.session.finishedAt,
-      exitCode: 0
+      exitCode: 0,
+      result
     })
     this.lifecycle.emit(sessionId, active.session.scriptId, 'completed')
     this.broadcastSession(active.session)
@@ -285,7 +287,8 @@ export class ScriptRunnerService {
       status: 'error',
       finishedAt: active.session.finishedAt,
       exitCode: active.session.exitCode,
-      errorMessage: message
+      errorMessage: message,
+      result: active.session.result
     })
     this.lifecycle.emit(sessionId, active.session.scriptId, 'failed', message)
     this.broadcastSession(active.session)

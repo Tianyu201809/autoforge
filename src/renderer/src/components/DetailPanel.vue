@@ -1,10 +1,12 @@
 <script setup lang="ts">
 import { computed, onMounted, onUnmounted, ref, toRaw, watch } from 'vue'
 import {
+  AlertCircle,
   Check,
   CheckCircle2,
   Copy,
   FolderOpen,
+  Loader2,
   Package,
   Play,
   Pencil,
@@ -23,6 +25,7 @@ import { resolveScriptIcon } from '../lib/script-icon-map'
 import { renameScript } from '../composables/useScriptRename'
 import CronScheduleBuilder from './CronScheduleBuilder.vue'
 import LogConsole from './LogConsole.vue'
+import ScriptRunHistoryPanel from './ScriptRunHistoryPanel.vue'
 import ScriptRunProgressPanel from './ScriptRunProgressPanel.vue'
 import { formatScriptRunProgressSummary } from '../../../shared/script-progress'
 import CodeEditor from './CodeEditor.vue'
@@ -35,7 +38,7 @@ import { parseParamAttachments } from '../../../shared/param-attachments'
 import { defaultSchemaValue } from '../../../shared/schema-values'
 import { promptUnsavedFiles } from '../utils/unsaved-files-prompt'
 
-type DetailPanelTab = 'detail' | 'params' | 'edit' | 'log' | 'config'
+type DetailPanelTab = 'detail' | 'params' | 'edit' | 'log' | 'config' | 'history'
 
 const props = defineProps<{
   script: ScriptItem
@@ -46,6 +49,10 @@ const props = defineProps<{
 }>()
 
 const PANEL_WIDTH_KEY = 'autoforge-detail-panel-width'
+const RUN_SPLIT_KEY = 'autoforge-run-split-top-pct'
+const RUN_SPLIT_MIN = 25
+const RUN_SPLIT_MAX = 75
+const RUN_SPLIT_DEFAULT = 45
 const SIDEBAR_WIDTH = 224
 const MAIN_MIN_WIDTH = 480
 const MIN_WIDTH = 320
@@ -54,6 +61,9 @@ const DEFAULT_WIDTH = 384
 
 const panelWidth = ref(DEFAULT_WIDTH)
 const resizing = ref(false)
+const runSplitTopPct = ref(RUN_SPLIT_DEFAULT)
+const runSplitResizing = ref(false)
+const viewingSessionId = ref<string | null>(null)
 
 function getMaxPanelWidth(): number {
   return Math.min(
@@ -105,6 +115,47 @@ function onResizeStart(e: MouseEvent): void {
 function onResizeReset(): void {
   panelWidth.value = DEFAULT_WIDTH
   localStorage.setItem(PANEL_WIDTH_KEY, String(DEFAULT_WIDTH))
+}
+
+function loadRunSplitRatio(): void {
+  const stored = Number(localStorage.getItem(RUN_SPLIT_KEY))
+  runSplitTopPct.value =
+    Number.isFinite(stored) && stored >= RUN_SPLIT_MIN && stored <= RUN_SPLIT_MAX
+      ? stored
+      : RUN_SPLIT_DEFAULT
+}
+
+function clampRunSplitPct(pct: number): number {
+  return Math.min(RUN_SPLIT_MAX, Math.max(RUN_SPLIT_MIN, pct))
+}
+
+function onRunSplitStart(e: MouseEvent): void {
+  e.preventDefault()
+  runSplitResizing.value = true
+  const container = (e.currentTarget as HTMLElement).parentElement
+  if (!container) return
+  const rect = container.getBoundingClientRect()
+  const startY = e.clientY
+  const startPct = runSplitTopPct.value
+
+  const onMove = (ev: MouseEvent): void => {
+    const deltaPct = ((ev.clientY - startY) / rect.height) * 100
+    runSplitTopPct.value = clampRunSplitPct(startPct + deltaPct)
+  }
+
+  const onUp = (): void => {
+    runSplitResizing.value = false
+    localStorage.setItem(RUN_SPLIT_KEY, String(runSplitTopPct.value))
+    document.removeEventListener('mousemove', onMove)
+    document.removeEventListener('mouseup', onUp)
+    document.body.style.cursor = ''
+    document.body.style.userSelect = ''
+  }
+
+  document.body.style.cursor = 'row-resize'
+  document.body.style.userSelect = 'none'
+  document.addEventListener('mousemove', onMove)
+  document.addEventListener('mouseup', onUp)
 }
 
 const emit = defineEmits<{
@@ -161,7 +212,8 @@ const iconOptions = SCRIPT_ICON_OPTIONS
 
 const tabs = [
   { id: 'detail' as const, label: '详情' },
-  { id: 'params' as const, label: '运行参数' },
+  { id: 'params' as const, label: '运行' },
+  { id: 'history' as const, label: '运行历史' },
   { id: 'edit' as const, label: '编辑' },
   { id: 'log' as const, label: '日志' },
   { id: 'config' as const, label: '配置' }
@@ -176,8 +228,17 @@ const session = computed(() => {
     .sort((a, b) => b.startedAt.localeCompare(a.startedAt))[0]
 })
 
-const sessionLogs = computed(() => {
-  const sid = session.value?.id ?? props.script.activeSessionId
+const latestRunSessionId = computed(() => resolveLatestSessionId())
+
+const latestRunSession = computed(() => {
+  const sid = latestRunSessionId.value
+  if (!sid) return undefined
+  return props.runner.sessions.value.find((s) => s.id === sid)
+})
+
+const latestRunLogs = computed(() => {
+  const sid = latestRunSessionId.value
+  if (!sid) return []
   return props.runner.logsForSession(sid)
 })
 
@@ -194,11 +255,40 @@ const activeSessionId = computed(() => {
   return running?.id ?? props.script.activeSessionId
 })
 
-const runResult = computed(() => props.runner.resultForScript(props.script.id))
+function resolveLatestSessionId(): string | undefined {
+  const scriptSessions = props.runner.sessions.value.filter((s) => s.scriptId === props.script.id)
+  const running = scriptSessions.find((s) => s.status === 'running')
+  if (running) return running.id
+  const latest = [...scriptSessions]
+    .filter((s) => s.status === 'success' || s.status === 'error' || s.status === 'stopped')
+    .sort((a, b) => b.startedAt.localeCompare(a.startedAt))[0]
+  return latest?.id
+}
 
-const runResultFinishedAt = computed(
-  () => props.runner.lastSuccessSessionForScript(props.script.id)?.finishedAt
-)
+function syncViewingSessionId(): void {
+  const currentId = viewingSessionId.value
+  if (currentId && props.runner.sessions.value.some((s) => s.id === currentId)) return
+  viewingSessionId.value = resolveLatestSessionId() ?? null
+}
+
+const viewingSession = computed(() => {
+  const sid = viewingSessionId.value ?? resolveLatestSessionId()
+  if (!sid) return undefined
+  return props.runner.sessions.value.find((s) => s.id === sid)
+})
+
+const runResult = computed(() => {
+  const s = viewingSession.value
+  if (!s || s.status === 'running') return null
+  if (s.status === 'success' && s.result != null) return s.result
+  return null
+})
+
+const runResultFinishedAt = computed(() => viewingSession.value?.finishedAt)
+
+const viewingSessionFailed = computed(() => viewingSession.value?.status === 'error')
+
+const viewingSessionExitCode = computed(() => viewingSession.value?.exitCode)
 
 const runResultText = computed(() => formatRunResult(runResult.value))
 
@@ -208,9 +298,15 @@ const resultCopied = ref(false)
 let resultCopiedTimer: ReturnType<typeof setTimeout> | undefined
 
 const statusLabel = computed(() => {
-  if (isRunning.value) return { text: '运行中', class: 'text-emerald-400' }
-  if (props.script.status === 'error') return { text: '运行异常', class: 'text-red-400' }
-  return { text: '空闲', class: 'sb-text-muted' }
+  if (isRunning.value) return { text: '运行中', class: 'text-emerald-400', icon: 'running' as const }
+  if (props.script.status === 'error') return { text: '运行异常', class: 'text-red-400', icon: 'error' as const }
+  return { text: '空闲', class: 'sb-text-muted', icon: 'idle' as const }
+})
+
+const headerStatusSubtext = computed(() => {
+  if (sessionProgressSummary.value) return sessionProgressSummary.value
+  if (session.value?.phase) return session.value.phase
+  return props.script.meta
 })
 
 const sessionProgressSummary = computed(() => formatScriptRunProgressSummary(session.value?.runProgress))
@@ -388,7 +484,9 @@ function syncScheduleFromScript(): void {
 
 onMounted(async () => {
   loadPanelWidth()
+  loadRunSplitRatio()
   syncScheduleFromScript()
+  syncViewingSessionId()
   await Promise.all([loadContent(), loadEnvironments()])
   syncDetailDraft()
   window.addEventListener('resize', onWindowResize)
@@ -454,11 +552,19 @@ watch(
     }
     editModeActive.value = false
     syncScheduleFromScript()
+    viewingSessionId.value = null
     resetFileEditor()
     if (props.initialTab) activeTab.value = props.initialTab
     await Promise.all([loadContent(), loadEnvironments()])
     syncDetailDraft()
+    syncViewingSessionId()
   }
+)
+
+watch(
+  () => props.runner.sessions.value,
+  () => syncViewingSessionId(),
+  { deep: true }
 )
 
 watch(
@@ -608,15 +714,16 @@ async function saveConfig(): Promise<void> {
 
 async function runWithEnv(): Promise<void> {
   const params = plainParamVars()
-  await props.runner.start(props.script.id, selectedEnvId.value, params)
+  const started = await props.runner.start(props.script.id, selectedEnvId.value, params)
+  if (started) viewingSessionId.value = started.id
   emit('navigate-tab', 'params')
   emit('viewLog')
   emit('refresh')
 }
 
 function clearSessionLogs(): void {
-  const sid = session.value?.id ?? props.script.activeSessionId
-  props.runner.clearLogs(sid)
+  const sid = latestRunSessionId.value
+  if (sid) props.runner.clearLogs(sid)
 }
 
 async function installDeps(): Promise<void> {
@@ -680,6 +787,12 @@ async function updateIcon(icon: ScriptIcon): Promise<void> {
     savingMeta.value = false
   }
 }
+async function restartScript(): Promise<void> {
+  const started = await props.runner.restart(props.script.id, selectedEnvId.value, plainParamVars())
+  if (started) viewingSessionId.value = started.id
+  emit('navigate-tab', 'params')
+  emit('refresh')
+}
 
 async function handleRename(): Promise<void> {
   if (renaming.value) return
@@ -712,7 +825,7 @@ async function handleRename(): Promise<void> {
       />
     </div>
     <div
-      class="relative flex items-center justify-between px-4 py-3.5 border-b sb-border-subtle detail-panel-header"
+      class="relative flex items-center justify-between px-4 py-3.5 border-b sb-border-subtle detail-panel-header gap-3"
       :class="iconPickerOpen && 'z-30'"
     >
       <div
@@ -772,7 +885,43 @@ async function handleRename(): Promise<void> {
           </div>
         </div>
       </div>
-      <button type="button" class="w-7 h-7 flex items-center justify-center rounded-md sb-text-muted hover:sb-text-secondary hover:sb-bg-inset transition-colors" @click="emit('close')">
+
+      <div
+        class="flex-shrink-0 flex items-center gap-2.5 px-3 py-1.5 rounded-lg border min-w-0 max-w-[180px]"
+        :class="isRunning ? 'bg-emerald-500/5 border-emerald-500/15' : 'sb-bg-surface sb-border-subtle'"
+      >
+        <div
+          class="w-7 h-7 rounded-full flex items-center justify-center flex-shrink-0"
+          :class="isRunning ? 'bg-emerald-500/10' : 'sb-bg-inset'"
+        >
+          <Loader2
+            v-if="statusLabel.icon === 'running'"
+            class="w-3.5 h-3.5 animate-spin"
+            :class="statusLabel.class"
+            :stroke-width="1.5"
+          />
+          <AlertCircle
+            v-else-if="statusLabel.icon === 'error'"
+            class="w-3.5 h-3.5"
+            :class="statusLabel.class"
+            :stroke-width="1.5"
+          />
+          <CheckCircle2
+            v-else
+            class="w-3.5 h-3.5"
+            :class="statusLabel.class"
+            :stroke-width="1.5"
+          />
+        </div>
+        <div class="min-w-0">
+          <p class="text-[12px] font-medium leading-tight" :class="statusLabel.class">{{ statusLabel.text }}</p>
+          <p class="text-[10px] sb-text-muted truncate leading-tight mt-0.5" :title="headerStatusSubtext">
+            {{ headerStatusSubtext }}
+          </p>
+        </div>
+      </div>
+
+      <button type="button" class="w-7 h-7 flex-shrink-0 flex items-center justify-center rounded-md sb-text-muted hover:sb-text-secondary hover:sb-bg-inset transition-colors" @click="emit('close')">
         <X class="w-4 h-4" :stroke-width="1.5" />
       </button>
     </div>
@@ -799,7 +948,7 @@ async function handleRename(): Promise<void> {
       <button
         type="button"
         class="flex-1 flex items-center justify-center gap-1.5 h-8 rounded-lg sb-bg-inset sb-text-secondary border sb-border-subtle text-[12px] font-medium sb-bg-hover transition-colors"
-        @click="runner.restart(script.id, selectedEnvId, plainParamVars()).then(() => { emit('navigate-tab', 'params'); emit('refresh') })"
+        @click="restartScript"
       >
         <RotateCw class="w-3.5 h-3.5" :stroke-width="1.5" />
         重启
@@ -851,7 +1000,7 @@ async function handleRename(): Promise<void> {
           >
             <option v-for="env in environments" :key="env.id" :value="env.id">{{ env.name }}</option>
           </select>
-          <p class="mt-1 text-[11px] sb-text-faint">环境变量在「配置」Tab 中按环境保存；运行参数在「运行参数」Tab 中同样按环境分别保存</p>
+          <p class="mt-1 text-[11px] sb-text-faint">环境变量在「配置」Tab 中按环境保存；运行参数在「运行」Tab 中同样按环境分别保存</p>
         </div>
 
         <div>
@@ -898,16 +1047,6 @@ async function handleRename(): Promise<void> {
             {{ installingDeps ? '安装中…' : '安装依赖' }}
           </button>
         </div>
-
-        <div>
-          <LogConsole
-            embedded
-            title="最近日志"
-            :logs="sessionLogs.slice(-20)"
-            :run-progress="session?.runProgress"
-            @clear="clearSessionLogs"
-          />
-        </div>
       </div>
       </div>
 
@@ -950,9 +1089,12 @@ async function handleRename(): Promise<void> {
       </div>
     </div>
 
-    <!-- 运行参数 -->
-    <div v-else-if="activeTab === 'params'" class="flex-1 flex flex-col min-h-0">
-      <div class="flex-1 overflow-y-auto min-h-0 p-4 space-y-4">
+    <!-- 运行 -->
+    <div v-else-if="activeTab === 'params'" class="flex-1 flex flex-col min-h-0" :class="runSplitResizing && 'select-none'">
+      <div
+        class="overflow-y-auto min-h-0 p-4 space-y-4 flex-shrink-0"
+        :style="{ height: `${runSplitTopPct}%` }"
+      >
         <div v-if="script.paramSchema.length">
           <label class="text-[11px] font-medium sb-text-faint uppercase tracking-wider">运行参数</label>
           <p class="mt-1 text-[11px] sb-text-faint">
@@ -970,73 +1112,111 @@ async function handleRename(): Promise<void> {
           </div>
         </div>
         <p v-else class="text-[13px] sb-text-muted">此脚本未定义运行参数</p>
+      </div>
 
-        <div>
-          <label class="text-[11px] font-medium sb-text-faint uppercase tracking-wider">运行状态</label>
-          <div class="mt-2 flex items-center gap-3 p-3 rounded-lg border" :class="isRunning ? 'bg-emerald-500/5 border-emerald-500/15' : 'sb-bg-surface sb-border-subtle'">
-            <div class="w-8 h-8 rounded-full flex items-center justify-center" :class="isRunning ? 'bg-emerald-500/10' : 'sb-bg-inset'">
-              <CheckCircle2 class="w-4 h-4" :class="statusLabel.class" :stroke-width="1.5" />
-            </div>
-            <div>
-              <p class="text-[13px] font-medium" :class="statusLabel.class">{{ statusLabel.text }}</p>
-              <p v-if="sessionProgressSummary" class="text-[11px] sb-text-muted">{{ sessionProgressSummary }}</p>
-              <p v-else-if="session?.phase" class="text-[11px] sb-text-muted">{{ session.phase }}</p>
-              <p v-else class="text-[11px] sb-text-muted">{{ script.meta }}</p>
-            </div>
-          </div>
-          <ScriptRunProgressPanel v-if="session?.runProgress && isRunning" :progress="session.runProgress" compact />
+      <div
+        class="flex-shrink-0 h-1.5 cursor-row-resize group relative border-y sb-border-subtle"
+        title="拖拽调节上下区域高度"
+        @mousedown="onRunSplitStart"
+      >
+        <div
+          class="absolute inset-x-0 top-1/2 h-px -translate-y-1/2 transition-colors"
+          :class="runSplitResizing ? 'bg-[var(--sb-accent-solid)]' : 'sb-border-subtle group-hover:bg-[var(--sb-accent-solid)]'"
+        />
+      </div>
+
+      <div class="flex-1 flex flex-col min-h-0 overflow-hidden">
+        <div class="flex-shrink-0 px-4 pt-3 pb-2">
+          <label class="text-[11px] font-medium sb-text-faint uppercase tracking-wider">本次运行结果</label>
         </div>
-
-        <div v-if="runResult" class="run-result">
-          <div class="flex items-center justify-between gap-3 mb-2.5">
+        <div class="flex-1 overflow-y-auto min-h-0 px-4 pb-4">
+          <div
+            v-if="viewingSession?.status === 'running'"
+            class="flex items-center gap-3 p-3 rounded-lg border bg-emerald-500/5 border-emerald-500/15"
+          >
+            <Loader2 class="w-4 h-4 text-emerald-400 animate-spin flex-shrink-0" :stroke-width="1.5" />
             <div class="min-w-0">
-              <p class="text-[12px] font-medium sb-text-secondary">运行结果</p>
-              <p
-                v-if="runResultFinishedAt"
-                class="run-result-meta mt-0.5"
-                :title="runResultFinishedAt"
-              >
-                上次完成
-                <time>{{ formatRunFinishedAt(runResultFinishedAt) }}</time>
-              </p>
+              <p class="text-[13px] font-medium text-emerald-400">运行中…</p>
+              <p v-if="sessionProgressSummary" class="text-[11px] sb-text-muted mt-0.5">{{ sessionProgressSummary }}</p>
+              <p v-else-if="session?.phase" class="text-[11px] sb-text-muted mt-0.5">{{ session.phase }}</p>
             </div>
-            <button
-              type="button"
-              class="run-result-action flex-shrink-0"
-              :class="resultCopied && 'is-copied'"
-              @click="copyResult"
-            >
-              <Check v-if="resultCopied" class="w-3 h-3" :stroke-width="1.5" />
-              <Copy v-else class="w-3 h-3" :stroke-width="1.5" />
-              {{ resultCopied ? '已复制' : '复制' }}
-            </button>
           </div>
 
-          <div class="run-result-body rounded-lg border overflow-hidden">
-            <div v-if="runResultOutputDir" class="run-result-output px-3 py-2.5 border-b sb-border-subtle">
-              <div class="flex items-center justify-between gap-3">
-                <span class="text-[11px] font-medium sb-text-secondary">产物目录</span>
-                <button
-                  type="button"
-                  class="run-result-open"
-                  @click="openOutputDir"
+          <div
+            v-else-if="viewingSessionFailed"
+            class="flex items-start gap-3 p-3 rounded-lg border bg-red-500/5 border-red-500/15"
+          >
+            <AlertCircle class="w-4 h-4 text-red-400 flex-shrink-0 mt-0.5" :stroke-width="1.5" />
+            <div class="min-w-0">
+              <p class="text-[13px] font-medium text-red-400">运行失败</p>
+              <p v-if="viewingSessionExitCode != null" class="text-[11px] sb-text-muted mt-0.5">
+                退出码 {{ viewingSessionExitCode }}
+              </p>
+              <p v-if="runResultFinishedAt" class="text-[11px] sb-text-faint mt-1">
+                {{ formatRunFinishedAt(runResultFinishedAt) }}
+              </p>
+            </div>
+          </div>
+
+          <div v-else-if="runResult" class="run-result">
+            <div class="flex items-center justify-between gap-3 mb-2.5">
+              <div class="min-w-0">
+                <p
+                  v-if="runResultFinishedAt"
+                  class="run-result-meta"
+                  :title="runResultFinishedAt"
                 >
-                  <FolderOpen class="w-3 h-3" :stroke-width="1.5" />
-                  打开
-                </button>
+                  完成于
+                  <time>{{ formatRunFinishedAt(runResultFinishedAt) }}</time>
+                </p>
               </div>
-              <p
-                class="run-result-path mt-1.5"
-                :title="runResultOutputDir"
+              <button
+                type="button"
+                class="run-result-action flex-shrink-0"
+                :class="resultCopied && 'is-copied'"
+                @click="copyResult"
               >
-                {{ runResultOutputDir }}
-              </p>
+                <Check v-if="resultCopied" class="w-3 h-3" :stroke-width="1.5" />
+                <Copy v-else class="w-3 h-3" :stroke-width="1.5" />
+                {{ resultCopied ? '已复制' : '复制' }}
+              </button>
             </div>
 
-            <div class="run-result-scroll max-h-48 overflow-y-auto overscroll-contain">
-              <pre class="run-result-pre">{{ runResultText }}</pre>
+            <div class="run-result-body rounded-lg border overflow-hidden">
+              <div v-if="runResultOutputDir" class="run-result-output px-3 py-2.5 border-b sb-border-subtle">
+                <div class="flex items-center justify-between gap-3">
+                  <span class="text-[11px] font-medium sb-text-secondary">产物目录</span>
+                  <button
+                    type="button"
+                    class="run-result-open"
+                    @click="openOutputDir"
+                  >
+                    <FolderOpen class="w-3 h-3" :stroke-width="1.5" />
+                    打开
+                  </button>
+                </div>
+                <p
+                  class="run-result-path mt-1.5"
+                  :title="runResultOutputDir"
+                >
+                  {{ runResultOutputDir }}
+                </p>
+              </div>
+
+              <div class="run-result-scroll overflow-y-auto overscroll-contain">
+                <pre class="run-result-pre">{{ runResultText }}</pre>
+              </div>
             </div>
           </div>
+
+          <p v-else class="text-[13px] sb-text-muted py-2">暂无运行结果，点击上方「运行」开始执行</p>
+
+          <ScriptRunProgressPanel
+            v-if="session?.runProgress && isRunning"
+            :progress="session.runProgress"
+            compact
+            class="mt-3"
+          />
         </div>
       </div>
 
@@ -1064,13 +1244,16 @@ async function handleRename(): Promise<void> {
       </div>
     </div>
 
+    <!-- 运行历史 -->
+    <ScriptRunHistoryPanel v-else-if="activeTab === 'history'" :script-id="script.id" :script="script" />
+
     <!-- 日志 -->
     <div v-else-if="activeTab === 'log'" class="flex-1 flex flex-col p-4 min-h-0">
       <LogConsole
         embedded
-        title="完整日志"
-        :logs="sessionLogs"
-        :run-progress="session?.runProgress"
+        title="最近运行日志"
+        :logs="latestRunLogs"
+        :run-progress="latestRunSession?.runProgress"
         @clear="clearSessionLogs"
       />
     </div>

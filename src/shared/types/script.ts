@@ -152,6 +152,8 @@ export interface ExecutionRecord {
   exitCode?: number
   errorMessage?: string
   durationMs?: number
+  /** 脚本返回的运行结果（持久化，供运行历史查看） */
+  result?: unknown
 }
 
 export interface ExecutionDaySummary {

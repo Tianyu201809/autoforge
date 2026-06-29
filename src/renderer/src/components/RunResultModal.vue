@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed, ref, watch } from 'vue'
-import { Check, CheckCircle2, Copy, FolderOpen, X } from 'lucide-vue-next'
+import { Check, CheckCircle2, Copy, FolderOpen, X, AlertCircle, Square } from 'lucide-vue-next'
 import type { EnvironmentProfile, RunSession, ScriptItem } from '../../../shared/types/script'
 import { parseParamAttachments } from '../../../shared/param-attachments'
 import { parseCheckboxValue } from '../../../shared/param-choices'
@@ -25,6 +25,33 @@ const result = computed(() => props.session?.result)
 const resultText = computed(() => formatRunResult(result.value))
 const outputDir = computed(() => extractRunResultOutputDir(result.value))
 const hasResult = computed(() => resultText.value.length > 0)
+
+const sessionStatus = computed(() => props.session?.status ?? 'success')
+
+const headerIcon = computed(() => {
+  if (sessionStatus.value === 'error') return AlertCircle
+  if (sessionStatus.value === 'stopped') return Square
+  return CheckCircle2
+})
+
+const headerIconClass = computed(() => {
+  if (sessionStatus.value === 'error') return 'text-red-400'
+  if (sessionStatus.value === 'stopped') return 'sb-text-muted'
+  return 'text-emerald-400'
+})
+
+const headerSubtitle = computed(() => {
+  if (sessionStatus.value === 'running') return '运行中'
+  if (sessionStatus.value === 'error') {
+    const base = `失败于 ${formatFinishedAt(props.session?.finishedAt)}`
+    return props.session?.exitCode != null ? `${base} · exit ${props.session.exitCode}` : base
+  }
+  if (sessionStatus.value === 'stopped') {
+    return `已停止 · ${formatFinishedAt(props.session?.finishedAt)}`
+  }
+  const base = `完成于 ${formatFinishedAt(props.session?.finishedAt)}`
+  return envName.value ? `${base} · 环境 ${envName.value}` : base
+})
 
 const envName = computed(() => {
   const envId = props.session?.envId
@@ -142,15 +169,14 @@ async function openOutputDir(): Promise<void> {
             />
             <div class="flex items-start gap-3 min-w-0">
               <div class="w-9 h-9 rounded-lg border sb-border-subtle sb-bg-inset flex items-center justify-center flex-shrink-0">
-                <CheckCircle2 class="w-4 h-4 text-emerald-400" :stroke-width="1.5" />
+                <component :is="headerIcon" class="w-4 h-4" :class="headerIconClass" :stroke-width="1.5" />
               </div>
               <div class="min-w-0">
                 <h2 id="run-result-modal-title" class="text-[15px] font-semibold sb-text-primary tracking-tight truncate">
                   {{ script?.name ?? '运行结果' }}
                 </h2>
                 <p class="text-[11px] sb-text-muted mt-0.5 leading-relaxed">
-                  完成于 {{ formatFinishedAt(session?.finishedAt) }}
-                  <span v-if="envName"> · 环境 {{ envName }}</span>
+                  {{ headerSubtitle }}
                 </p>
               </div>
             </div>
