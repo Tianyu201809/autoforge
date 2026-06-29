@@ -190,7 +190,7 @@ function closeResultModal(): void {
   <div class="flex-1 flex flex-col min-h-0">
     <div class="flex-shrink-0 px-4 py-3 border-b sb-border-subtle space-y-2.5">
       <div class="flex flex-wrap items-center gap-2">
-        <span class="text-[11px] sb-text-faint uppercase tracking-wider">时间范围</span>
+        <span class="sb-field-label">时间范围</span>
         <button
           v-for="option in [7, 30, 90] as const"
           :key="option"
@@ -212,7 +212,7 @@ function closeResultModal(): void {
 
       <div class="flex flex-wrap items-center gap-3">
         <div class="flex items-center gap-1.5">
-          <span class="text-[11px] sb-text-faint">状态</span>
+          <span class="sb-field-label normal-case tracking-normal">状态</span>
           <button
             v-for="opt in ([['all', '全部'], ['success', '成功'], ['error', '失败'], ['stopped', '停止'], ['running', '运行中']] as const)"
             :key="opt[0]"
@@ -229,7 +229,7 @@ function closeResultModal(): void {
           </button>
         </div>
         <div class="flex items-center gap-1.5">
-          <span class="text-[11px] sb-text-faint">触发</span>
+          <span class="sb-field-label normal-case tracking-normal">触发</span>
           <button
             v-for="opt in ([['all', '全部'], ['manual', '手动'], ['scheduled', '定时']] as const)"
             :key="opt[0]"

@@ -422,7 +422,7 @@ onUnmounted(() => {
   <!-- 嵌入式（详情面板内） -->
   <div v-if="embedded" class="flex flex-col min-h-0">
     <div class="flex items-center justify-between mb-2">
-      <span class="text-[11px] font-medium sb-text-faint uppercase tracking-wider">{{ title }}</span>
+      <span class="sb-field-label">{{ title }}</span>
       <div class="flex items-center gap-0.5">
         <button type="button" class="w-6 h-6 flex items-center justify-center rounded sb-text-muted hover:sb-text-primary sb-bg-hover" title="缩小" @click="zoomOut">
           <Minus class="w-3 h-3" :stroke-width="1.5" />

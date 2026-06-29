@@ -175,7 +175,7 @@ async function openOutputDir(): Promise<void> {
 
           <div class="flex-1 overflow-y-auto min-h-0 px-5 py-4 space-y-4">
             <section>
-              <h3 class="text-[11px] font-medium sb-text-faint uppercase tracking-wider">运行参数</h3>
+              <h3 class="sb-field-label">运行参数</h3>
               <div v-if="paramRows.length" class="mt-2 rounded-lg border sb-border-subtle overflow-hidden">
                 <div
                   v-for="(row, index) in paramRows"

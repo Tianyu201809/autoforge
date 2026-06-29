@@ -84,7 +84,7 @@ const attachmentKey = computed(() => props.attachmentStorageKey ?? props.def.key
   <div>
     <div v-if="showClear" class="flex items-start justify-between gap-2">
       <div class="min-w-0">
-        <label class="text-[12px] sb-text-muted">
+        <label class="sb-field-title">
           {{ def.label }}
           <span v-if="def.required" class="text-red-400">*</span>
         </label>
@@ -102,7 +102,7 @@ const attachmentKey = computed(() => props.attachmentStorageKey ?? props.def.key
       </button>
     </div>
     <template v-else>
-      <label class="text-[12px] sb-text-muted">
+      <label class="sb-field-title">
         {{ def.label }}
         <span v-if="def.required" class="text-red-400">*</span>
       </label>

@@ -311,8 +311,8 @@ watch(
 }
 
 .rr-viewer-chip-label {
-  color: var(--sb-text-faint);
-  font-weight: 400;
+  color: var(--sb-text-muted);
+  font-weight: 500;
 }
 
 .rr-viewer-chip--ok {
@@ -384,11 +384,11 @@ watch(
   display: inline-flex;
   align-items: center;
   gap: 0.35rem;
-  font-size: 10px;
+  font-size: 11px;
   font-weight: 600;
   letter-spacing: 0.04em;
   text-transform: uppercase;
-  color: var(--sb-text-faint);
+  color: var(--sb-text-label);
 }
 
 .rr-viewer-tree-actions {

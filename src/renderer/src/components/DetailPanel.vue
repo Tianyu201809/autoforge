@@ -974,12 +974,12 @@ async function handleRename(): Promise<void> {
       <div class="flex-1 overflow-y-auto min-h-0">
         <div class="p-4 space-y-4 border-b sb-border-subtle">
         <div>
-          <label class="text-[11px] font-medium sb-text-faint uppercase tracking-wider">功能描述</label>
+          <label class="sb-field-label">功能描述</label>
           <p class="mt-1.5 text-[13px] sb-text-muted leading-relaxed">{{ script.description || '暂无描述' }}</p>
         </div>
 
         <div>
-          <label class="text-[11px] font-medium sb-text-faint uppercase tracking-wider">分类</label>
+          <label class="sb-field-label">分类</label>
           <select
             v-model="detailCategory"
             class="mt-1.5 w-full h-8 px-3 rounded-lg sb-bg-input border sb-border text-[13px] outline-none focus:sb-input disabled:opacity-50"
@@ -990,7 +990,7 @@ async function handleRename(): Promise<void> {
         </div>
 
         <div>
-          <label class="text-[11px] font-medium sb-text-faint uppercase tracking-wider">运行环境</label>
+          <label class="sb-field-label">运行环境</label>
           <select
             v-model="selectedEnvId"
             class="mt-1.5 w-full h-8 px-3 rounded-lg sb-bg-input border sb-border text-[13px] outline-none focus:sb-input"
@@ -1001,7 +1001,7 @@ async function handleRename(): Promise<void> {
         </div>
 
         <div>
-          <label class="text-[11px] font-medium sb-text-faint uppercase tracking-wider">浏览器模式</label>
+          <label class="sb-field-label">浏览器模式</label>
           <label class="mt-2 flex items-center gap-2 text-[13px] sb-text-secondary cursor-pointer">
             <input
               v-model="browserHeadless"
@@ -1018,17 +1018,17 @@ async function handleRename(): Promise<void> {
       <div class="p-4 space-y-4">
         <div class="grid grid-cols-2 gap-3">
           <div class="p-3 rounded-lg border sb-border-subtle sb-bg-surface">
-            <p class="text-[11px] sb-text-faint">版本</p>
+            <p class="sb-field-title text-[11px]">版本</p>
             <p class="text-[13px] sb-text-secondary mt-0.5 font-mono">{{ script.version }}</p>
           </div>
           <div class="p-3 rounded-lg border sb-border-subtle sb-bg-surface">
-            <p class="text-[11px] sb-text-faint">入口</p>
+            <p class="sb-field-title text-[11px]">入口</p>
             <p class="text-[11px] sb-text-muted mt-0.5 font-mono truncate">{{ script.entry }}</p>
           </div>
         </div>
 
         <div v-if="script.dependencies && Object.keys(script.dependencies).length">
-          <label class="text-[11px] font-medium sb-text-faint uppercase tracking-wider">依赖</label>
+          <label class="sb-field-label">依赖</label>
           <div class="mt-2 flex flex-wrap gap-1.5">
             <span v-for="(ver, pkg) in script.dependencies" :key="pkg" class="text-[11px] px-2 py-1 rounded-md sb-bg-inset sb-text-muted border sb-border-subtle font-mono">
               {{ pkg }}@{{ ver }}
@@ -1094,7 +1094,7 @@ async function handleRename(): Promise<void> {
         :style="runResultSectionExpanded ? { height: `${runSplitTopPct}%` } : undefined"
       >
         <div v-if="script.paramSchema.length">
-          <label class="text-[11px] font-medium sb-text-faint uppercase tracking-wider">运行参数</label>
+          <label class="sb-field-label">运行参数</label>
           <p class="mt-1 text-[11px] sb-text-faint">
             业务参数随每次运行传入脚本，通过 ctx.params 访问；当前环境：
             {{ environments.find((e) => e.id === selectedEnvId)?.name ?? '—' }}（切换后加载该环境下已保存的参数）
@@ -1135,7 +1135,7 @@ async function handleRename(): Promise<void> {
           @click="runResultSectionExpanded = !runResultSectionExpanded"
         >
           <div class="flex items-center gap-2 min-w-0">
-            <span class="text-[11px] font-medium sb-text-faint uppercase tracking-wider shrink-0">
+            <span class="sb-field-label shrink-0">
               本次运行结果
             </span>
             <span v-if="runResultSectionBrief" class="text-[11px] sb-text-muted truncate">
@@ -1307,7 +1307,7 @@ async function handleRename(): Promise<void> {
     <!-- 配置 -->
     <div v-else-if="activeTab === 'config'" class="flex-1 overflow-y-auto p-4 space-y-4">
       <div>
-        <label class="text-[12px] sb-text-muted">运行环境</label>
+        <label class="sb-field-title">运行环境</label>
         <select
           v-model="selectedEnvId"
           class="mt-1 w-full h-8 px-3 rounded-lg sb-bg-input border sb-border text-[13px] outline-none focus:sb-input"
@@ -1318,7 +1318,7 @@ async function handleRename(): Promise<void> {
       </div>
 
       <div v-if="script.envSchema.length">
-        <h3 class="text-[12px] font-medium sb-text-muted mb-2">环境变量</h3>
+        <h3 class="sb-field-title mb-2">环境变量</h3>
         <p class="text-[11px] sb-text-faint mb-3">固定环境配置（账号、URL 等），按环境保存，通过 ctx.env 访问；支持 text、select、boolean、attachment 等类型，值均为字符串</p>
         <div v-for="def in script.envSchema" :key="def.key" class="mb-3">
           <SchemaValueField
@@ -1335,7 +1335,7 @@ async function handleRename(): Promise<void> {
       </div>
 
       <div>
-        <label class="text-[12px] sb-text-muted">定时任务</label>
+        <label class="sb-field-title">定时任务</label>
         <div class="mt-1">
           <CronScheduleBuilder v-model="cronExpression" />
         </div>
