@@ -5,6 +5,7 @@ import type { EnvironmentProfile, RunSession, ScriptItem } from '../../../shared
 import { parseParamAttachments } from '../../../shared/param-attachments'
 import { parseCheckboxValue } from '../../../shared/param-choices'
 import { extractRunResultOutputDir, formatRunResult } from '../../../shared/run-result'
+import { defaultSchemaValue } from '../../../shared/schema-values'
 
 const props = defineProps<{
   open: boolean
@@ -34,8 +35,10 @@ const envName = computed(() => {
 const paramRows = computed(() => {
   const script = props.script
   if (!script?.paramSchema.length) return []
+  const envId = props.session?.envId ?? script.defaultEnvId
+  const savedForEnv = envId ? script.paramsByEnv?.[envId] : undefined
   return script.paramSchema.map((def) => {
-    const raw = script.savedParams?.[def.key] ?? def.default ?? ''
+    const raw = savedForEnv?.[def.key] ?? defaultSchemaValue(def)
     const optionLabel = (value: string): string =>
       def.options?.find((opt) => opt.value === value)?.label ?? value
     if (def.type === 'attachment') {

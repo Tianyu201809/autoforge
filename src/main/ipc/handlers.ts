@@ -208,9 +208,9 @@ export function registerIpcHandlers(getWindow: () => BrowserWindow | null): void
     return enrichScriptItem(updated, runner.listSessions())
   })
 
-  ipcMain.handle(IPC.SCRIPTS_SET_PARAMS, (_event, id: string, values: Record<string, string>) => {
+  ipcMain.handle(IPC.SCRIPTS_SET_PARAMS, (_event, id: string, envId: string, values: Record<string, string>) => {
     const plainValues = JSON.parse(JSON.stringify(values)) as Record<string, string>
-    const updated = scriptStore.setScriptParams(id, plainValues)
+    const updated = scriptStore.setScriptParams(id, envId, plainValues)
     if (!updated) return null
     return enrichScriptItem(updated, runner.listSessions())
   })

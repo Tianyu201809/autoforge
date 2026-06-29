@@ -122,8 +122,8 @@ const autoforge = {
       ipcRenderer.invoke(IPC.SCRIPTS_INSTALL_DEPS, id),
     setEnvConfig: (id: string, envId: string, values: Record<string, string>): Promise<ScriptItem | null> =>
       ipcRenderer.invoke(IPC.SCRIPTS_SET_ENV_CONFIG, id, envId, values),
-    setParams: (id: string, values: Record<string, string>): Promise<ScriptItem | null> =>
-      ipcRenderer.invoke(IPC.SCRIPTS_SET_PARAMS, id, values),
+    setParams: (id: string, envId: string, values: Record<string, string>): Promise<ScriptItem | null> =>
+      ipcRenderer.invoke(IPC.SCRIPTS_SET_PARAMS, id, envId, values),
     updateMeta: (
       id: string,
       patch: { name?: string; icon?: ScriptIcon; category?: string; categoryLabel?: string; browser?: { headless?: boolean } }

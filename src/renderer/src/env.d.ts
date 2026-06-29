@@ -112,7 +112,7 @@ export interface AutoforgeApi {
     setContent: (id: string, content: string, manifestContent?: string) => Promise<boolean>
     installDeps: (id: string) => Promise<DependencyInstallResult>
     setEnvConfig: (id: string, envId: string, values: Record<string, string>) => Promise<ScriptItem | null>
-    setParams: (id: string, values: Record<string, string>) => Promise<ScriptItem | null>
+    setParams: (id: string, envId: string, values: Record<string, string>) => Promise<ScriptItem | null>
     updateMeta: (
       id: string,
       patch: { name?: string; icon?: ScriptIcon; category?: string; categoryLabel?: string; browser?: { headless?: boolean } }

@@ -246,7 +246,7 @@ function resolvedDefaultEnvId(): string {
 }
 
 function savedParamValue(def: (typeof props.script.paramSchema)[number]): string {
-  const saved = props.script.savedParams?.[def.key]
+  const saved = props.script.paramsByEnv?.[selectedEnvId.value]?.[def.key]
   if (saved !== undefined) return saved
   return defaultSchemaValue(def)
 }
@@ -348,7 +348,7 @@ async function saveParams(): Promise<void> {
     )
     const nextParams = plainParamVars()
     await cleanupAttachmentDiff(props.script.paramSchema, beforeParams, nextParams, 'removed')
-    await window.autoforge.scripts.setParams(props.script.id, nextParams)
+    await window.autoforge.scripts.setParams(props.script.id, selectedEnvId.value, nextParams)
     emit('refresh')
   } finally {
     detailSaving.value = false
@@ -465,12 +465,22 @@ watch(
   { immediate: true }
 )
 
-watch(selectedEnvId, () => {
+watch(selectedEnvId, async (_newId, oldId) => {
   syncEnvVars()
+  if (oldId && paramsDirty.value) {
+    const beforeParams = Object.fromEntries(
+      props.script.paramSchema.map((def) => [
+        def.key,
+        props.script.paramsByEnv?.[oldId]?.[def.key] ?? defaultSchemaValue(def)
+      ])
+    )
+    await cleanupAttachmentDiff(props.script.paramSchema, beforeParams, paramVars.value, 'added')
+  }
+  syncParamVars()
 })
 
 watch(
-  () => props.script.savedParams,
+  () => props.script.paramsByEnv,
   () => {
     if (!paramsDirty.value) syncParamVars()
   },
@@ -837,7 +847,7 @@ async function handleRename(): Promise<void> {
           >
             <option v-for="env in environments" :key="env.id" :value="env.id">{{ env.name }}</option>
           </select>
-          <p class="mt-1 text-[11px] sb-text-faint">环境变量在「配置」Tab 中按环境保存，此处仅选择运行环境</p>
+          <p class="mt-1 text-[11px] sb-text-faint">环境变量在「配置」Tab 中按环境保存；运行参数在「运行参数」Tab 中同样按环境分别保存</p>
         </div>
 
         <div>
@@ -940,12 +950,16 @@ async function handleRename(): Promise<void> {
       <div class="flex-1 overflow-y-auto min-h-0 p-4 space-y-4">
         <div v-if="script.paramSchema.length">
           <label class="text-[11px] font-medium sb-text-faint uppercase tracking-wider">运行参数</label>
-          <p class="mt-1 text-[11px] sb-text-faint">业务参数随每次运行传入脚本，通过 ctx.params 访问；附件类型参数值为 JSON 数组</p>
+          <p class="mt-1 text-[11px] sb-text-faint">
+            业务参数随每次运行传入脚本，通过 ctx.params 访问；当前环境：
+            {{ environments.find((e) => e.id === selectedEnvId)?.name ?? '—' }}（切换后加载该环境下已保存的参数）
+          </p>
           <div v-for="def in script.paramSchema" :key="def.key" class="mt-3">
             <SchemaValueField
               v-model="paramVars[def.key]"
               :def="def"
               :script-id="script.id"
+              :attachment-storage-key="`params/${selectedEnvId}/${def.key}`"
               show-clear
             />
           </div>

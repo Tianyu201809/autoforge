@@ -21,7 +21,9 @@ export interface ScriptPreference {
   defaultEnvId?: string
   /** 脚本在各环境下的 env 专属配置值 */
   configByEnv?: Record<string, Record<string, string>>
-  /** 上次保存的运行业务参数 */
+  /** 脚本在各环境下上次保存的运行参数 */
+  paramsByEnv?: Record<string, Record<string, string>>
+  /** @deprecated 旧版全局参数，读取时会迁移到 paramsByEnv */
   savedParams?: Record<string, string>
 }
 
@@ -120,6 +122,18 @@ export class ScriptStore {
     return this.data.scripts.map((s) => this.applyPreference(s))
   }
 
+  private mergeParamsByEnv(pref: ScriptPreference, script: ScriptMeta): Record<string, Record<string, string>> {
+    const byEnv = { ...(pref.paramsByEnv ?? script.paramsByEnv ?? {}) }
+    const legacy = pref.savedParams ?? script.savedParams
+    if (legacy && Object.keys(legacy).length > 0) {
+      const envId = pref.defaultEnvId ?? script.defaultEnvId ?? this.getDefaultEnvironment().id
+      if (!byEnv[envId] || Object.keys(byEnv[envId]).length === 0) {
+        byEnv[envId] = { ...legacy }
+      }
+    }
+    return byEnv
+  }
+
   private applyPreference(script: ScriptMeta): ScriptMeta {
     const pref = this.data.preferences[script.id] ?? {}
     return {
@@ -130,7 +144,7 @@ export class ScriptStore {
       schedule: pref.schedule ?? script.schedule,
       defaultEnvId: pref.defaultEnvId ?? script.defaultEnvId,
       configByEnv: pref.configByEnv ?? script.configByEnv ?? {},
-      savedParams: pref.savedParams ?? script.savedParams ?? {},
+      paramsByEnv: this.mergeParamsByEnv(pref, script),
       paramSchema: script.paramSchema ?? []
     }
   }
@@ -148,7 +162,8 @@ export class ScriptStore {
     const index = this.data.scripts.findIndex((s) => s.id === id)
     if (index === -1) return null
 
-    const { starred, archived, recentRunAt, schedule, defaultEnvId, configByEnv, savedParams, ...metaPatch } = patch
+    const { starred, archived, recentRunAt, schedule, defaultEnvId, configByEnv, paramsByEnv, savedParams, ...metaPatch } =
+      patch
     this.data.scripts[index] = { ...this.data.scripts[index], ...metaPatch }
 
     const prefPatch: ScriptPreference = {}
@@ -158,6 +173,7 @@ export class ScriptStore {
     if (schedule !== undefined) prefPatch.schedule = schedule
     if (defaultEnvId !== undefined) prefPatch.defaultEnvId = defaultEnvId
     if (configByEnv !== undefined) prefPatch.configByEnv = configByEnv
+    if (paramsByEnv !== undefined) prefPatch.paramsByEnv = paramsByEnv
     if (savedParams !== undefined) prefPatch.savedParams = savedParams
     if (Object.keys(prefPatch).length) {
       this.data.preferences[id] = { ...this.data.preferences[id], ...prefPatch }
@@ -237,14 +253,19 @@ export class ScriptStore {
     return validateSchemaValues(script.envSchema, env, { subject: '环境变量', tab: '配置' })
   }
 
-  /** 合并：schema 默认值 → 上次保存值 → 本次运行传入（优先级最高） */
-  resolveParamsForScript(script: ScriptMeta, overrides?: Record<string, string>): Record<string, string> {
+  /** 合并：schema 默认值 → 该环境下上次保存值 → 本次运行传入（优先级最高） */
+  resolveParamsForScript(
+    script: ScriptMeta,
+    envId?: string,
+    overrides?: Record<string, string>
+  ): Record<string, string> {
+    const resolvedEnvId = envId ?? script.defaultEnvId ?? this.getDefaultEnvironment().id
     const resolved: Record<string, string> = {}
     for (const def of script.paramSchema) {
       const defaultVal = defaultSchemaValue(def)
       if (defaultVal) resolved[def.key] = defaultVal
     }
-    const saved = script.savedParams ?? {}
+    const saved = script.paramsByEnv?.[resolvedEnvId] ?? {}
     for (const [key, value] of Object.entries(saved)) {
       if (value !== undefined && value !== '') resolved[key] = value
     }
@@ -256,13 +277,15 @@ export class ScriptStore {
     return resolved
   }
 
-  setScriptParams(scriptId: string, values: Record<string, string>): ScriptMeta | null {
+  setScriptParams(scriptId: string, envId: string, values: Record<string, string>): ScriptMeta | null {
     this.ensureInitialized()
     const script = this.data.scripts.find((s) => s.id === scriptId)
     if (!script) return null
 
     const pref = this.data.preferences[scriptId] ?? {}
-    this.data.preferences[scriptId] = { ...pref, savedParams: { ...values } }
+    const paramsByEnv = { ...(pref.paramsByEnv ?? {}) }
+    paramsByEnv[envId] = { ...values }
+    this.data.preferences[scriptId] = { ...pref, paramsByEnv }
     this.save()
     return this.applyPreference(script)
   }

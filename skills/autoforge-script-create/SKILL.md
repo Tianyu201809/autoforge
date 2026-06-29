@@ -102,7 +102,7 @@ await copyFile(join(packageDir, "autoforge.json"), join(packDir, "autoforge.json
 | 用途 | 固定环境配置 | 本次业务输入 |
 | 平台 | 脚本详情 → **配置** Tab | 脚本详情 → **详情** Tab |
 | 访问 | `ctx.env.KEY` | `ctx.params.KEY` |
-| 持久化 | 按环境 | 上次值（不区分环境） |
+| 持久化 | 按环境 | 按环境（paramsByEnv） |
 
 - 缺 env → 错误信息提示「脚本详情 → **配置** Tab」
 - 缺 params → 错误信息提示「脚本详情 → **详情** Tab」
@@ -135,7 +135,7 @@ await copyFile(join(packageDir, "autoforge.json"), join(packDir, "autoforge.json
 
 `select` / `radio` / `checkbox` 须配 `options`（字符串简写 `["a","b"]` 或 `{ "label", "value" }`）。
 
-合并优先级：`autoforge.json 默认值` → `上次保存值` → `本次运行传入（最高）`
+合并优先级：`autoforge.json 默认值` → `该环境下上次保存值` → `本次运行传入（最高）`
 
 ## run(ctx) 约定
 

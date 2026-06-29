@@ -47,7 +47,7 @@ my-script/
 | 变化频率 | 按环境长期固定 | 每次运行可能不同 |
 | 平台位置 | 脚本详情 → **配置** Tab | 脚本详情 → **详情** Tab |
 | 脚本访问 | `ctx.env.KEY` | `ctx.params.KEY` |
-| 持久化 | 按环境（configByEnv） | 上次值（savedParams，不区分环境） |
+| 持久化 | 按环境（configByEnv） | 按环境（paramsByEnv） |
 
 选用原则：
 
@@ -145,7 +145,7 @@ interface ParamAttachmentItem {
 
 1. 选择运行环境（决定使用哪套 env）
 2. 填写运行参数：文本直接输入；附件「选择文件」多选上传
-3. 点击「运行」— 上次值自动保存，不区分环境
+3. 点击「运行」— 参数按当前环境自动保存，切换环境后加载该环境下已保存的值
 
 ## run(ctx) 上下文
 

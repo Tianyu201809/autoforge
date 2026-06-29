@@ -45,7 +45,9 @@ export interface ScriptMeta {
   defaultEnvId?: string
   /** 各环境下的脚本专属 env 配置：envId → { KEY: value } */
   configByEnv?: Record<string, Record<string, string>>
-  /** 上次运行保存的业务参数（不区分环境） */
+  /** 各环境下上次保存的运行参数：envId → { KEY: value } */
+  paramsByEnv?: Record<string, Record<string, string>>
+  /** @deprecated 旧版全局参数，读取时会迁移到 paramsByEnv */
   savedParams?: Record<string, string>
   /** manifest 中声明的 npm 依赖 */
   dependencies?: Record<string, string>

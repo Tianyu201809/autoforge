@@ -70,12 +70,12 @@ export class ScriptRunnerService {
       throw new Error(envError)
     }
 
-    const params = scriptStore.resolveParamsForScript(script, runtimeParams)
+    const params = scriptStore.resolveParamsForScript(script, resolvedEnvId, runtimeParams)
     const paramsError = scriptStore.validateParamsForScript(script, params)
     if (paramsError) {
       throw new Error(paramsError)
     }
-    scriptStore.setScriptParams(scriptId, params)
+    scriptStore.setScriptParams(scriptId, resolvedEnvId, params)
 
     const session: RunSession = {
       id: randomUUID(),
