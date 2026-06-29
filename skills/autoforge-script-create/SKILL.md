@@ -1,6 +1,6 @@
 ---
 name: autoforge-script-create
-description: 在 AutoforgeScripts monorepo 的 packages/ 下新建 Autoforge 脚本包（autoforge.json + run(ctx)）。Use when the user invokes /autoforge-script-create, asks to create a new Autoforge script, scaffold a script package, or add a package under packages/.
+description: 在 AutoforgeScripts monorepo 的 packages/ 下新建 Autoforge 脚本包（autoforge.json + run(ctx)），含 env/params schema（text、textarea、number、select、radio、checkbox、boolean、attachment）。Use when the user invokes /autoforge-script-create, asks to create a new Autoforge script, scaffold a script package, add params with select/checkbox, or add a package under packages/.
 disable-model-invocation: true
 ---
 
@@ -19,9 +19,15 @@ disable-model-invocation: true
    - 换环境才变（URL、账号、Token）→ `env`，平台 **配置 Tab**
    - 每次任务才变（订单号、日期、任务 ID）→ `params`，平台 **详情 Tab**
    - 每次运行需上传的本地文件 → `params` 且 `type: "attachment"`
-5. **浏览器脚本**是否需要无头模式（`browser.headless`，见下文）
-6. **npm 依赖**（如有）
-7. **是否落盘产物**（若需要 UI「产物目录」快捷入口，返回值须含 `outputDir` 等字段）
+5. **params 控件类型**（按需选用，默认 `text`）：
+   - 单行 / 多行 / 数字 → `text` / `textarea` / `number`
+   - 单选 → `select` 或 `radio`（需 `options`）
+   - 多选 → `checkbox`（需 `options`，值为 JSON 数组字符串）
+   - 开关 → `boolean`（值为 `"true"` / `"false"`）
+   - 文件 → `attachment`（值为 JSON 数组字符串）
+6. **浏览器脚本**是否需要无头模式（`browser.headless`，见下文）
+7. **npm 依赖**（如有）
+8. **是否落盘产物**（若需要 UI「产物目录」快捷入口，返回值须含 `outputDir` 等字段）
 
 ## 创建流程
 
@@ -29,7 +35,7 @@ disable-model-invocation: true
 Task Progress:
 - [ ] 选定 JS 或 TS 模板
 - [ ] 创建 packages/<name>/ 与 autoforge.json
-- [ ] 声明 env / params（含 attachment、browser 如需要）
+- [ ] 声明 env / params（含 type、options、browser 如需要）
 - [ ] 实现 export async function run(ctx)
 - [ ] 有文件输出时返回 outputDir（本机绝对路径）
 - [ ] （TS）配置 package.json / tsconfig / 构建脚本
@@ -101,6 +107,23 @@ await copyFile(join(packageDir, "autoforge.json"), join(packDir, "autoforge.json
 - 缺 env → 错误信息提示「脚本详情 → **配置** Tab」
 - 缺 params → 错误信息提示「脚本详情 → **详情** Tab」
 - 所有 schema 默认值均为**字符串**（含 `default`）
+- `ctx.params` 的值**始终是字符串**；复合类型需脚本内解析
+
+### params 类型速查
+
+| `type` | UI | `ctx.params[key]` | 脚本内读取 |
+|--------|-----|-------------------|-----------|
+| `text`（默认） | 单行文本 | 字符串 | 直接用 |
+| `textarea` | 多行文本 | 字符串 | 直接用 |
+| `number` | 数字输入 | 数字字符串 | `Number(raw)` |
+| `select` / `radio` | 下拉 / 单选组 | 选项 `value` | 直接用 |
+| `checkbox` | 多选组 | JSON 数组字符串 | `JSON.parse(raw)` |
+| `boolean` | 开关 | `"true"` / `"false"` | `raw === 'true'` |
+| `attachment` | 文件多选 | JSON 数组字符串 | 见下文 |
+
+`select` / `radio` / `checkbox` 须配 `options`（字符串简写 `["a","b"]` 或 `{ "label", "value" }`）。
+
+合并优先级：`autoforge.json 默认值` → `上次保存值` → `本次运行传入（最高）`
 
 ## run(ctx) 约定
 
@@ -160,7 +183,35 @@ export async function run(ctx) {
 
 `ctx.sdk.browser.launch()` 会应用此设置。验证码 / 2FA 场景应设 `headless: false`。
 
-### 附件参数（`type: "attachment"`）
+### 脚本内解析 params
+
+**checkbox / 多选：**
+
+```javascript
+function parseCheckbox(raw) {
+  if (!raw?.trim()) return []
+  try {
+    const v = JSON.parse(raw)
+    return Array.isArray(v) ? v.filter((x) => typeof x === 'string') : []
+  } catch {
+    return []
+  }
+}
+```
+
+**boolean：**
+
+```javascript
+const dryRun = ctx.params.DRY_RUN === 'true'
+```
+
+**number：**
+
+```javascript
+const limit = Number(ctx.params.LIMIT) || 10
+```
+
+**附件（`type: "attachment"`）：**
 
 `ctx.params[key]` 为 **JSON 数组字符串**，每项含 `name`、`path`（绝对路径）、可选 `size`。平台复制文件到 `{userData}/script-inputs/{scriptId}/{paramKey}/`。
 
@@ -176,7 +227,7 @@ function parseAttachments(raw) {
 }
 ```
 
-本地 `run-local.mjs` 测试时传入 `JSON.stringify([{ name, path }])`。
+本地 `run-local.mjs` 测试时：checkbox 传 `JSON.stringify(['a','b'])`；attachment 传 `JSON.stringify([{ name, path }])`；boolean 传 `'true'` / `'false'`。
 
 ## autoforge.json 模板
 
@@ -190,16 +241,40 @@ function parseAttachments(raw) {
   "category": "file",
   "categoryLabel": "文件",
   "env": [],
-  "params": [],
+  "params": [
+    {
+      "key": "DRY_RUN",
+      "label": "试运行",
+      "type": "boolean",
+      "default": "false"
+    },
+    {
+      "key": "EXPORT_FORMAT",
+      "label": "导出格式",
+      "type": "select",
+      "options": ["xlsx", "csv"],
+      "default": "xlsx"
+    },
+    {
+      "key": "MODULES",
+      "label": "处理模块",
+      "type": "checkbox",
+      "options": [
+        { "label": "订单", "value": "order" },
+        { "label": "库存", "value": "stock" }
+      ]
+    }
+  ],
   "dependencies": {},
   "browser": { "headless": false }
 }
 ```
 
 - TS 包：`"entry": "dist/index.js"`
-- 敏感 env：`"secret": true`
+- 敏感值：仅 `text` 类型支持 `"secret": true`
 - 浏览器脚本按需加 `"browser": { "headless": true }`
 - 有文件输出：实现返回值 `outputDir` + 可选 params `OUTPUT_DIR`
+- 完整字段说明见 [reference.md](reference.md)
 
 ## 本地测试
 
@@ -220,7 +295,7 @@ pnpm --filter @autoforge/<name> lint
 ## 完成后汇报
 
 1. 包路径与入口文件
-2. **配置 Tab** 的 env、**详情 Tab** 的 params（文本 / 附件分别说明）
+2. **配置 Tab** 的 env、**详情 Tab** 的 params（按 type 说明：text/textarea/number/select/radio/checkbox/boolean/attachment）
 3. 若有产物落盘：说明 `outputDir` 默认规则与 params `OUTPUT_DIR`
 4. 浏览器脚本：说明 `headless` 默认值
 5. 本地测试命令与导入目录
