@@ -1,11 +1,12 @@
 <script setup lang="ts">
 import { computed, ref, watch } from 'vue'
-import { Check, CheckCircle2, Copy, FolderOpen, X, AlertCircle, Square } from 'lucide-vue-next'
+import { CheckCircle2, X, AlertCircle, Square } from 'lucide-vue-next'
 import type { EnvironmentProfile, RunSession, ScriptItem } from '../../../shared/types/script'
 import { parseParamAttachments } from '../../../shared/param-attachments'
 import { parseCheckboxValue } from '../../../shared/param-choices'
 import { extractRunResultOutputDir, formatRunResult } from '../../../shared/run-result'
 import { defaultSchemaValue } from '../../../shared/schema-values'
+import RunResultViewer from './RunResultViewer.vue'
 
 const props = defineProps<{
   open: boolean
@@ -18,13 +19,10 @@ const emit = defineEmits<{
 }>()
 
 const environments = ref<EnvironmentProfile[]>([])
-const resultCopied = ref(false)
-let resultCopiedTimer: ReturnType<typeof setTimeout> | undefined
 
 const result = computed(() => props.session?.result)
-const resultText = computed(() => formatRunResult(result.value))
 const outputDir = computed(() => extractRunResultOutputDir(result.value))
-const hasResult = computed(() => resultText.value.length > 0)
+const hasResult = computed(() => formatRunResult(result.value).length > 0)
 
 const sessionStatus = computed(() => props.session?.status ?? 'success')
 
@@ -100,11 +98,7 @@ const paramRows = computed(() => {
 watch(
   () => props.open,
   (open) => {
-    if (!open) {
-      resultCopied.value = false
-      if (resultCopiedTimer) clearTimeout(resultCopiedTimer)
-      return
-    }
+    if (!open) return
     void window.autoforge.env.list().then((list) => {
       environments.value = list
     })
@@ -124,17 +118,6 @@ function formatFinishedAt(iso: string | undefined): string {
     second: '2-digit',
     hour12: false
   })
-}
-
-async function copyResult(): Promise<void> {
-  const text = resultText.value
-  if (!text) return
-  await navigator.clipboard.writeText(text)
-  resultCopied.value = true
-  if (resultCopiedTimer) clearTimeout(resultCopiedTimer)
-  resultCopiedTimer = setTimeout(() => {
-    resultCopied.value = false
-  }, 2000)
 }
 
 async function openOutputDir(): Promise<void> {
@@ -207,37 +190,13 @@ async function openOutputDir(): Promise<void> {
               <p v-else class="mt-2 text-[12px] sb-text-muted">此脚本未定义运行参数</p>
             </section>
 
-            <section v-if="outputDir">
-              <div class="flex items-center justify-between gap-3 mb-2">
-                <h3 class="text-[11px] font-medium sb-text-faint uppercase tracking-wider">产物目录</h3>
-                <button type="button" class="run-result-open" @click="openOutputDir">
-                  <FolderOpen class="w-3 h-3" :stroke-width="1.5" />
-                  打开目录
-                </button>
-              </div>
-              <p class="run-result-path" :title="outputDir">{{ outputDir }}</p>
-            </section>
-
             <section>
-              <div class="flex items-center justify-between gap-3 mb-2">
-                <h3 class="text-[11px] font-medium sb-text-faint uppercase tracking-wider">运行结果</h3>
-                <button
-                  v-if="hasResult"
-                  type="button"
-                  class="run-result-action"
-                  :class="resultCopied && 'is-copied'"
-                  @click="copyResult"
-                >
-                  <Check v-if="resultCopied" class="w-3 h-3" :stroke-width="1.5" />
-                  <Copy v-else class="w-3 h-3" :stroke-width="1.5" />
-                  {{ resultCopied ? '已复制' : '复制' }}
-                </button>
-              </div>
-              <div v-if="hasResult" class="run-result-body rounded-lg border overflow-hidden">
-                <div class="run-result-scroll max-h-64 overflow-y-auto overscroll-contain">
-                  <pre class="run-result-pre">{{ resultText }}</pre>
-                </div>
-              </div>
+              <RunResultViewer
+                v-if="hasResult"
+                :result="result"
+                :output-dir="outputDir"
+                @open-output-dir="openOutputDir"
+              />
               <p v-else class="text-[12px] sb-text-muted">脚本未返回结果数据</p>
             </section>
           </div>

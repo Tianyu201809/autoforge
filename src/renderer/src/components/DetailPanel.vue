@@ -2,9 +2,8 @@
 import { computed, onMounted, onUnmounted, ref, toRaw, watch } from 'vue'
 import {
   AlertCircle,
-  Check,
   CheckCircle2,
-  Copy,
+  ChevronDown,
   FolderOpen,
   Loader2,
   Package,
@@ -25,6 +24,7 @@ import { resolveScriptIcon } from '../lib/script-icon-map'
 import { renameScript } from '../composables/useScriptRename'
 import CronScheduleBuilder from './CronScheduleBuilder.vue'
 import LogConsole from './LogConsole.vue'
+import RunResultViewer from './RunResultViewer.vue'
 import ScriptRunHistoryPanel from './ScriptRunHistoryPanel.vue'
 import ScriptRunProgressPanel from './ScriptRunProgressPanel.vue'
 import { formatScriptRunProgressSummary } from '../../../shared/script-progress'
@@ -33,7 +33,7 @@ import SchemaValueField from './SchemaValueField.vue'
 import ScriptWorkspaceSidebar from './ScriptWorkspaceSidebar.vue'
 import { useScriptFileEditor } from '../composables/useScriptFileEditor'
 import { MANIFEST_FILENAME } from '../../../shared/script-contract'
-import { extractRunResultOutputDir, formatRunResult } from '../../../shared/run-result'
+import { extractRunResultOutputDir } from '../../../shared/run-result'
 import { parseParamAttachments } from '../../../shared/param-attachments'
 import { defaultSchemaValue } from '../../../shared/schema-values'
 import { promptUnsavedFiles } from '../utils/unsaved-files-prompt'
@@ -64,6 +64,7 @@ const resizing = ref(false)
 const runSplitTopPct = ref(RUN_SPLIT_DEFAULT)
 const runSplitResizing = ref(false)
 const viewingSessionId = ref<string | null>(null)
+const runResultSectionExpanded = ref(true)
 
 function getMaxPanelWidth(): number {
   return Math.min(
@@ -290,12 +291,14 @@ const viewingSessionFailed = computed(() => viewingSession.value?.status === 'er
 
 const viewingSessionExitCode = computed(() => viewingSession.value?.exitCode)
 
-const runResultText = computed(() => formatRunResult(runResult.value))
-
 const runResultOutputDir = computed(() => extractRunResultOutputDir(runResult.value))
 
-const resultCopied = ref(false)
-let resultCopiedTimer: ReturnType<typeof setTimeout> | undefined
+const runResultSectionBrief = computed(() => {
+  if (viewingSession.value?.status === 'running') return '运行中…'
+  if (viewingSessionFailed.value) return '运行失败'
+  if (runResultFinishedAt.value) return `完成于 ${formatRunFinishedAt(runResultFinishedAt.value)}`
+  return ''
+})
 
 const statusLabel = computed(() => {
   if (isRunning.value) return { text: '运行中', class: 'text-emerald-400', icon: 'running' as const }
@@ -303,13 +306,27 @@ const statusLabel = computed(() => {
   return { text: '空闲', class: 'sb-text-muted', icon: 'idle' as const }
 })
 
+function formatRunFinishedAt(iso: string): string {
+  const date = new Date(iso)
+  if (Number.isNaN(date.getTime())) return iso
+  return date.toLocaleString('zh-CN', {
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+    hour: '2-digit',
+    minute: '2-digit',
+    second: '2-digit',
+    hour12: false
+  })
+}
+
+const sessionProgressSummary = computed(() => formatScriptRunProgressSummary(session.value?.runProgress))
+
 const headerStatusSubtext = computed(() => {
   if (sessionProgressSummary.value) return sessionProgressSummary.value
   if (session.value?.phase) return session.value.phase
   return props.script.meta
 })
-
-const sessionProgressSummary = computed(() => formatScriptRunProgressSummary(session.value?.runProgress))
 
 function syncBrowserHeadless(): void {
   browserHeadless.value = props.script.browser?.headless ?? false
@@ -516,7 +533,6 @@ onUnmounted(() => {
   unsubEditorClosed?.()
   unsubEditorSync?.()
   unsubEditorSaved?.()
-  if (resultCopiedTimer) clearTimeout(resultCopiedTimer)
 })
 
 watch(
@@ -715,7 +731,10 @@ async function saveConfig(): Promise<void> {
 async function runWithEnv(): Promise<void> {
   const params = plainParamVars()
   const started = await props.runner.start(props.script.id, selectedEnvId.value, params)
-  if (started) viewingSessionId.value = started.id
+  if (started) {
+    viewingSessionId.value = started.id
+    runResultSectionExpanded.value = true
+  }
   emit('navigate-tab', 'params')
   emit('viewLog')
   emit('refresh')
@@ -748,31 +767,6 @@ async function openOutputDir(): Promise<void> {
   await window.autoforge.system.openPath(dir)
 }
 
-function formatRunFinishedAt(iso: string): string {
-  const date = new Date(iso)
-  if (Number.isNaN(date.getTime())) return iso
-  return date.toLocaleString('zh-CN', {
-    year: 'numeric',
-    month: '2-digit',
-    day: '2-digit',
-    hour: '2-digit',
-    minute: '2-digit',
-    second: '2-digit',
-    hour12: false
-  })
-}
-
-async function copyResult(): Promise<void> {
-  const text = runResultText.value
-  if (!text) return
-  await navigator.clipboard.writeText(text)
-  resultCopied.value = true
-  if (resultCopiedTimer) clearTimeout(resultCopiedTimer)
-  resultCopiedTimer = setTimeout(() => {
-    resultCopied.value = false
-  }, 2000)
-}
-
 async function updateIcon(icon: ScriptIcon): Promise<void> {
   if (icon === props.script.icon) {
     iconPickerOpen.value = false
@@ -789,7 +783,10 @@ async function updateIcon(icon: ScriptIcon): Promise<void> {
 }
 async function restartScript(): Promise<void> {
   const started = await props.runner.restart(props.script.id, selectedEnvId.value, plainParamVars())
-  if (started) viewingSessionId.value = started.id
+  if (started) {
+    viewingSessionId.value = started.id
+    runResultSectionExpanded.value = true
+  }
   emit('navigate-tab', 'params')
   emit('refresh')
 }
@@ -1092,8 +1089,9 @@ async function handleRename(): Promise<void> {
     <!-- 运行 -->
     <div v-else-if="activeTab === 'params'" class="flex-1 flex flex-col min-h-0" :class="runSplitResizing && 'select-none'">
       <div
-        class="overflow-y-auto min-h-0 p-4 space-y-4 flex-shrink-0"
-        :style="{ height: `${runSplitTopPct}%` }"
+        class="overflow-y-auto min-h-0 p-4 space-y-4"
+        :class="runResultSectionExpanded ? 'flex-shrink-0' : 'flex-1'"
+        :style="runResultSectionExpanded ? { height: `${runSplitTopPct}%` } : undefined"
       >
         <div v-if="script.paramSchema.length">
           <label class="text-[11px] font-medium sb-text-faint uppercase tracking-wider">运行参数</label>
@@ -1115,6 +1113,7 @@ async function handleRename(): Promise<void> {
       </div>
 
       <div
+        v-show="runResultSectionExpanded"
         class="flex-shrink-0 h-1.5 cursor-row-resize group relative border-y sb-border-subtle"
         title="拖拽调节上下区域高度"
         @mousedown="onRunSplitStart"
@@ -1125,11 +1124,32 @@ async function handleRename(): Promise<void> {
         />
       </div>
 
-      <div class="flex-1 flex flex-col min-h-0 overflow-hidden">
-        <div class="flex-shrink-0 px-4 pt-3 pb-2">
-          <label class="text-[11px] font-medium sb-text-faint uppercase tracking-wider">本次运行结果</label>
-        </div>
-        <div class="flex-1 overflow-y-auto min-h-0 px-4 pb-4">
+      <div
+        class="flex flex-col overflow-hidden sb-bg-panel border-t sb-border-subtle"
+        :class="runResultSectionExpanded ? 'flex-1 min-h-0' : 'flex-shrink-0 mt-auto'"
+      >
+        <button
+          type="button"
+          class="run-result-section-header flex-shrink-0 w-full flex items-center justify-between gap-2 px-4 py-2.5 text-left transition-colors hover:sb-bg-hover"
+          :aria-expanded="runResultSectionExpanded"
+          @click="runResultSectionExpanded = !runResultSectionExpanded"
+        >
+          <div class="flex items-center gap-2 min-w-0">
+            <span class="text-[11px] font-medium sb-text-faint uppercase tracking-wider shrink-0">
+              本次运行结果
+            </span>
+            <span v-if="runResultSectionBrief" class="text-[11px] sb-text-muted truncate">
+              {{ runResultSectionBrief }}
+            </span>
+          </div>
+          <ChevronDown
+            class="w-4 h-4 sb-text-faint shrink-0 transition-transform duration-200"
+            :class="runResultSectionExpanded && 'rotate-180'"
+            :stroke-width="1.5"
+          />
+        </button>
+
+        <div v-if="runResultSectionExpanded" class="flex-1 min-h-0 overflow-y-auto px-4 py-3 flex flex-col">
           <div
             v-if="viewingSession?.status === 'running'"
             class="flex items-center gap-3 p-3 rounded-lg border bg-emerald-500/5 border-emerald-500/15"
@@ -1158,56 +1178,13 @@ async function handleRename(): Promise<void> {
             </div>
           </div>
 
-          <div v-else-if="runResult" class="run-result">
-            <div class="flex items-center justify-between gap-3 mb-2.5">
-              <div class="min-w-0">
-                <p
-                  v-if="runResultFinishedAt"
-                  class="run-result-meta"
-                  :title="runResultFinishedAt"
-                >
-                  完成于
-                  <time>{{ formatRunFinishedAt(runResultFinishedAt) }}</time>
-                </p>
-              </div>
-              <button
-                type="button"
-                class="run-result-action flex-shrink-0"
-                :class="resultCopied && 'is-copied'"
-                @click="copyResult"
-              >
-                <Check v-if="resultCopied" class="w-3 h-3" :stroke-width="1.5" />
-                <Copy v-else class="w-3 h-3" :stroke-width="1.5" />
-                {{ resultCopied ? '已复制' : '复制' }}
-              </button>
-            </div>
-
-            <div class="run-result-body rounded-lg border overflow-hidden">
-              <div v-if="runResultOutputDir" class="run-result-output px-3 py-2.5 border-b sb-border-subtle">
-                <div class="flex items-center justify-between gap-3">
-                  <span class="text-[11px] font-medium sb-text-secondary">产物目录</span>
-                  <button
-                    type="button"
-                    class="run-result-open"
-                    @click="openOutputDir"
-                  >
-                    <FolderOpen class="w-3 h-3" :stroke-width="1.5" />
-                    打开
-                  </button>
-                </div>
-                <p
-                  class="run-result-path mt-1.5"
-                  :title="runResultOutputDir"
-                >
-                  {{ runResultOutputDir }}
-                </p>
-              </div>
-
-              <div class="run-result-scroll overflow-y-auto overscroll-contain">
-                <pre class="run-result-pre">{{ runResultText }}</pre>
-              </div>
-            </div>
-          </div>
+          <RunResultViewer
+            v-else-if="runResult"
+            :result="runResult"
+            :output-dir="runResultOutputDir"
+            fill-height
+            @open-output-dir="openOutputDir"
+          />
 
           <p v-else class="text-[13px] sb-text-muted py-2">暂无运行结果，点击上方「运行」开始执行</p>
 
