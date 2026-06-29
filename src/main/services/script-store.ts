@@ -4,6 +4,7 @@ import { join } from 'path'
 import { UTF8 } from '../../shared/encoding'
 import { randomUUID } from 'crypto'
 import { isAttachmentParamEmpty, parseParamAttachments } from '../../shared/param-attachments'
+import { parseCheckboxValue } from '../../shared/param-choices'
 import type { AppConfig, CategoryDefinition, CronConfig, EnvironmentProfile, ScriptMeta } from '../../shared/types/script'
 import {
   createStoredCategory,
@@ -281,6 +282,12 @@ export class ScriptStore {
           if (!existsSync(item.path)) {
             return `附件不存在或已失效: ${item.name}（${def.key}），请重新上传`
           }
+        }
+        continue
+      }
+      if (def.type === 'checkbox') {
+        if (def.required && parseCheckboxValue(raw).length === 0) {
+          return `缺少必填运行参数: ${def.label}（${def.key}），请在脚本「详情」Tab 中至少勾选一项`
         }
         continue
       }

@@ -89,8 +89,11 @@ my-script/
 | `description` | string | 说明 |
 | `required` | boolean | 是否必填 |
 | `secret` | boolean | 敏感值（仅 `text` 有效） |
-| `type` | `"text"` \| `"attachment"` | 默认 `text` |
-| `default` | string | `text` 为字符串；`attachment` 为 JSON 数组字符串，默认 `[]` |
+| `type` | 见下 | 默认 `text` |
+| `options` | `(string \| {label,value})[]` | `select`/`radio`/`checkbox` 候选项 |
+| `default` | string | 见下表 |
+
+**`type` 取值：** `text`（单行）、`textarea`（多行）、`number`（数字）、`select`（下拉单选）、`radio`（单选组）、`checkbox`（多选组，值为 JSON 数组字符串，默认 `[]`）、`boolean`（开关，值 `"true"`/`"false"`，默认 `"false"`）、`attachment`（文件，JSON 数组字符串，默认 `[]`）。`select`/`radio`/`checkbox` 需配 `options`。
 
 合并优先级：`autoforge.json 默认值` → `上次保存值` → `本次运行传入（最高）`
 

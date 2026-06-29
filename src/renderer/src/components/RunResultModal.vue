@@ -3,6 +3,7 @@ import { computed, ref, watch } from 'vue'
 import { Check, CheckCircle2, Copy, FolderOpen, X } from 'lucide-vue-next'
 import type { EnvironmentProfile, RunSession, ScriptItem } from '../../../shared/types/script'
 import { parseParamAttachments } from '../../../shared/param-attachments'
+import { parseCheckboxValue } from '../../../shared/param-choices'
 import { extractRunResultOutputDir, formatRunResult } from '../../../shared/run-result'
 
 const props = defineProps<{
@@ -35,6 +36,8 @@ const paramRows = computed(() => {
   if (!script?.paramSchema.length) return []
   return script.paramSchema.map((def) => {
     const raw = script.savedParams?.[def.key] ?? def.default ?? ''
+    const optionLabel = (value: string): string =>
+      def.options?.find((opt) => opt.value === value)?.label ?? value
     if (def.type === 'attachment') {
       const items = parseParamAttachments(raw)
       return {
@@ -42,6 +45,20 @@ const paramRows = computed(() => {
         key: def.key,
         value: items.length ? items.map((item) => item.name).join('、') : '—'
       }
+    }
+    if (def.type === 'checkbox') {
+      const values = parseCheckboxValue(raw)
+      return {
+        label: def.label,
+        key: def.key,
+        value: values.length ? values.map(optionLabel).join('、') : '—'
+      }
+    }
+    if (def.type === 'boolean') {
+      return { label: def.label, key: def.key, value: raw === 'true' ? '是' : '否' }
+    }
+    if (def.type === 'select' || def.type === 'radio') {
+      return { label: def.label, key: def.key, value: raw.trim() ? optionLabel(raw) : '—' }
     }
     if (def.secret) {
       return { label: def.label, key: def.key, value: raw.trim() ? '••••••' : '—' }

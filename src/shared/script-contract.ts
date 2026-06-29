@@ -57,7 +57,21 @@ export interface EnvVarDefinition {
   default?: string
 }
 
-export type ParamValueType = 'text' | 'attachment'
+export type ParamValueType =
+  | 'text'
+  | 'textarea'
+  | 'number'
+  | 'select'
+  | 'radio'
+  | 'checkbox'
+  | 'boolean'
+  | 'attachment'
+
+/** select / radio / checkbox 的候选项 */
+export interface ParamOption {
+  label: string
+  value: string
+}
 
 /** 运行业务参数 schema — 与 env 区分：params 用于每次运行的业务输入，不绑定环境 Profile */
 export interface ParamDefinition {
@@ -66,8 +80,17 @@ export interface ParamDefinition {
   description?: string
   required?: boolean
   secret?: boolean
-  /** 参数类型，默认 text；attachment 为可多选的文件附件，值为 JSON 数组 */
+  /**
+   * 参数类型，默认 text。
+   * - text/textarea/number：值为字符串
+   * - select/radio：单选，值为选项 value 字符串
+   * - checkbox：多选，值为 JSON 数组字符串
+   * - boolean：开关，值为 "true" / "false"
+   * - attachment：可多选的文件附件，值为 JSON 数组字符串
+   */
   type?: ParamValueType
+  /** select / radio / checkbox 的候选项 */
+  options?: ParamOption[]
   /** 默认值（可被上次运行保存值覆盖） */
   default?: string
 }
@@ -182,6 +205,57 @@ export const CATEGORY_DEFAULTS: Record<
   }
 }
 
+const PARAM_VALUE_TYPES: ReadonlySet<ParamValueType> = new Set([
+  'text',
+  'textarea',
+  'number',
+  'select',
+  'radio',
+  'checkbox',
+  'boolean',
+  'attachment'
+])
+
+function normalizeParamType(raw: unknown): ParamValueType {
+  return typeof raw === 'string' && PARAM_VALUE_TYPES.has(raw as ParamValueType)
+    ? (raw as ParamValueType)
+    : 'text'
+}
+
+/** 选项支持字符串简写（["a","b"]）或 { label, value } 对象 */
+function normalizeParamOptions(raw: unknown): ParamOption[] | undefined {
+  if (!Array.isArray(raw)) return undefined
+  const options: ParamOption[] = []
+  for (const item of raw) {
+    if (typeof item === 'string' || typeof item === 'number') {
+      const value = String(item)
+      options.push({ label: value, value })
+      continue
+    }
+    if (item && typeof item === 'object') {
+      const obj = item as Record<string, unknown>
+      if (obj.value === undefined && obj.label === undefined) continue
+      const value = String(obj.value ?? obj.label ?? '')
+      const label = String(obj.label ?? obj.value ?? '')
+      options.push({ label, value })
+    }
+  }
+  return options.length ? options : undefined
+}
+
+/** 将清单中的 default 统一规范为字符串：布尔→"true"/"false"，数组→JSON，数字→字符串 */
+function normalizeParamDefault(raw: unknown, type: ParamValueType): string | undefined {
+  if (raw === undefined || raw === null) return undefined
+  if (type === 'boolean') return raw === true || raw === 'true' ? 'true' : 'false'
+  if (type === 'checkbox' || type === 'attachment') {
+    if (Array.isArray(raw)) return JSON.stringify(raw.map((v) => String(v)))
+    return typeof raw === 'string' ? raw : undefined
+  }
+  if (typeof raw === 'string') return raw
+  if (typeof raw === 'number' || typeof raw === 'boolean') return String(raw)
+  return undefined
+}
+
 export function normalizeAutoforgeManifestVersion(raw: unknown): string | null {
   if (raw === undefined || raw === null || raw === '') {
     return AUTOFORGE_MANIFEST_VERSION
@@ -227,15 +301,19 @@ export function validateManifest(raw: unknown): { ok: true; manifest: ScriptMani
     icon: typeof obj.icon === 'string' ? (obj.icon as ScriptIcon) : 'app-window',
     env: Array.isArray(obj.env) ? (obj.env as EnvVarDefinition[]) : [],
     params: Array.isArray(obj.params)
-      ? (obj.params as Record<string, unknown>[]).map((item) => ({
-          key: String(item.key ?? ''),
-          label: String(item.label ?? item.key ?? ''),
-          description: typeof item.description === 'string' ? item.description : undefined,
-          required: item.required === true,
-          secret: item.secret === true,
-          type: item.type === 'attachment' ? ('attachment' as const) : ('text' as const),
-          default: typeof item.default === 'string' ? item.default : undefined
-        }))
+      ? (obj.params as Record<string, unknown>[]).map((item) => {
+          const type = normalizeParamType(item.type)
+          return {
+            key: String(item.key ?? ''),
+            label: String(item.label ?? item.key ?? ''),
+            description: typeof item.description === 'string' ? item.description : undefined,
+            required: item.required === true,
+            secret: item.secret === true,
+            type,
+            options: normalizeParamOptions(item.options),
+            default: normalizeParamDefault(item.default, type)
+          }
+        })
       : [],
     dependencies:
       obj.dependencies && typeof obj.dependencies === 'object'

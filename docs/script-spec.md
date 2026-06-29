@@ -119,8 +119,22 @@ Autoforge 将脚本输入分为两个维度，**不要在脚本中混用**：
 | `description` | string | 说明文字 |
 | `required` | boolean | 是否必填 |
 | `secret` | boolean | 敏感值（仅 `text` 类型有效，UI 掩码显示） |
-| `type` | `"text"` \| `"attachment"` | 参数类型，默认 `text` |
-| `default` | string | 默认值（`text` 为字符串；`attachment` 为 JSON 数组字符串，默认 `[]`） |
+| `type` | 见下表 | 参数类型，默认 `text` |
+| `options` | `(string \| {label,value})[]` | `select` / `radio` / `checkbox` 的候选项 |
+| `default` | string | 默认值（见各类型说明） |
+
+**支持的 `type`：**
+
+| `type` | UI 控件 | `ctx.params[key]` 的值 | 备注 |
+|--------|---------|------------------------|------|
+| `text`（默认） | 单行文本框 | 普通字符串 | 支持 `secret` 掩码 |
+| `textarea` | 多行文本框 | 普通字符串 | |
+| `number` | 数字输入框 | 数字字符串 | 脚本内用 `Number()` 转换 |
+| `select` | 下拉单选 | 选项 `value` 字符串 | 需 `options` |
+| `radio` | 单选按钮组 | 选项 `value` 字符串 | 需 `options` |
+| `checkbox` | 多选框组 | **JSON 数组字符串** | 需 `options`，默认 `[]` |
+| `boolean` | 开关 | `"true"` / `"false"` | 默认 `"false"` |
+| `attachment` | 文件上传 + 附件列表 | **JSON 数组字符串** | 默认 `[]` |
 
 ```json
 {
@@ -134,7 +148,24 @@ Autoforge 将脚本输入分为两个维度，**不要在脚本中混用**：
     {
       "key": "DRY_RUN",
       "label": "试运行",
+      "type": "boolean",
       "default": "false"
+    },
+    {
+      "key": "EXPORT_FORMAT",
+      "label": "导出格式",
+      "type": "select",
+      "options": ["xlsx", "csv", "pdf"],
+      "default": "xlsx"
+    },
+    {
+      "key": "MODULES",
+      "label": "处理模块",
+      "type": "checkbox",
+      "options": [
+        { "label": "订单", "value": "order" },
+        { "label": "库存", "value": "stock" }
+      ]
     },
     {
       "key": "SOURCE_FILES",

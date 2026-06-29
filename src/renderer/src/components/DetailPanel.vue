@@ -30,6 +30,7 @@ import { useScriptFileEditor } from '../composables/useScriptFileEditor'
 import { MANIFEST_FILENAME } from '../../../shared/script-contract'
 import { extractRunResultOutputDir, formatRunResult } from '../../../shared/run-result'
 import { parseParamAttachments } from '../../../shared/param-attachments'
+import { parseCheckboxValue, toggleCheckboxValue } from '../../../shared/param-choices'
 import { promptUnsavedFiles } from '../utils/unsaved-files-prompt'
 
 type DetailPanelTab = 'detail' | 'params' | 'edit' | 'log' | 'config'
@@ -246,7 +247,8 @@ function resolvedDefaultEnvId(): string {
 function savedParamValue(def: (typeof props.script.paramSchema)[number]): string {
   const saved = props.script.savedParams?.[def.key]
   if (saved !== undefined) return saved
-  if (def.type === 'attachment') return def.default ?? '[]'
+  if (def.type === 'attachment' || def.type === 'checkbox') return def.default ?? '[]'
+  if (def.type === 'boolean') return def.default ?? 'false'
   return def.default ?? ''
 }
 
@@ -367,18 +369,36 @@ function plainParamVars(): Record<string, string> {
 }
 
 function emptyParamValue(def: (typeof props.script.paramSchema)[number]): string {
-  if (def.type === 'attachment') return '[]'
+  if (def.type === 'attachment' || def.type === 'checkbox') return '[]'
+  if (def.type === 'boolean') return 'false'
   return ''
 }
 
 function paramHasValue(def: (typeof props.script.paramSchema)[number]): boolean {
   const raw = paramVars.value[def.key] ?? ''
   if (def.type === 'attachment') return parseParamAttachments(raw).length > 0
+  if (def.type === 'checkbox') return parseCheckboxValue(raw).length > 0
+  if (def.type === 'boolean') return raw === 'true'
   return raw.trim().length > 0
 }
 
 function clearParam(def: (typeof props.script.paramSchema)[number]): void {
   paramVars.value = { ...paramVars.value, [def.key]: emptyParamValue(def) }
+}
+
+function isCheckboxChecked(def: (typeof props.script.paramSchema)[number], value: string): boolean {
+  return parseCheckboxValue(paramVars.value[def.key]).includes(value)
+}
+
+function toggleCheckbox(def: (typeof props.script.paramSchema)[number], value: string): void {
+  paramVars.value = {
+    ...paramVars.value,
+    [def.key]: toggleCheckboxValue(paramVars.value[def.key], value)
+  }
+}
+
+function setBooleanParam(def: (typeof props.script.paramSchema)[number], checked: boolean): void {
+  paramVars.value = { ...paramVars.value, [def.key]: checked ? 'true' : 'false' }
 }
 
 function syncScheduleFromScript(): void {
@@ -965,6 +985,73 @@ async function handleRename(): Promise<void> {
               v-model="paramVars[def.key]"
               :script-id="script.id"
               :param-key="def.key"
+            />
+            <textarea
+              v-else-if="def.type === 'textarea'"
+              v-model="paramVars[def.key]"
+              rows="3"
+              class="mt-1 w-full px-3 py-2 rounded-lg sb-bg-input border sb-border text-[13px] outline-none focus:sb-input resize-y"
+              :placeholder="def.default ? `默认: ${def.default}` : def.required ? '必填' : '可选'"
+            ></textarea>
+            <select
+              v-else-if="def.type === 'select'"
+              v-model="paramVars[def.key]"
+              class="mt-1 w-full h-8 px-2 rounded-lg sb-bg-input border sb-border text-[13px] outline-none focus:sb-input"
+            >
+              <option value="">{{ def.required ? '请选择' : '（不选择）' }}</option>
+              <option v-for="opt in def.options ?? []" :key="opt.value" :value="opt.value">
+                {{ opt.label }}
+              </option>
+            </select>
+            <div v-else-if="def.type === 'radio'" class="mt-1.5 space-y-1.5">
+              <label
+                v-for="opt in def.options ?? []"
+                :key="opt.value"
+                class="flex items-center gap-2 text-[13px] sb-text-secondary cursor-pointer"
+              >
+                <input
+                  type="radio"
+                  :name="`param-${def.key}`"
+                  :value="opt.value"
+                  v-model="paramVars[def.key]"
+                  class="accent-[var(--sb-accent)]"
+                />
+                {{ opt.label }}
+              </label>
+            </div>
+            <div v-else-if="def.type === 'checkbox'" class="mt-1.5 space-y-1.5">
+              <label
+                v-for="opt in def.options ?? []"
+                :key="opt.value"
+                class="flex items-center gap-2 text-[13px] sb-text-secondary cursor-pointer"
+              >
+                <input
+                  type="checkbox"
+                  :checked="isCheckboxChecked(def, opt.value)"
+                  class="accent-[var(--sb-accent)]"
+                  @change="toggleCheckbox(def, opt.value)"
+                />
+                {{ opt.label }}
+              </label>
+            </div>
+            <label
+              v-else-if="def.type === 'boolean'"
+              class="mt-1.5 flex items-center gap-2 text-[13px] sb-text-secondary cursor-pointer"
+            >
+              <input
+                type="checkbox"
+                :checked="paramVars[def.key] === 'true'"
+                class="accent-[var(--sb-accent)]"
+                @change="setBooleanParam(def, ($event.target as HTMLInputElement).checked)"
+              />
+              {{ paramVars[def.key] === 'true' ? '已开启' : '已关闭' }}
+            </label>
+            <input
+              v-else-if="def.type === 'number'"
+              v-model="paramVars[def.key]"
+              type="number"
+              class="mt-1 w-full h-8 px-3 rounded-lg sb-bg-input border sb-border text-[13px] outline-none focus:sb-input"
+              :placeholder="def.default ? `默认: ${def.default}` : def.required ? '必填' : '可选'"
             />
             <input
               v-else
