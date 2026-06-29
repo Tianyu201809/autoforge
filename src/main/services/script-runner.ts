@@ -4,8 +4,14 @@ import { join } from 'path'
 import { pathToFileURL } from 'url'
 import type { BrowserWindow } from 'electron'
 import { IPC } from '../../shared/ipc-channels'
-import type { ScriptRunFn } from '../../shared/script-contract'
+import type { ScriptRunFn, ScriptStageInput, ScriptProgressInput } from '../../shared/script-contract'
 import type { LogLine, RunSession, ScriptMeta, ExecutionTrigger } from '../../shared/types/script'
+import {
+  applyScriptControl,
+  formatControlLogLine,
+  parseScriptControlMessage,
+  type ScriptControlMessage
+} from '../../shared/script-progress'
 import { dependencyManager } from './dependency-manager'
 import { executionHistory } from './execution-history'
 import { createLog, logBus } from './log-bus'
@@ -15,7 +21,7 @@ import { scriptRegistry } from './script-registry'
 import { buildCategorySidebarItems } from './category-service'
 import { scriptStore } from './script-store'
 import { scriptWorkspace } from './script-workspace'
-import { broadcastToRenderers } from './window-broadcast'
+import { formatScriptRunProgressSummary } from '../../shared/script-progress'
 
 interface ActiveSession {
   session: RunSession
@@ -132,6 +138,12 @@ export class ScriptRunnerService {
     const log = (level: LogLine['level'], message: string): void => {
       this.pushLog(session.id, level, message)
     }
+    const stage = (input: ScriptStageInput): void => {
+      this.handleScriptControl(session, { kind: 'stage', ...input })
+    }
+    const progress = (input: ScriptProgressInput): void => {
+      this.handleScriptControl(session, { kind: 'progress', ...input })
+    }
 
     try {
       this.setPhase(session, 'validating', '校验脚本包…')
@@ -170,6 +182,8 @@ export class ScriptRunnerService {
         params,
         signal: abortController.signal,
         log,
+        stage,
+        progress,
         sdk: createScriptSdk(config, script.workspacePath, log, script.browser)
       }
 
@@ -212,10 +226,31 @@ export class ScriptRunnerService {
     this.broadcastSession(session)
   }
 
-  private pushLog(sessionId: string, level: LogLine['level'], message: string): void {
+  private handleScriptControl(session: RunSession, control: ScriptControlMessage): void {
+    session.runProgress = {
+      ...applyScriptControl(session.runProgress, control),
+      updatedAt: new Date().toISOString()
+    }
+    this.broadcastSession(session)
+    this.pushLogLine(session.id, 'INFO', formatControlLogLine(control))
+  }
+
+  private pushLogLine(sessionId: string, level: LogLine['level'], message: string): void {
     const line = createLog(sessionId, level, message)
     logBus.emitLog(line)
     broadcastToRenderers(IPC.EVENT_LOG, line)
+  }
+
+  private pushLog(sessionId: string, level: LogLine['level'], message: string): void {
+    const control = parseScriptControlMessage(message)
+    if (control) {
+      const active = this.sessions.get(sessionId)
+      if (active) {
+        this.handleScriptControl(active.session, control)
+      }
+      return
+    }
+    this.pushLogLine(sessionId, level, message)
   }
 
   private completeSession(sessionId: string, result?: unknown): void {
@@ -284,7 +319,9 @@ export function enrichScriptItem(
 
   if (active) {
     status = 'running'
-    metaText = active.phase ? `${phaseLabel(active.phase)} · ${formatTime(active.startedAt)}` : `运行中 · ${formatTime(active.startedAt)}`
+    const progressSummary = formatScriptRunProgressSummary(active.runProgress)
+    metaText = progressSummary
+      ?? (active.phase ? `${phaseLabel(active.phase)} · ${formatTime(active.startedAt)}` : `运行中 · ${formatTime(active.startedAt)}`)
   } else if (lastTerminal?.status === 'error') {
     status = 'error'
     errorMeta = `Exit code ${lastTerminal.exitCode ?? 1} · ${formatRelative(lastTerminal.finishedAt ?? lastTerminal.startedAt)}`

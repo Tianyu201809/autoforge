@@ -1,4 +1,4 @@
-import type { EnvVarDefinition, ParamDefinition, ScriptIcon, ScriptLifecyclePhase } from '../script-contract'
+import type { EnvVarDefinition, ParamDefinition, ScriptIcon, ScriptLifecyclePhase, ScriptRunProgress } from '../script-contract'
 
 export type ScriptStatus = 'running' | 'idle' | 'error'
 export type SessionStatus = 'running' | 'success' | 'error' | 'stopped'
@@ -72,8 +72,10 @@ export interface RunSession {
   status: SessionStatus
   /** 本次运行使用的环境 Profile */
   envId?: string
-  /** 当前生命周期阶段 */
+  /** 当前生命周期阶段（平台） */
   phase?: ScriptLifecyclePhase
+  /** 脚本通过 stage/progress 上报的执行阶段与进度 */
+  runProgress?: ScriptRunProgress
   pid?: number
   startedAt: string
   finishedAt?: string

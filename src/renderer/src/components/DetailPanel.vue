@@ -23,6 +23,8 @@ import { resolveScriptIcon } from '../lib/script-icon-map'
 import { renameScript } from '../composables/useScriptRename'
 import CronScheduleBuilder from './CronScheduleBuilder.vue'
 import LogConsole from './LogConsole.vue'
+import ScriptRunProgressPanel from './ScriptRunProgressPanel.vue'
+import { formatScriptRunProgressSummary } from '../../../shared/script-progress'
 import CodeEditor from './CodeEditor.vue'
 import SchemaValueField from './SchemaValueField.vue'
 import ScriptWorkspaceSidebar from './ScriptWorkspaceSidebar.vue'
@@ -210,6 +212,8 @@ const statusLabel = computed(() => {
   if (props.script.status === 'error') return { text: '运行异常', class: 'text-red-400' }
   return { text: '空闲', class: 'sb-text-muted' }
 })
+
+const sessionProgressSummary = computed(() => formatScriptRunProgressSummary(session.value?.runProgress))
 
 function syncBrowserHeadless(): void {
   browserHeadless.value = props.script.browser?.headless ?? false
@@ -900,6 +904,7 @@ async function handleRename(): Promise<void> {
             embedded
             title="最近日志"
             :logs="sessionLogs.slice(-20)"
+            :run-progress="session?.runProgress"
             @clear="clearSessionLogs"
           />
         </div>
@@ -974,10 +979,12 @@ async function handleRename(): Promise<void> {
             </div>
             <div>
               <p class="text-[13px] font-medium" :class="statusLabel.class">{{ statusLabel.text }}</p>
-              <p v-if="session?.phase" class="text-[11px] sb-text-muted">{{ session.phase }}</p>
+              <p v-if="sessionProgressSummary" class="text-[11px] sb-text-muted">{{ sessionProgressSummary }}</p>
+              <p v-else-if="session?.phase" class="text-[11px] sb-text-muted">{{ session.phase }}</p>
               <p v-else class="text-[11px] sb-text-muted">{{ script.meta }}</p>
             </div>
           </div>
+          <ScriptRunProgressPanel v-if="session?.runProgress && isRunning" :progress="session.runProgress" compact />
         </div>
 
         <div v-if="runResult" class="run-result">
@@ -1059,7 +1066,13 @@ async function handleRename(): Promise<void> {
 
     <!-- 日志 -->
     <div v-else-if="activeTab === 'log'" class="flex-1 flex flex-col p-4 min-h-0">
-      <LogConsole embedded title="完整日志" :logs="sessionLogs" @clear="clearSessionLogs" />
+      <LogConsole
+        embedded
+        title="完整日志"
+        :logs="sessionLogs"
+        :run-progress="session?.runProgress"
+        @clear="clearSessionLogs"
+      />
     </div>
 
     <!-- 编辑 -->

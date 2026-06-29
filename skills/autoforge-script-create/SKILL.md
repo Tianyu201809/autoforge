@@ -154,6 +154,20 @@ export async function run(ctx) {
 
 `ctx.log('INFO'|'WARN'|'ERROR', message)` → UI 日志面板
 
+### 阶段与进度
+
+```javascript
+ctx.stage({ name: 'fetch', label: '拉取数据', message: '…' })
+ctx.progress({ scope: 'task', current: 3, total: 10, label: '当前文件' })
+ctx.progress({ scope: 'total', current: 450, total: 1000, unit: '条', label: '总进度' })
+```
+
+- `scope: 'task'` — 当前子任务（单文件、单页等）
+- `scope: 'total'` — 整批总进度（跑数据、批处理）
+- 也可 `ctx.log('INFO', '@autoforge/ctl ' + JSON.stringify({ kind: 'progress', ... }))`
+
+终端面板、脚本卡片 meta、详情运行状态会实时展示 `runProgress`。
+
 ### 返回值与产物目录
 
 - 返回值 → `session.result`；抛 `Error` → `failed`

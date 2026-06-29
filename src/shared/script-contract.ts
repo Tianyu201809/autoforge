@@ -140,6 +140,10 @@ export interface ScriptRunContext {
   params: Record<string, string>
   signal: AbortSignal
   log: (level: 'INFO' | 'WARN' | 'ERROR', message: string) => void
+  /** 报告脚本自定义执行阶段（UI 终端 / 运行状态） */
+  stage: (input: import('./script-progress').ScriptStageInput) => void
+  /** 报告进度；scope=task 为当前子任务，scope=total 为整批总进度 */
+  progress: (input: import('./script-progress').ScriptProgressInput) => void
   sdk: ScriptSdkShape
 }
 
@@ -154,6 +158,18 @@ export interface ScriptSdkShape {
 }
 
 export type ScriptRunFn = (ctx: ScriptRunContext) => Promise<unknown>
+
+export type {
+  ScriptControlMessage,
+  ScriptProgressInput,
+  ScriptProgressScope,
+  ScriptRunProgress,
+  ScriptStageControl,
+  ScriptStageInput,
+  ScriptProgressControl
+} from './script-progress'
+
+export { SCRIPT_CONTROL_PREFIX, serializeScriptControl } from './script-progress'
 
 /** 脚本执行生命周期阶段 */
 export type ScriptLifecyclePhase =

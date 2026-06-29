@@ -16,6 +16,9 @@ import {
   X
 } from 'lucide-vue-next'
 import type { LogLine, SessionStatus } from '../../../shared/types/script'
+import type { ScriptRunProgress } from '../../../shared/script-progress'
+import { formatScriptRunProgressSummary, isControlLogMessage } from '../../../shared/script-progress'
+import ScriptRunProgressPanel from './ScriptRunProgressPanel.vue'
 
 export type LogConsoleDisplayMode = 'hidden' | 'mini' | 'normal'
 
@@ -24,6 +27,7 @@ export interface LogConsoleSession {
   scriptName: string
   logs: LogLine[]
   status?: SessionStatus
+  runProgress?: ScriptRunProgress
 }
 
 const props = withDefaults(
@@ -34,6 +38,7 @@ const props = withDefaults(
     embedded?: boolean
     standalone?: boolean
     sessionId?: string
+    runProgress?: ScriptRunProgress
   }>(),
   {
     title: '运行日志',
@@ -116,6 +121,16 @@ function logLevelClass(level: string): string {
   if (level === 'ERROR') return 'terminal-log-level-error'
   return 'terminal-log-level-info'
 }
+
+function logMessageClass(message: string): string {
+  return isControlLogMessage(message) ? 'terminal-log-progress' : 'terminal-log-message'
+}
+
+const activeRunProgress = computed(
+  () => activeSession.value?.runProgress ?? props.runProgress
+)
+
+const activeProgressSummary = computed(() => formatScriptRunProgressSummary(activeRunProgress.value))
 
 function sessionStatusIconClass(status?: SessionStatus): string {
   if (status === 'running') return 'terminal-status-running'
@@ -421,6 +436,7 @@ onUnmounted(() => {
         </button>
       </div>
     </div>
+    <ScriptRunProgressPanel v-if="activeRunProgress" :progress="activeRunProgress" compact />
     <div
       ref="logBodyRef"
       class="rounded-lg border sb-border-subtle sb-bg-log p-3 font-mono leading-relaxed space-y-1 flex-1 overflow-y-auto min-h-[120px]"
@@ -431,7 +447,7 @@ onUnmounted(() => {
       <p v-for="(log, i) in displayLogs" :key="`${log.ts}-${i}`">
         <span class="sb-text-faint">{{ formatLogTime(log.ts) }}</span>
         <span class="ml-1" :class="logLevelClass(log.level)">{{ log.level }}</span>
-        <span class="sb-text-muted ml-1">{{ log.message }}</span>
+        <span class="sb-text-muted ml-1" :class="logMessageClass(log.message)">{{ log.message }}</span>
       </p>
     </div>
   </div>
@@ -460,7 +476,7 @@ onUnmounted(() => {
           <component :is="isVisible ? ChevronDown : ChevronUp" class="w-3.5 h-3.5" :stroke-width="1.5" />
         </button>
         <span v-if="isVisible && activeSession" class="terminal-header-subtitle ml-2 text-[11px] truncate hidden md:inline">
-          {{ activeSession.scriptName }}
+          {{ activeProgressSummary || activeSession.scriptName }}
         </span>
       </div>
       <div class="flex items-center gap-1 flex-shrink-0">
@@ -529,20 +545,23 @@ onUnmounted(() => {
       :style="panelBodyStyle"
     >
       <!-- 日志输出 -->
-      <div
-        ref="logBodyRef"
-        class="terminal-log flex-1 min-w-0 font-mono leading-relaxed overflow-y-auto px-4 py-2"
-        :style="{ fontSize: `${fontSize}px` }"
-        @scroll="onScroll"
-      >
-        <p v-if="!activeLogs.length" class="terminal-log-message py-2 opacity-70">
-          {{ activeSession ? '等待输出…' : '暂无日志，运行脚本后将在此显示输出' }}
-        </p>
-        <p v-for="(log, i) in activeLogs" :key="`${activeSessionId}-${log.ts}-${i}`" class="py-0.5 whitespace-pre-wrap break-all">
-          <span class="terminal-log-time">{{ formatLogTime(log.ts) }}</span>
-          <span class="ml-1.5" :class="logLevelClass(log.level)">{{ log.level }}</span>
-          <span class="terminal-log-message ml-1.5">{{ log.message }}</span>
-        </p>
+      <div class="flex flex-col flex-1 min-w-0 min-h-0">
+        <ScriptRunProgressPanel v-if="activeRunProgress && !isMini" :progress="activeRunProgress" />
+        <div
+          ref="logBodyRef"
+          class="terminal-log flex-1 min-w-0 min-h-0 font-mono leading-relaxed overflow-y-auto px-4 py-2"
+          :style="{ fontSize: `${fontSize}px` }"
+          @scroll="onScroll"
+        >
+          <p v-if="!activeLogs.length" class="terminal-log-message py-2 opacity-70">
+            {{ activeSession ? '等待输出…' : '暂无日志，运行脚本后将在此显示输出' }}
+          </p>
+          <p v-for="(log, i) in activeLogs" :key="`${activeSessionId}-${log.ts}-${i}`" class="py-0.5 whitespace-pre-wrap break-all">
+            <span class="terminal-log-time">{{ formatLogTime(log.ts) }}</span>
+            <span class="ml-1.5" :class="logLevelClass(log.level)">{{ log.level }}</span>
+            <span class="ml-1.5" :class="logMessageClass(log.message)">{{ log.message }}</span>
+          </p>
+        </div>
       </div>
 
       <!-- 右侧终端列表（VS Code 风格） -->

@@ -157,6 +157,15 @@ interface ScriptRunContext {
   params: Record<string, string> // attachment 为 JSON 数组字符串
   signal: AbortSignal
   log: (level: 'INFO' | 'WARN' | 'ERROR', message: string) => void
+  stage: (input: { name: string; label?: string; message?: string }) => void
+  progress: (input: {
+    scope: 'task' | 'total'
+    current: number
+    total?: number
+    label?: string
+    message?: string
+    unit?: string
+  }) => void
   sdk: {
     browser: { launch: () => Promise<Browser> }
     paths: { userData: string; scriptDir: string }
@@ -164,9 +173,12 @@ interface ScriptRunContext {
 }
 ```
 
-### 日志 / 返回值 / 取消
+### 日志 / 阶段 / 进度 / 返回值 / 取消
 
 - `ctx.log('INFO'|'WARN'|'ERROR', message)` → UI 日志面板
+- `ctx.stage({ name, label?, message? })` → 自定义执行阶段
+- `ctx.progress({ scope: 'task'|'total', current, total?, label?, message?, unit? })` → 单任务或总进度
+- 控制行：`@autoforge/ctl ` + JSON（见 `src/shared/script-progress.ts`）
 - 返回值 → `session.result`；抛 Error → failed
 - UI 展示最近一次**成功**运行的返回值
 - 监听 `ctx.signal.aborted`；浏览器脚本 abort 时关闭 browser

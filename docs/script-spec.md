@@ -321,6 +321,8 @@ interface ScriptRunContext {
   params: Record<string, string> // 本次运行的业务参数（attachment 类型为 JSON 数组字符串）
   signal: AbortSignal            // 用户停止时 abort
   log: (level, message) => void
+  stage: (input) => void         // 报告脚本自定义阶段
+  progress: (input) => void      // 报告 task/total 进度
   sdk: {
     browser: { launch: () => Promise<Browser> }
     paths: { userData: string; scriptDir: string }
@@ -370,6 +372,72 @@ export async function run(ctx) {
 
 - 使用 `ctx.log('INFO'|'WARN'|'ERROR', message)` 输出
 - 日志会实时推送到 UI 日志面板
+
+### 阶段与进度（stage / progress）
+
+平台生命周期（排队、校验、安装依赖、运行中等）由 Autoforge 自动管理。脚本在 **`running`** 阶段可通过 `ctx.stage` / `ctx.progress` 上报**自定义阶段**与**进度**，供终端面板、脚本卡片与详情页展示。
+
+#### 推荐 API
+
+```javascript
+export async function run(ctx) {
+  ctx.stage({ name: 'load', label: '加载数据', message: '读取输入文件…' })
+  ctx.progress({ scope: 'total', current: 0, total: 1000, unit: '条', label: '总进度' })
+
+  for (let i = 1; i <= 1000; i += 1) {
+    // …处理单条…
+    ctx.progress({
+      scope: 'task',
+      current: 1,
+      total: 1,
+      label: '当前记录',
+      message: `第 ${i} 条`
+    })
+    ctx.progress({ scope: 'total', current: i, total: 1000, unit: '条' })
+  }
+
+  return { ok: true, processed: 1000 }
+}
+```
+
+| API | 说明 |
+|-----|------|
+| `ctx.stage({ name, label?, message? })` | 报告当前执行阶段；`name` 为机器 ID，`label` 为 UI 展示名 |
+| `ctx.progress({ scope, current, total?, label?, message?, unit? })` | 报告进度；`scope` 见下表 |
+
+**`scope` 含义：**
+
+| `scope` | 用途 | 示例 |
+|---------|------|------|
+| `task` | **单任务 / 当前子步骤**进度 | 当前文件 3/10、当前页 5/20 |
+| `total` | **整批 / 总任务**进度 | 已处理 450/1000 条、总文件 12/50 |
+
+- `current` 必填，从 `0` 起计
+- `total` 可选；省略时表示**不确定进度**（UI 只显示 current，不显示百分比）
+- `unit` 可选，如 `条`、`文件`、`页`
+
+#### 控制行格式（兼容 `ctx.log`）
+
+也可直接输出控制行（单行 JSON）：
+
+```
+@autoforge/ctl {"kind":"stage","name":"import","label":"导入","message":"读取 Excel…"}
+@autoforge/ctl {"kind":"progress","scope":"total","current":450,"total":1000,"unit":"条"}
+```
+
+前缀常量：`SCRIPT_CONTROL_PREFIX = '@autoforge/ctl '`（见 `src/shared/script-progress.ts`）。
+
+平台解析后会：
+1. 更新 session 的 `runProgress`（终端进度条、脚本卡片 meta、详情运行状态）
+2. 在日志中写入可读行，如 `[阶段] 导入 — 读取 Excel…`、`[进度·总计] 总进度 · 450/1000 条 (45%)`
+
+#### 与平台 lifecycle 的区别
+
+| | **平台 lifecycle** | **脚本 stage/progress** |
+|---|---|---|
+| 来源 | Autoforge 运行时 | 脚本 `ctx.stage` / `ctx.progress` |
+| 字段 | `session.phase` | `session.runProgress` |
+| 示例 | `validating`、`installing-deps`、`running` | `导入数据`、`总进度 450/1000` |
 
 ### 返回值
 

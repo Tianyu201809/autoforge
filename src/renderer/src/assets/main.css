@@ -215,6 +215,10 @@ body {
   color: #ef4444;
 }
 
+.terminal-log-progress {
+  color: var(--sb-accent-solid);
+}
+
 [data-theme='dark'] .terminal-log-level-error {
   color: #f87171;
 }

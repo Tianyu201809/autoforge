@@ -32,7 +32,8 @@ const sessions = computed<LogConsoleSession[]>(() =>
         sessionId,
         scriptName: scriptNameForSession(sessionId),
         logs: runner.logsForSession(sessionId),
-        status: session?.status
+        status: session?.status,
+        runProgress: session?.runProgress
       }
     })
     .sort((a, b) => {
