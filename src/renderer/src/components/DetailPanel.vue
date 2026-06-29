@@ -24,13 +24,13 @@ import { renameScript } from '../composables/useScriptRename'
 import CronScheduleBuilder from './CronScheduleBuilder.vue'
 import LogConsole from './LogConsole.vue'
 import CodeEditor from './CodeEditor.vue'
-import ParamAttachmentField from './ParamAttachmentField.vue'
+import SchemaValueField from './SchemaValueField.vue'
 import ScriptWorkspaceSidebar from './ScriptWorkspaceSidebar.vue'
 import { useScriptFileEditor } from '../composables/useScriptFileEditor'
 import { MANIFEST_FILENAME } from '../../../shared/script-contract'
 import { extractRunResultOutputDir, formatRunResult } from '../../../shared/run-result'
 import { parseParamAttachments } from '../../../shared/param-attachments'
-import { parseCheckboxValue, toggleCheckboxValue } from '../../../shared/param-choices'
+import { defaultSchemaValue } from '../../../shared/schema-values'
 import { promptUnsavedFiles } from '../utils/unsaved-files-prompt'
 
 type DetailPanelTab = 'detail' | 'params' | 'edit' | 'log' | 'config'
@@ -230,7 +230,8 @@ function syncEnvVars(): void {
   const scriptConfig = props.script.configByEnv?.[selectedEnvId.value] ?? {}
   const vars: Record<string, string> = {}
   for (const def of props.script.envSchema) {
-    vars[def.key] = scriptConfig[def.key] ?? profile?.variables[def.key] ?? def.default ?? ''
+    vars[def.key] =
+      scriptConfig[def.key] ?? profile?.variables[def.key] ?? defaultSchemaValue(def)
   }
   envVars.value = vars
 }
@@ -247,9 +248,13 @@ function resolvedDefaultEnvId(): string {
 function savedParamValue(def: (typeof props.script.paramSchema)[number]): string {
   const saved = props.script.savedParams?.[def.key]
   if (saved !== undefined) return saved
-  if (def.type === 'attachment' || def.type === 'checkbox') return def.default ?? '[]'
-  if (def.type === 'boolean') return def.default ?? 'false'
-  return def.default ?? ''
+  return defaultSchemaValue(def)
+}
+
+function savedEnvConfigValue(def: (typeof props.script.envSchema)[number]): string {
+  const saved = props.script.configByEnv?.[selectedEnvId.value]?.[def.key]
+  if (saved !== undefined) return saved
+  return defaultSchemaValue(def)
 }
 
 function syncParamVars(): void {
@@ -282,17 +287,21 @@ const paramsDirty = computed(() => {
 })
 
 async function cleanupAttachmentDiff(
+  schema: Array<{ key: string; type?: string }>,
   before: Record<string, string>,
   after: Record<string, string>,
   mode: 'removed' | 'added'
 ): Promise<void> {
-  for (const def of props.script.paramSchema) {
+  for (const def of schema) {
     if (def.type !== 'attachment') continue
     const prev = parseParamAttachments(before[def.key])
     const next = parseParamAttachments(after[def.key])
     const prevPaths = new Set(prev.map((item) => item.path))
     const nextPaths = new Set(next.map((item) => item.path))
-    const targets = mode === 'removed' ? prev.filter((item) => !nextPaths.has(item.path)) : next.filter((item) => !prevPaths.has(item.path))
+    const targets =
+      mode === 'removed'
+        ? prev.filter((item) => !nextPaths.has(item.path))
+        : next.filter((item) => !prevPaths.has(item.path))
     for (const item of targets) {
       await window.autoforge.scripts.removeAttachment(item.path)
     }
@@ -338,7 +347,7 @@ async function saveParams(): Promise<void> {
       props.script.paramSchema.map((def) => [def.key, savedParamValue(def)])
     )
     const nextParams = plainParamVars()
-    await cleanupAttachmentDiff(beforeParams, nextParams, 'removed')
+    await cleanupAttachmentDiff(props.script.paramSchema, beforeParams, nextParams, 'removed')
     await window.autoforge.scripts.setParams(props.script.id, nextParams)
     emit('refresh')
   } finally {
@@ -358,7 +367,7 @@ async function cancelParamsDraft(): Promise<void> {
   const beforeParams = Object.fromEntries(
     props.script.paramSchema.map((def) => [def.key, savedParamValue(def)])
   )
-  await cleanupAttachmentDiff(beforeParams, paramVars.value, 'added')
+  await cleanupAttachmentDiff(props.script.paramSchema, beforeParams, paramVars.value, 'added')
   syncParamVars()
 }
 
@@ -366,39 +375,6 @@ function plainParamVars(): Record<string, string> {
   return Object.fromEntries(
     Object.entries(toRaw(paramVars.value)).map(([k, v]) => [k, v ?? ''])
   )
-}
-
-function emptyParamValue(def: (typeof props.script.paramSchema)[number]): string {
-  if (def.type === 'attachment' || def.type === 'checkbox') return '[]'
-  if (def.type === 'boolean') return 'false'
-  return ''
-}
-
-function paramHasValue(def: (typeof props.script.paramSchema)[number]): boolean {
-  const raw = paramVars.value[def.key] ?? ''
-  if (def.type === 'attachment') return parseParamAttachments(raw).length > 0
-  if (def.type === 'checkbox') return parseCheckboxValue(raw).length > 0
-  if (def.type === 'boolean') return raw === 'true'
-  return raw.trim().length > 0
-}
-
-function clearParam(def: (typeof props.script.paramSchema)[number]): void {
-  paramVars.value = { ...paramVars.value, [def.key]: emptyParamValue(def) }
-}
-
-function isCheckboxChecked(def: (typeof props.script.paramSchema)[number], value: string): boolean {
-  return parseCheckboxValue(paramVars.value[def.key]).includes(value)
-}
-
-function toggleCheckbox(def: (typeof props.script.paramSchema)[number], value: string): void {
-  paramVars.value = {
-    ...paramVars.value,
-    [def.key]: toggleCheckboxValue(paramVars.value[def.key], value)
-  }
-}
-
-function setBooleanParam(def: (typeof props.script.paramSchema)[number], checked: boolean): void {
-  paramVars.value = { ...paramVars.value, [def.key]: checked ? 'true' : 'false' }
 }
 
 function syncScheduleFromScript(): void {
@@ -593,13 +569,18 @@ let unsubEditorClosed: (() => void) | undefined
 let unsubEditorSync: (() => void) | undefined
 let unsubEditorSaved: (() => void) | undefined
 
+function plainEnvVars(): Record<string, string> {
+  return Object.fromEntries(Object.entries(toRaw(envVars.value)).map(([k, v]) => [k, v ?? '']))
+}
+
 async function saveConfig(): Promise<void> {
   saving.value = true
   try {
-    // IPC 需要纯 JSON 对象，Vue reactive Proxy 无法 structured clone
-    const plainConfig = Object.fromEntries(
-      Object.entries(toRaw(envVars.value)).map(([k, v]) => [k, v ?? ''])
+    const beforeEnv = Object.fromEntries(
+      props.script.envSchema.map((def) => [def.key, savedEnvConfigValue(def)])
     )
+    const plainConfig = plainEnvVars()
+    await cleanupAttachmentDiff(props.script.envSchema, beforeEnv, plainConfig, 'removed')
     await window.autoforge.scripts.setEnvConfig(props.script.id, selectedEnvId.value, plainConfig)
     await window.autoforge.scripts.update(props.script.id, {
       defaultEnvId: selectedEnvId.value,
@@ -961,106 +942,12 @@ async function handleRename(): Promise<void> {
           <label class="text-[11px] font-medium sb-text-faint uppercase tracking-wider">运行参数</label>
           <p class="mt-1 text-[11px] sb-text-faint">业务参数随每次运行传入脚本，通过 ctx.params 访问；附件类型参数值为 JSON 数组</p>
           <div v-for="def in script.paramSchema" :key="def.key" class="mt-3">
-            <div class="flex items-start justify-between gap-2">
-              <div class="min-w-0">
-                <label class="text-[12px] sb-text-muted">
-                  {{ def.label }}
-                  <span v-if="def.required" class="text-red-400">*</span>
-                </label>
-                <p v-if="def.description" class="text-[11px] sb-text-faint mt-0.5">{{ def.description }}</p>
-              </div>
-              <button
-                v-if="paramHasValue(def)"
-                type="button"
-                class="flex-shrink-0 text-[11px] sb-text-muted hover:text-red-400 flex items-center gap-0.5 transition-colors"
-                title="清除此参数"
-                @click="clearParam(def)"
-              >
-                <X class="w-3 h-3" :stroke-width="1.5" />
-                清除
-              </button>
-            </div>
-            <ParamAttachmentField
-              v-if="def.type === 'attachment'"
+            <SchemaValueField
               v-model="paramVars[def.key]"
+              :def="def"
               :script-id="script.id"
-              :param-key="def.key"
+              show-clear
             />
-            <textarea
-              v-else-if="def.type === 'textarea'"
-              v-model="paramVars[def.key]"
-              rows="3"
-              class="mt-1 w-full px-3 py-2 rounded-lg sb-bg-input border sb-border text-[13px] outline-none focus:sb-input resize-y"
-              :placeholder="def.default ? `默认: ${def.default}` : def.required ? '必填' : '可选'"
-            ></textarea>
-            <select
-              v-else-if="def.type === 'select'"
-              v-model="paramVars[def.key]"
-              class="mt-1 w-full h-8 px-2 rounded-lg sb-bg-input border sb-border text-[13px] outline-none focus:sb-input"
-            >
-              <option value="">{{ def.required ? '请选择' : '（不选择）' }}</option>
-              <option v-for="opt in def.options ?? []" :key="opt.value" :value="opt.value">
-                {{ opt.label }}
-              </option>
-            </select>
-            <div v-else-if="def.type === 'radio'" class="mt-1.5 space-y-1.5">
-              <label
-                v-for="opt in def.options ?? []"
-                :key="opt.value"
-                class="flex items-center gap-2 text-[13px] sb-text-secondary cursor-pointer"
-              >
-                <input
-                  type="radio"
-                  :name="`param-${def.key}`"
-                  :value="opt.value"
-                  v-model="paramVars[def.key]"
-                  class="accent-[var(--sb-accent)]"
-                />
-                {{ opt.label }}
-              </label>
-            </div>
-            <div v-else-if="def.type === 'checkbox'" class="mt-1.5 space-y-1.5">
-              <label
-                v-for="opt in def.options ?? []"
-                :key="opt.value"
-                class="flex items-center gap-2 text-[13px] sb-text-secondary cursor-pointer"
-              >
-                <input
-                  type="checkbox"
-                  :checked="isCheckboxChecked(def, opt.value)"
-                  class="accent-[var(--sb-accent)]"
-                  @change="toggleCheckbox(def, opt.value)"
-                />
-                {{ opt.label }}
-              </label>
-            </div>
-            <label
-              v-else-if="def.type === 'boolean'"
-              class="mt-1.5 flex items-center gap-2 text-[13px] sb-text-secondary cursor-pointer"
-            >
-              <input
-                type="checkbox"
-                :checked="paramVars[def.key] === 'true'"
-                class="accent-[var(--sb-accent)]"
-                @change="setBooleanParam(def, ($event.target as HTMLInputElement).checked)"
-              />
-              {{ paramVars[def.key] === 'true' ? '已开启' : '已关闭' }}
-            </label>
-            <input
-              v-else-if="def.type === 'number'"
-              v-model="paramVars[def.key]"
-              type="number"
-              class="mt-1 w-full h-8 px-3 rounded-lg sb-bg-input border sb-border text-[13px] outline-none focus:sb-input"
-              :placeholder="def.default ? `默认: ${def.default}` : def.required ? '必填' : '可选'"
-            />
-            <input
-              v-else
-              v-model="paramVars[def.key]"
-              :type="def.secret ? 'password' : 'text'"
-              class="mt-1 w-full h-8 px-3 rounded-lg sb-bg-input border sb-border text-[13px] outline-none focus:sb-input"
-              :placeholder="def.default ? `默认: ${def.default}` : def.required ? '必填' : '可选'"
-            />
-            <p class="mt-0.5 text-[10px] sb-text-faint font-mono">{{ def.key }}</p>
           </div>
         </div>
         <p v-else class="text-[13px] sb-text-muted">此脚本未定义运行参数</p>
@@ -1245,20 +1132,15 @@ async function handleRename(): Promise<void> {
 
       <div v-if="script.envSchema.length">
         <h3 class="text-[12px] font-medium sb-text-muted mb-2">环境变量</h3>
-        <p class="text-[11px] sb-text-faint mb-3">固定环境配置（账号、URL 等），按环境保存，通过 ctx.env 访问</p>
+        <p class="text-[11px] sb-text-faint mb-3">固定环境配置（账号、URL 等），按环境保存，通过 ctx.env 访问；支持 text、select、boolean、attachment 等类型，值均为字符串</p>
         <div v-for="def in script.envSchema" :key="def.key" class="mb-3">
-          <label class="text-[12px] sb-text-muted">
-            {{ def.label }}
-            <span v-if="def.required" class="text-red-400">*</span>
-          </label>
-          <p v-if="def.description" class="text-[11px] sb-text-faint mt-0.5">{{ def.description }}</p>
-          <input
+          <SchemaValueField
             v-model="envVars[def.key]"
-            :type="def.secret ? 'password' : 'text'"
-            class="mt-1 w-full h-8 px-3 rounded-lg sb-bg-input border sb-border text-[13px] outline-none focus:sb-input"
-            :placeholder="def.default ? `默认: ${def.default}` : def.required ? '必填' : '可选'"
+            :def="def"
+            :script-id="script.id"
+            :attachment-storage-key="`env/${selectedEnvId}/${def.key}`"
+            attachment-hint="支持多选；文件会复制到本地缓存（按环境分别保存），脚本通过 JSON 解析 ctx.env 获取路径"
           />
-          <p class="mt-0.5 text-[10px] sb-text-faint font-mono">{{ def.key }}</p>
         </div>
       </div>
       <div v-else class="rounded-lg border sb-border-subtle sb-bg-surface p-4 text-[12px] sb-text-muted">

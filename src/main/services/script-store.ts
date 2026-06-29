@@ -3,8 +3,8 @@ import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'fs'
 import { join } from 'path'
 import { UTF8 } from '../../shared/encoding'
 import { randomUUID } from 'crypto'
-import { isAttachmentParamEmpty, parseParamAttachments } from '../../shared/param-attachments'
-import { parseCheckboxValue } from '../../shared/param-choices'
+import { defaultSchemaValue } from '../../shared/schema-values'
+import { validateSchemaValues } from '../../shared/schema-validation'
 import type { AppConfig, CategoryDefinition, CronConfig, EnvironmentProfile, ScriptMeta } from '../../shared/types/script'
 import {
   createStoredCategory,
@@ -204,7 +204,8 @@ export class ScriptStore {
 
     const resolved: Record<string, string> = {}
     for (const def of script.envSchema) {
-      if (def.default) resolved[def.key] = def.default
+      const defaultVal = defaultSchemaValue(def)
+      if (defaultVal) resolved[def.key] = defaultVal
     }
     if (profile?.variables) {
       for (const [key, value] of Object.entries(profile.variables)) {
@@ -233,19 +234,15 @@ export class ScriptStore {
   }
 
   validateEnvForScript(script: ScriptMeta, env: Record<string, string>): string | null {
-    for (const def of script.envSchema) {
-      if (def.required && !env[def.key]?.trim()) {
-        return `缺少必填环境变量: ${def.label}（${def.key}），请在脚本「配置」Tab 中填写`
-      }
-    }
-    return null
+    return validateSchemaValues(script.envSchema, env, { subject: '环境变量', tab: '配置' })
   }
 
   /** 合并：schema 默认值 → 上次保存值 → 本次运行传入（优先级最高） */
   resolveParamsForScript(script: ScriptMeta, overrides?: Record<string, string>): Record<string, string> {
     const resolved: Record<string, string> = {}
     for (const def of script.paramSchema) {
-      if (def.default) resolved[def.key] = def.default
+      const defaultVal = defaultSchemaValue(def)
+      if (defaultVal) resolved[def.key] = defaultVal
     }
     const saved = script.savedParams ?? {}
     for (const [key, value] of Object.entries(saved)) {
@@ -271,31 +268,7 @@ export class ScriptStore {
   }
 
   validateParamsForScript(script: ScriptMeta, params: Record<string, string>): string | null {
-    for (const def of script.paramSchema) {
-      const raw = params[def.key]
-      if (def.type === 'attachment') {
-        const items = parseParamAttachments(raw)
-        if (def.required && isAttachmentParamEmpty(raw)) {
-          return `缺少必填附件: ${def.label}（${def.key}），请在脚本「详情」Tab 中上传`
-        }
-        for (const item of items) {
-          if (!existsSync(item.path)) {
-            return `附件不存在或已失效: ${item.name}（${def.key}），请重新上传`
-          }
-        }
-        continue
-      }
-      if (def.type === 'checkbox') {
-        if (def.required && parseCheckboxValue(raw).length === 0) {
-          return `缺少必填运行参数: ${def.label}（${def.key}），请在脚本「详情」Tab 中至少勾选一项`
-        }
-        continue
-      }
-      if (def.required && !raw?.trim()) {
-        return `缺少必填运行参数: ${def.label}（${def.key}），请在脚本「详情」Tab 中填写`
-      }
-    }
-    return null
+    return validateSchemaValues(script.paramSchema, params, { subject: '运行参数', tab: '详情' })
   }
 
   addEnvironment(profile: Omit<EnvironmentProfile, 'id'>): EnvironmentProfile {

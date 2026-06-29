@@ -57,28 +57,41 @@ my-script/
 
 ## env schema
 
+| 字段 | 类型 | 说明 |
+|------|------|------|
+| `key` | string | 变量名，`ctx.env[key]` |
+| `label` | string | UI 标签 |
+| `description` | string | 说明 |
+| `required` | boolean | 是否必填 |
+| `secret` | boolean | 敏感值（仅 `text` 有效） |
+| `type` | 见下 | 默认 `text` |
+| `options` | `(string \| {label,value})[]` | `select`/`radio`/`checkbox` 候选项 |
+| `default` | string | 见下表 |
+
+**`type` 取值（与 params 相同）：** `text`、`textarea`、`number`、`select`、`radio`、`checkbox`、`boolean`、`attachment`。`ctx.env[key]` **始终是字符串**；复合类型需脚本内解析。
+
 ```json
 {
   "env": [
     {
       "key": "API_URL",
       "label": "API 地址",
-      "description": "后端服务根 URL",
       "required": true,
-      "secret": false,
       "default": "https://api.example.com"
     },
     {
-      "key": "API_TOKEN",
-      "label": "访问令牌",
-      "required": true,
-      "secret": true
+      "key": "USE_MOCK",
+      "label": "Mock 模式",
+      "type": "boolean",
+      "default": "false"
     }
   ]
 }
 ```
 
 合并优先级：`autoforge.json 默认值` → `全局 Profile 共享变量` → `脚本专属配置（最高）`
+
+env 的 `attachment` 缓存路径：`{userData}/script-inputs/{scriptId}/env/{envId}/{key}/`（按环境分别保存）。
 
 ## params schema
 

@@ -83,6 +83,32 @@ Autoforge 将脚本输入分为两个维度，**不要在脚本中混用**：
 
 ## 环境变量 schema
 
+每个环境变量项（`EnvVarDefinition`）支持以下字段：
+
+| 字段 | 类型 | 说明 |
+|------|------|------|
+| `key` | string | 变量名，脚本内通过 `ctx.env[key]` 访问 |
+| `label` | string | UI 展示标签 |
+| `description` | string | 说明文字 |
+| `required` | boolean | 是否必填 |
+| `secret` | boolean | 敏感值（仅 `text` 类型有效，UI 掩码显示） |
+| `type` | 见下表 | 值类型，默认 `text` |
+| `options` | `(string \| {label,value})[]` | `select` / `radio` / `checkbox` 的候选项 |
+| `default` | string | 默认值（见各类型说明） |
+
+**支持的 `type`（与 `params` 一致）：**
+
+| `type` | UI 控件 | `ctx.env[key]` 的值 | 备注 |
+|--------|---------|----------------------|------|
+| `text`（默认） | 单行文本框 | 普通字符串 | 支持 `secret` 掩码 |
+| `textarea` | 多行文本框 | 普通字符串 | |
+| `number` | 数字输入框 | 数字字符串 | 脚本内用 `Number()` 转换 |
+| `select` | 下拉单选 | 选项 `value` 字符串 | 需 `options` |
+| `radio` | 单选按钮组 | 选项 `value` 字符串 | 需 `options` |
+| `checkbox` | 多选框组 | **JSON 数组字符串** | 需 `options`，默认 `[]` |
+| `boolean` | 开关 | `"true"` / `"false"` | 默认 `"false"` |
+| `attachment` | 文件上传 + 附件列表 | **JSON 数组字符串** | 默认 `[]`；按环境分别缓存 |
+
 ```json
 {
   "env": [
@@ -99,6 +125,19 @@ Autoforge 将脚本输入分为两个维度，**不要在脚本中混用**：
       "label": "访问令牌",
       "required": true,
       "secret": true
+    },
+    {
+      "key": "USE_MOCK",
+      "label": "使用 Mock 服务",
+      "type": "boolean",
+      "default": "false"
+    },
+    {
+      "key": "DEPLOY_ENV",
+      "label": "部署环境",
+      "type": "select",
+      "options": ["dev", "staging", "prod"],
+      "default": "dev"
     }
   ]
 }
@@ -257,7 +296,7 @@ export async function run(ctx) {
 
 1. 导入脚本后，打开脚本详情 → **配置** Tab
 2. 选择运行环境（开发 / 测试 / 生产）
-3. 填写账号、密码、URL 等**固定环境配置**
+3. 填写账号、密码、URL 等**固定环境配置**（支持文本、下拉、开关、附件等多种类型）
 4. 点击「保存配置」
 
 每个脚本、每个环境的 env 配置相互独立。
@@ -279,7 +318,7 @@ export async function run(ctx) {
 interface ScriptRunContext {
   sessionId: string
   scriptId: string
-  env: Record<string, string>     // 合并后的环境变量（固定环境配置）
+  env: Record<string, string>     // 合并后的环境变量（固定环境配置；attachment/checkbox 等为 JSON 字符串）
   params: Record<string, string> // 本次运行的业务参数（attachment 类型为 JSON 数组字符串）
   signal: AbortSignal            // 用户停止时 abort
   log: (level, message) => void

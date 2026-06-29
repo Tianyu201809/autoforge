@@ -107,7 +107,19 @@ await copyFile(join(packageDir, "autoforge.json"), join(packDir, "autoforge.json
 - 缺 env → 错误信息提示「脚本详情 → **配置** Tab」
 - 缺 params → 错误信息提示「脚本详情 → **详情** Tab」
 - 所有 schema 默认值均为**字符串**（含 `default`）
-- `ctx.params` 的值**始终是字符串**；复合类型需脚本内解析
+- `ctx.env` / `ctx.params` 的值**始终是字符串**；复合类型需脚本内解析
+
+### env 类型速查
+
+| `type` | UI | `ctx.env[key]` | 脚本内读取 |
+|--------|-----|----------------|-----------|
+| `text`（默认） | 单行文本 | 字符串 | 直接用 |
+| `textarea` | 多行文本 | 字符串 | 直接用 |
+| `number` | 数字输入 | 数字字符串 | `Number(raw)` |
+| `select` / `radio` | 下拉 / 单选组 | 选项 `value` | 直接用 |
+| `checkbox` | 多选组 | JSON 数组字符串 | `JSON.parse(raw)` |
+| `boolean` | 开关 | `"true"` / `"false"` | `raw === 'true'` |
+| `attachment` | 文件多选 | JSON 数组字符串 | 见下文 |
 
 ### params 类型速查
 

@@ -51,8 +51,19 @@ export interface EnvVarDefinition {
   description?: string
   /** 是否必填 */
   required?: boolean
-  /** 是否为敏感值（密码/token），UI 中掩码显示 */
+  /** 是否为敏感值（密码/token），UI 中掩码显示；仅 text 类型有效 */
   secret?: boolean
+  /**
+   * 值类型，默认 text。语义与 params 一致，ctx.env[key] 始终为字符串。
+   * - text/textarea/number：普通字符串
+   * - select/radio：单选 value 字符串
+   * - checkbox：JSON 数组字符串
+   * - boolean："true" / "false"
+   * - attachment：JSON 数组字符串（按环境分别缓存）
+   */
+  type?: ParamValueType
+  /** select / radio / checkbox 的候选项 */
+  options?: ParamOption[]
   /** 默认值（可被环境 Profile 覆盖） */
   default?: string
 }
@@ -256,6 +267,20 @@ function normalizeParamDefault(raw: unknown, type: ParamValueType): string | und
   return undefined
 }
 
+function normalizeSchemaField(item: Record<string, unknown>): EnvVarDefinition {
+  const type = normalizeParamType(item.type)
+  return {
+    key: String(item.key ?? ''),
+    label: String(item.label ?? item.key ?? ''),
+    description: typeof item.description === 'string' ? item.description : undefined,
+    required: item.required === true,
+    secret: item.secret === true,
+    type,
+    options: normalizeParamOptions(item.options),
+    default: normalizeParamDefault(item.default, type)
+  }
+}
+
 export function normalizeAutoforgeManifestVersion(raw: unknown): string | null {
   if (raw === undefined || raw === null || raw === '') {
     return AUTOFORGE_MANIFEST_VERSION
@@ -299,21 +324,11 @@ export function validateManifest(raw: unknown): { ok: true; manifest: ScriptMani
     category: typeof obj.category === 'string' ? obj.category : 'local',
     categoryLabel: typeof obj.categoryLabel === 'string' ? obj.categoryLabel : undefined,
     icon: typeof obj.icon === 'string' ? (obj.icon as ScriptIcon) : 'app-window',
-    env: Array.isArray(obj.env) ? (obj.env as EnvVarDefinition[]) : [],
+    env: Array.isArray(obj.env)
+      ? (obj.env as Record<string, unknown>[]).map((item) => normalizeSchemaField(item))
+      : [],
     params: Array.isArray(obj.params)
-      ? (obj.params as Record<string, unknown>[]).map((item) => {
-          const type = normalizeParamType(item.type)
-          return {
-            key: String(item.key ?? ''),
-            label: String(item.label ?? item.key ?? ''),
-            description: typeof item.description === 'string' ? item.description : undefined,
-            required: item.required === true,
-            secret: item.secret === true,
-            type,
-            options: normalizeParamOptions(item.options),
-            default: normalizeParamDefault(item.default, type)
-          }
-        })
+      ? (obj.params as Record<string, unknown>[]).map((item) => normalizeSchemaField(item))
       : [],
     dependencies:
       obj.dependencies && typeof obj.dependencies === 'object'
