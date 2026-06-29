@@ -9,7 +9,6 @@ import {
   Package,
   Play,
   Pencil,
-  RotateCw,
   Save,
   Square,
   Trash2,
@@ -213,7 +212,7 @@ const iconOptions = SCRIPT_ICON_OPTIONS
 
 const tabs = [
   { id: 'detail' as const, label: '详情' },
-  { id: 'params' as const, label: '运行' },
+  { id: 'params' as const, label: '运行参数' },
   { id: 'history' as const, label: '运行历史' },
   { id: 'edit' as const, label: '编辑' },
   { id: 'log' as const, label: '日志' },
@@ -781,14 +780,15 @@ async function updateIcon(icon: ScriptIcon): Promise<void> {
     savingMeta.value = false
   }
 }
-async function restartScript(): Promise<void> {
-  const started = await props.runner.restart(props.script.id, selectedEnvId.value, plainParamVars())
-  if (started) {
-    viewingSessionId.value = started.id
-    runResultSectionExpanded.value = true
+async function handleRunToggle(): Promise<void> {
+  if (isRunning.value) {
+    const sid = activeSessionId.value
+    if (!sid) return
+    await props.runner.stop(sid)
+    emit('refresh')
+    return
   }
-  emit('navigate-tab', 'params')
-  emit('refresh')
+  await runWithEnv()
 }
 
 async function handleRename(): Promise<void> {
@@ -822,7 +822,7 @@ async function handleRename(): Promise<void> {
       />
     </div>
     <div
-      class="relative flex items-center justify-between px-4 py-3.5 border-b sb-border-subtle detail-panel-header gap-3"
+      class="relative flex items-start px-4 py-3 border-b sb-border-subtle detail-panel-header gap-3"
       :class="iconPickerOpen && 'z-30'"
     >
       <div
@@ -830,7 +830,7 @@ async function handleRename(): Promise<void> {
         style="background: linear-gradient(90deg, transparent, color-mix(in srgb, var(--sb-accent-solid) 55%, transparent), transparent)"
         aria-hidden="true"
       />
-      <div class="flex items-center gap-3 min-w-0">
+      <div class="flex items-center gap-3 min-w-0 flex-1">
         <div class="relative flex-shrink-0">
           <button
             type="button"
@@ -883,90 +883,83 @@ async function handleRename(): Promise<void> {
         </div>
       </div>
 
-      <div
-        class="flex-shrink-0 flex items-center gap-2.5 px-3 py-1.5 rounded-lg border min-w-0 max-w-[180px]"
-        :class="isRunning ? 'bg-emerald-500/5 border-emerald-500/15' : 'sb-bg-surface sb-border-subtle'"
-      >
-        <div
-          class="w-7 h-7 rounded-full flex items-center justify-center flex-shrink-0"
-          :class="isRunning ? 'bg-emerald-500/10' : 'sb-bg-inset'"
+      <div class="detail-panel-header-tools">
+        <button
+          type="button"
+          class="detail-panel-run-toggle"
+          :class="isRunning ? 'is-running' : 'is-idle'"
+          :title="isRunning ? '停止' : '运行'"
+          @click="handleRunToggle"
         >
+          <Square v-if="isRunning" class="detail-panel-run-toggle-icon detail-panel-run-toggle-icon--stop" :stroke-width="2" />
+          <Play v-else class="detail-panel-run-toggle-icon" :stroke-width="2" />
+        </button>
+        <div class="detail-panel-header-divider" aria-hidden="true" />
+        <button
+          type="button"
+          class="detail-panel-close flex items-center justify-center rounded-lg sb-text-muted hover:sb-text-secondary hover:sb-bg-inset transition-colors"
+          title="关闭"
+          @click="emit('close')"
+        >
+          <X :stroke-width="1.75" />
+        </button>
+      </div>
+    </div>
+
+    <div class="detail-panel-tabs">
+      <button
+        v-for="tab in tabs"
+        :key="tab.id"
+        type="button"
+        class="detail-panel-tab"
+        :class="activeTab === tab.id && 'is-active'"
+        @click="switchTab(tab.id)"
+      >
+        {{ tab.label }}
+      </button>
+    </div>
+
+    <div
+      class="detail-panel-status flex-shrink-0 border-b sb-border-subtle"
+      :class="isRunning ? 'is-running' : statusLabel.icon === 'error' ? 'is-error' : 'is-idle'"
+    >
+      <div class="flex items-center gap-3 px-4 py-2.5 min-w-0">
+        <div class="detail-panel-status-icon flex-shrink-0">
           <Loader2
             v-if="statusLabel.icon === 'running'"
-            class="w-3.5 h-3.5 animate-spin"
+            class="w-4 h-4 animate-spin"
             :class="statusLabel.class"
             :stroke-width="1.5"
           />
           <AlertCircle
             v-else-if="statusLabel.icon === 'error'"
-            class="w-3.5 h-3.5"
+            class="w-4 h-4"
             :class="statusLabel.class"
             :stroke-width="1.5"
           />
           <CheckCircle2
             v-else
-            class="w-3.5 h-3.5"
+            class="w-4 h-4"
             :class="statusLabel.class"
             :stroke-width="1.5"
           />
         </div>
-        <div class="min-w-0">
-          <p class="text-[12px] font-medium leading-tight" :class="statusLabel.class">{{ statusLabel.text }}</p>
-          <p class="text-[10px] sb-text-muted truncate leading-tight mt-0.5" :title="headerStatusSubtext">
+        <div class="min-w-0 flex-1">
+          <p class="text-[12px] font-semibold leading-tight sb-field-label">{{ statusLabel.text }}</p>
+          <p
+            v-if="headerStatusSubtext"
+            class="text-[11px] sb-text-muted truncate leading-tight mt-0.5"
+            :title="headerStatusSubtext"
+          >
             {{ headerStatusSubtext }}
           </p>
         </div>
       </div>
-
-      <button type="button" class="w-7 h-7 flex-shrink-0 flex items-center justify-center rounded-md sb-text-muted hover:sb-text-secondary hover:sb-bg-inset transition-colors" @click="emit('close')">
-        <X class="w-4 h-4" :stroke-width="1.5" />
-      </button>
-    </div>
-
-    <div class="flex-shrink-0 flex gap-2 px-4 py-3 border-b sb-border-subtle">
-      <button
-        type="button"
-        class="flex-1 flex items-center justify-center gap-1.5 h-8 rounded-lg bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 text-[12px] font-medium hover:bg-emerald-500/20 transition-colors disabled:opacity-40"
-        :disabled="isRunning"
-        @click="runWithEnv"
-      >
-        <Play class="w-3 h-3" :stroke-width="1.5" />
-        运行
-      </button>
-      <button
-        type="button"
-        class="flex-1 flex items-center justify-center gap-1.5 h-8 rounded-lg bg-red-500/10 text-red-400 border border-red-500/20 text-[12px] font-medium hover:bg-red-500/20 transition-colors disabled:opacity-40"
-        :disabled="!activeSessionId"
-        @click="activeSessionId && runner.stop(activeSessionId).then(() => emit('refresh'))"
-      >
-        <Square class="w-3 h-3" :stroke-width="1.5" />
-        停止
-      </button>
-      <button
-        type="button"
-        class="flex-1 flex items-center justify-center gap-1.5 h-8 rounded-lg sb-bg-inset sb-text-secondary border sb-border-subtle text-[12px] font-medium sb-bg-hover transition-colors"
-        @click="restartScript"
-      >
-        <RotateCw class="w-3.5 h-3.5" :stroke-width="1.5" />
-        重启
-      </button>
-    </div>
-
-    <div class="flex border-b sb-border-subtle px-3 gap-0.5">
-      <button
-        v-for="tab in tabs"
-        :key="tab.id"
-        type="button"
-        class="px-3 py-2.5 text-[12px] transition-colors rounded-t-md"
-        :class="
-          activeTab === tab.id
-            ? 'sb-nav-active font-semibold sb-text-primary border-b-2 border-[var(--sb-accent-solid)] -mb-px'
-            : 'sb-text-muted hover:sb-text-secondary hover:sb-bg-hover'
-        "
-        @click="switchTab(tab.id)"
-      >
-        {{ tab.label }}
-      </button>
+      <ScriptRunProgressPanel
+        v-if="session?.runProgress && isRunning"
+        :progress="session.runProgress"
+        compact
+      />
     </div>
 
     <!-- 详情 -->
@@ -997,7 +990,7 @@ async function handleRename(): Promise<void> {
           >
             <option v-for="env in environments" :key="env.id" :value="env.id">{{ env.name }}</option>
           </select>
-          <p class="mt-1 text-[11px] sb-text-faint">环境变量在「配置」Tab 中按环境保存；运行参数在「运行」Tab 中同样按环境分别保存</p>
+          <p class="mt-1 text-[11px] sb-text-faint">环境变量在「配置」Tab 中按环境保存；运行参数在「运行参数」Tab 中同样按环境分别保存</p>
         </div>
 
         <div>
@@ -1047,7 +1040,7 @@ async function handleRename(): Promise<void> {
       </div>
       </div>
 
-      <div class="flex-shrink-0 px-3 py-2 border-t sb-border-subtle flex items-center gap-1.5">
+      <div class="detail-panel-footer flex-shrink-0 px-3 flex items-center gap-1.5">
         <button
           type="button"
           class="h-7 px-2 flex items-center gap-1 rounded-md text-[11px] sb-text-muted border sb-border hover:sb-text-primary hover:sb-bg-hover transition-colors"
@@ -1130,7 +1123,8 @@ async function handleRename(): Promise<void> {
       >
         <button
           type="button"
-          class="run-result-section-header flex-shrink-0 w-full flex items-center justify-between gap-2 px-4 py-2.5 text-left transition-colors hover:sb-bg-hover"
+          class="run-result-section-header flex-shrink-0 w-full flex items-center justify-between gap-2 px-4 py-2.5 text-left transition-colors"
+          :class="runResultSectionExpanded && 'is-expanded'"
           :aria-expanded="runResultSectionExpanded"
           @click="runResultSectionExpanded = !runResultSectionExpanded"
         >
@@ -1143,7 +1137,7 @@ async function handleRename(): Promise<void> {
             </span>
           </div>
           <ChevronDown
-            class="w-4 h-4 sb-text-faint shrink-0 transition-transform duration-200"
+            class="run-result-section-chevron w-4 h-4 shrink-0 transition-transform duration-200"
             :class="runResultSectionExpanded && 'rotate-180'"
             :stroke-width="1.5"
           />
@@ -1186,14 +1180,7 @@ async function handleRename(): Promise<void> {
             @open-output-dir="openOutputDir"
           />
 
-          <p v-else class="text-[13px] sb-text-muted py-2">暂无运行结果，点击上方「运行」开始执行</p>
-
-          <ScriptRunProgressPanel
-            v-if="session?.runProgress && isRunning"
-            :progress="session.runProgress"
-            compact
-            class="mt-3"
-          />
+          <p v-else class="text-[13px] sb-text-muted py-2">暂无运行结果，点击顶部运行按钮开始执行</p>
         </div>
       </div>
 
