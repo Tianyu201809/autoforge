@@ -253,7 +253,7 @@ async function openUserDataDir(): Promise<void> {
             新建
           </button>
         </div>
-        <p class="text-[11px] sb-text-faint">创建开发 / 测试 / 生产等环境。各脚本的账号、密码、URL 在脚本详情 → 配置 Tab 中按环境分别填写。</p>
+        <p class="text-[11px] sb-text-faint">创建开发 / 测试 / 生产等环境。各脚本的账号、密码、URL 可在脚本详情 → 配置 Tab 中引用或单独填写。</p>
 
         <div class="flex gap-2 flex-wrap">
           <button

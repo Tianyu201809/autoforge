@@ -22,6 +22,7 @@ import {
   type ScriptIcon,
   type ScriptManifest
 } from '../../shared/script-contract'
+import { resolveScriptLanguage } from '../../shared/script-language'
 import type { CategoryDefinition, ScriptFileContent, ScriptMeta } from '../../shared/types/script'
 import { resolveCategoryForManifest } from './category-service'
 import { scriptStore } from './script-store'
@@ -141,6 +142,7 @@ export class ScriptWorkspace {
       paramSchema: manifest.params ?? [],
       dependencies: manifest.dependencies,
       entry: manifest.entry ?? 'index.mjs',
+      language: manifest.language ?? resolveScriptLanguage(undefined, manifest.entry ?? 'index.mjs'),
       browser: manifest.browser
     }
   }
@@ -208,6 +210,7 @@ export class ScriptWorkspace {
       description: '从文件导入的脚本',
       version: '1.0.0',
       entry: entryName,
+      language: resolveScriptLanguage(undefined, entryName),
       category: 'local'
     }
     writeFileSync(join(targetDir, MANIFEST_FILENAME), JSON.stringify(manifest, null, 2), UTF8)

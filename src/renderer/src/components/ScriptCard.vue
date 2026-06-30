@@ -20,6 +20,7 @@ import {
   Trash2
 } from 'lucide-vue-next'
 import type { CategoryDefinition, ScriptItem } from '../../../shared/types/script'
+import { scriptLanguageBadge } from '../../../shared/script-language'
 import { resolveScriptIcon } from '../lib/script-icon-map'
 import { renameScript } from '../composables/useScriptRename'
 
@@ -60,6 +61,8 @@ const VIEWPORT_PADDING = 8
 const MENU_GAP = 4
 
 const ScriptIcon = computed(() => resolveScriptIcon(props.script.icon))
+
+const languageBadge = computed(() => scriptLanguageBadge(props.script.language))
 
 const cardClass = computed(() => {
   if (props.script.status === 'running') {
@@ -318,6 +321,11 @@ onUnmounted(() => {
       </div>
       <div class="flex items-center gap-2 mt-3">
         <span class="text-[10px] px-1.5 py-0.5 rounded border" :class="script.categoryColor">{{ script.categoryLabel }}</span>
+        <span
+          class="text-[10px] px-1.5 py-0.5 rounded border font-mono font-semibold tracking-wide"
+          :class="languageBadge.className"
+          :title="script.language === 'python' ? 'Python 脚本' : 'JavaScript 脚本'"
+        >{{ languageBadge.label }}</span>
         <span class="text-[10px] sb-text-faint font-mono">{{ script.version }}</span>
       </div>
       <div class="flex items-center justify-between mt-3 pt-3 border-t sb-border-subtle">

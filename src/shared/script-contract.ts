@@ -1,5 +1,8 @@
 /** Autoforge 脚本包规范 — autoforge.json 字段定义 */
 
+import type { ScriptLanguage } from './script-language'
+import { resolveScriptLanguage } from './script-language'
+
 export const AUTOFORGE_MANIFEST_VERSION = '1.0'
 export const MANIFEST_FILENAME = 'autoforge.json'
 export const LEGACY_MANIFEST_FILENAME = 'scriptbox.json'
@@ -114,6 +117,8 @@ export interface ScriptManifest {
   version?: string
   /** 入口文件，相对脚本包根目录，默认 index.mjs */
   entry?: string
+  /** 脚本语言；未声明时根据 entry 扩展名推断 */
+  language?: ScriptLanguage
   category?: string
   categoryLabel?: string
   icon?: ScriptIcon
@@ -331,12 +336,16 @@ export function validateManifest(raw: unknown): { ok: true; manifest: ScriptMani
   if (!nameStr.trim()) {
     return { ok: false, error: 'name 为必填字符串' }
   }
+  const entry = typeof obj.entry === 'string' ? obj.entry : 'index.mjs'
+  const manifestLanguage =
+    obj.language === 'python' || obj.language === 'javascript' ? obj.language : undefined
   const manifest: ScriptManifest = {
     autoforge: autoforgeVersion,
     name: nameStr.trim(),
     description: typeof obj.description === 'string' ? obj.description : undefined,
     version: typeof obj.version === 'string' ? obj.version : '1.0.0',
-    entry: typeof obj.entry === 'string' ? obj.entry : 'index.mjs',
+    entry,
+    language: resolveScriptLanguage(manifestLanguage, entry),
     category: typeof obj.category === 'string' ? obj.category : 'local',
     categoryLabel: typeof obj.categoryLabel === 'string' ? obj.categoryLabel : undefined,
     icon: typeof obj.icon === 'string' ? (obj.icon as ScriptIcon) : 'app-window',

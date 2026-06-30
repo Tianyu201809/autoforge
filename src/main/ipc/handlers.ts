@@ -108,7 +108,7 @@ export function registerIpcHandlers(getWindow: () => BrowserWindow | null): void
     const win = getWindow()
     const result = await dialog.showOpenDialog(win ?? undefined, {
       properties: ['openFile', 'openDirectory'],
-      filters: [{ name: '脚本文件', extensions: ['js', 'mjs', 'cjs'] }]
+      filters: [{ name: '脚本文件', extensions: ['js', 'mjs', 'cjs', 'py'] }]
     })
     if (result.canceled || !result.filePaths[0]) return null
     return result.filePaths[0]

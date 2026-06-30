@@ -1,4 +1,5 @@
 import type { AppConfig, CronConfig, EnvironmentProfile, ExecutionRecord, ScriptMeta } from '../../shared/types/script'
+import { resolveScriptLanguage } from '../../shared/script-language'
 import type { CategoryOverride, StoredCategory } from '../services/category-service'
 import type { ScriptPreference } from '../../shared/types/script'
 
@@ -105,6 +106,7 @@ export function rowToScriptBase(row: ScriptRow): ScriptMeta {
     iconBorder: row.icon_border,
     version: row.version,
     entry: row.entry,
+    language: resolveScriptLanguage(undefined, row.entry),
     envSchema: fromJson(row.env_schema, []),
     paramSchema: fromJson(row.param_schema, []),
     dependencies: fromJson(row.dependencies, undefined),

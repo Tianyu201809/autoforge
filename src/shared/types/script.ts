@@ -1,4 +1,5 @@
 import type { EnvVarDefinition, ParamDefinition, ScriptIcon, ScriptLifecyclePhase, ScriptRunProgress } from '../script-contract'
+import type { ScriptLanguage } from '../script-language'
 
 export type ScriptStatus = 'running' | 'idle' | 'error'
 export type SessionStatus = 'running' | 'success' | 'error' | 'stopped'
@@ -68,6 +69,8 @@ export interface ScriptMeta {
   dependencies?: Record<string, string>
   /** 入口文件相对路径 */
   entry: string
+  /** 脚本语言（JS / Python） */
+  language: ScriptLanguage
   /** 浏览器启动选项（autoforge.json browser 字段） */
   browser?: {
     headless?: boolean
