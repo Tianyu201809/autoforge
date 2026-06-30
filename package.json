@@ -1,6 +1,6 @@
 {
   "name": "autoforge",
-  "version": "1.4.0",
+  "version": "1.5.0",
   "description": "Autoforge — 本机自动化脚本锻造与管理桌面应用",
   "author": "Autoforge",
   "main": "./out/main/index.js",
