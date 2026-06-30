@@ -1,6 +1,6 @@
 import initSqlJs, { type Database as SqlJsDatabase, type Statement as SqlJsStatement } from 'sql.js'
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'fs'
-import { join, dirname } from 'path'
+import { dirname } from 'path'
 import { createRequire } from 'module'
 
 export interface RunResult {
@@ -24,8 +24,7 @@ export interface SqliteDatabase {
 /** 解析 sql.js wasm 文件路径（开发 / 打包均可用） */
 function resolveWasmPath(): string {
   const require = createRequire(__filename)
-  const pkgPath = require.resolve('sql.js/package.json')
-  return join(dirname(pkgPath), 'dist', 'sql-wasm.wasm')
+  return require.resolve('sql.js/dist/sql-wasm.wasm')
 }
 
 function bindParams(stmt: SqlJsStatement, params: unknown[]): void {
