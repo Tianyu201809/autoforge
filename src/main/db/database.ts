@@ -51,11 +51,11 @@ export function closeDatabase(): void {
 }
 
 function runMigrations(database: SqliteDatabase): void {
-  const row = database.prepare('SELECT version FROM schema_migrations ORDER BY version DESC LIMIT 1').get() as
-    | { version: number }
-    | undefined
+  const hasMigrationsTable = database
+    .prepare("SELECT name FROM sqlite_master WHERE type = 'table' AND name = 'schema_migrations'")
+    .get()
 
-  if (!row) {
+  if (!hasMigrationsTable) {
     database.exec(MIGRATION_001)
     database.prepare('INSERT INTO schema_migrations (version) VALUES (?)').run(1)
     seedDefaults(database)
@@ -80,6 +80,11 @@ function seedDefaults(database: SqliteDatabase): void {
 
 /** 判断数据库是否已有业务数据（用于迁移决策） */
 export function isDatabaseEmpty(database: SqliteDatabase): boolean {
+  const hasScripts = database
+    .prepare("SELECT name FROM sqlite_master WHERE type = 'table' AND name = 'scripts'")
+    .get()
+  if (!hasScripts) return true
+
   const scriptCount = (database.prepare('SELECT COUNT(*) AS count FROM scripts').get() as { count: number }).count
   const historyCount = (database.prepare('SELECT COUNT(*) AS count FROM execution_records').get() as { count: number })
     .count

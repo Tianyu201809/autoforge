@@ -61,6 +61,11 @@ export interface EditorSyncPayload {
   content: string
 }
 
+export interface WindowModeState extends AppWindowConfig {
+  visible: boolean
+  globalShortcutRegistered: boolean
+}
+
 export interface WindowApi {
   minimize: () => void
   maximize: () => void
@@ -70,9 +75,9 @@ export interface WindowApi {
   show: () => Promise<void>
   hide: () => Promise<void>
   toggle: () => Promise<boolean>
-  getMode: () => Promise<AppWindowConfig & { visible: boolean }>
-  setMode: (patch: Partial<AppWindowConfig>) => Promise<AppWindowConfig & { visible: boolean }>
-  onModeChange: (callback: (mode: AppWindowConfig & { visible: boolean }) => void) => () => void
+  getMode: () => Promise<WindowModeState>
+  setMode: (patch: Partial<AppWindowConfig>) => Promise<WindowModeState>
+  onModeChange: (callback: (mode: WindowModeState) => void) => () => void
   versions: {
     node: string
     electron: string

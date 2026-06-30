@@ -49,6 +49,7 @@ function bindParams(stmt: SqlJsStatement, params: unknown[]): void {
 class SqlJsAdapter implements SqliteDatabase {
   private inTransaction = false
   private dirty = false
+  private nextSavepoint = 0
 
   constructor(
     private sql: initSqlJs.SqlJsStatic,
@@ -123,19 +124,39 @@ class SqlJsAdapter implements SqliteDatabase {
   transaction<F extends (...args: never[]) => unknown>(fn: F): F {
     const adapter = this
     const wrapped = ((...args: Parameters<F>) => {
-      adapter.inTransaction = true
-      adapter.dirty = false
-      adapter.db.exec('BEGIN IMMEDIATE')
+      const outer = !adapter.inTransaction
+      let savepoint: string | null = null
+
+      if (outer) {
+        adapter.inTransaction = true
+        adapter.dirty = false
+        adapter.db.exec('BEGIN IMMEDIATE')
+      } else {
+        savepoint = `sp_${++adapter.nextSavepoint}`
+        adapter.db.exec(`SAVEPOINT ${savepoint}`)
+      }
+
       try {
         const result = fn(...args)
-        adapter.db.exec('COMMIT')
-        if (adapter.dirty) adapter.persist()
+        if (outer) {
+          adapter.db.exec('COMMIT')
+          if (adapter.dirty) adapter.persist()
+        } else if (savepoint) {
+          adapter.db.exec(`RELEASE SAVEPOINT ${savepoint}`)
+        }
         return result
       } catch (err) {
-        adapter.db.exec('ROLLBACK')
+        if (outer) {
+          adapter.db.exec('ROLLBACK')
+        } else if (savepoint) {
+          adapter.db.exec(`ROLLBACK TO SAVEPOINT ${savepoint}`)
+          adapter.db.exec(`RELEASE SAVEPOINT ${savepoint}`)
+        }
         throw err
       } finally {
-        adapter.inTransaction = false
+        if (outer) {
+          adapter.inTransaction = false
+        }
       }
     }) as F
     return wrapped

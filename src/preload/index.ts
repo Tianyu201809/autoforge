@@ -69,13 +69,19 @@ const api = {
   show: (): Promise<void> => ipcRenderer.invoke(IPC.WINDOW_SHOW),
   hide: (): Promise<void> => ipcRenderer.invoke(IPC.WINDOW_HIDE),
   toggle: (): Promise<boolean> => ipcRenderer.invoke(IPC.WINDOW_TOGGLE),
-  getMode: (): Promise<AppWindowConfig & { visible: boolean }> => ipcRenderer.invoke(IPC.WINDOW_GET_MODE),
-  setMode: (patch: Partial<AppWindowConfig>): Promise<AppWindowConfig & { visible: boolean }> =>
+  getMode: (): Promise<AppWindowConfig & { visible: boolean; globalShortcutRegistered: boolean }> =>
+    ipcRenderer.invoke(IPC.WINDOW_GET_MODE),
+  setMode: (
+    patch: Partial<AppWindowConfig>
+  ): Promise<AppWindowConfig & { visible: boolean; globalShortcutRegistered: boolean }> =>
     ipcRenderer.invoke(IPC.WINDOW_SET_MODE, patch),
   onModeChange: (
-    callback: (mode: AppWindowConfig & { visible: boolean }) => void
+    callback: (mode: AppWindowConfig & { visible: boolean; globalShortcutRegistered: boolean }) => void
   ): (() => void) => {
-    const handler = (_event: IpcRendererEvent, mode: AppWindowConfig & { visible: boolean }) => callback(mode)
+    const handler = (
+      _event: IpcRendererEvent,
+      mode: AppWindowConfig & { visible: boolean; globalShortcutRegistered: boolean }
+    ) => callback(mode)
     ipcRenderer.on(IPC.EVENT_WINDOW_MODE, handler)
     return () => ipcRenderer.removeListener(IPC.EVENT_WINDOW_MODE, handler)
   },

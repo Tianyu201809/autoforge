@@ -1,5 +1,6 @@
 import { app, BrowserWindow, Menu, Tray, globalShortcut } from 'electron'
 import { IPC } from '../../shared/ipc-channels'
+import { DEFAULT_GLOBAL_SHORTCUT } from '../../shared/accelerator'
 import type { AppWindowConfig } from '../../shared/types/script'
 import { getTrayIcon } from './app-icon'
 import {
@@ -8,7 +9,7 @@ import {
   syncFloatingBall
 } from './floating-ball-window'
 
-export const DEFAULT_GLOBAL_SHORTCUT = 'CommandOrControl+Shift+A'
+export { DEFAULT_GLOBAL_SHORTCUT }
 
 export const DEFAULT_WINDOW_CONFIG: Required<AppWindowConfig> = {
   trayMode: false,
@@ -16,8 +17,11 @@ export const DEFAULT_WINDOW_CONFIG: Required<AppWindowConfig> = {
   globalShortcutEnabled: true,
   globalShortcut: DEFAULT_GLOBAL_SHORTCUT
 }
-
-let tray: Tray | null = null
+export type WindowModeState = Required<AppWindowConfig> & {
+  visible: boolean
+  /** 全局快捷键是否已成功注册（禁用时恒为 true） */
+  globalShortcutRegistered: boolean
+}
 let registeredShortcut: string | null = null
 let appQuitting = false
 let getMainWindow: () => BrowserWindow | null = () => null
@@ -34,12 +38,19 @@ export function resolveWindowConfig(config?: AppWindowConfig): Required<AppWindo
   }
 }
 
-function broadcastModeChange(): void {
+function buildWindowModeState(): WindowModeState {
+  const resolved = resolveWindowConfig(readWindowConfig())
   const win = getMainWindow()
-  const payload = {
-    ...resolveWindowConfig(readWindowConfig()),
-    visible: win ? win.isVisible() : false
+  return {
+    ...resolved,
+    visible: win ? win.isVisible() : false,
+    globalShortcutRegistered:
+      !resolved.globalShortcutEnabled || registeredShortcut === resolved.globalShortcut
   }
+}
+
+function broadcastModeChange(): void {
+  const payload = buildWindowModeState()
   for (const w of BrowserWindow.getAllWindows()) {
     if (!w.isDestroyed()) {
       w.webContents.send(IPC.EVENT_WINDOW_MODE, payload)
@@ -230,10 +241,6 @@ export function attachMainWindowModeHandlers(win: BrowserWindow): void {
   win.on('hide', () => broadcastModeChange())
 }
 
-export function getWindowModeState(): Required<AppWindowConfig> & { visible: boolean } {
-  const win = getMainWindow()
-  return {
-    ...resolveWindowConfig(readWindowConfig()),
-    visible: win ? win.isVisible() : false
-  }
+export function getWindowModeState(): WindowModeState {
+  return buildWindowModeState()
 }

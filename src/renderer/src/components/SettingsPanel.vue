@@ -2,7 +2,9 @@
 import { onMounted, onUnmounted, ref, toRaw, watch } from 'vue'
 import { CheckCircle2, Plus, Trash2, X, XCircle } from 'lucide-vue-next'
 import type { BrowserStatusInfo, EnvironmentProfile } from '../../../shared/types/script'
+import { DEFAULT_GLOBAL_SHORTCUT } from '../../../shared/accelerator'
 import ThemeToggle from './ThemeToggle.vue'
+import ShortcutRecorder from './ShortcutRecorder.vue'
 import { askConfirm } from '../composables/useConfirmDialog'
 
 const emit = defineEmits<{ close: [] }>()
@@ -12,6 +14,8 @@ const logLevel = ref<'INFO' | 'WARN' | 'ERROR'>('INFO')
 const trayMode = ref(false)
 const floatingMode = ref(false)
 const globalShortcutEnabled = ref(true)
+const globalShortcut = ref(DEFAULT_GLOBAL_SHORTCUT)
+const globalShortcutRegistered = ref(true)
 const saving = ref(false)
 const saved = ref(false)
 const browserStatus = ref<BrowserStatusInfo | null>(null)
@@ -32,11 +36,14 @@ function syncWindowModeFromState(): void {
   void window.api.setMode({
     trayMode: trayMode.value,
     floatingMode: floatingMode.value,
-    globalShortcutEnabled: globalShortcutEnabled.value
+    globalShortcutEnabled: globalShortcutEnabled.value,
+    globalShortcut: globalShortcut.value
+  }).then((mode) => {
+    globalShortcutRegistered.value = mode.globalShortcutRegistered
   })
 }
 
-watch([trayMode, floatingMode, globalShortcutEnabled], () => {
+watch([trayMode, floatingMode, globalShortcutEnabled, globalShortcut], () => {
   syncWindowModeFromState()
 })
 
@@ -47,6 +54,7 @@ onMounted(async () => {
   trayMode.value = !!config.window?.trayMode
   floatingMode.value = !!config.window?.floatingMode
   globalShortcutEnabled.value = config.window?.globalShortcutEnabled !== false
+  globalShortcut.value = config.window?.globalShortcut?.trim() || DEFAULT_GLOBAL_SHORTCUT
   browserStatus.value = await window.autoforge.system.browserStatus()
   environments.value = await window.autoforge.env.list()
   editingEnv.value = environments.value.find((e) => e.isDefault) ?? environments.value[0] ?? null
@@ -56,8 +64,13 @@ onMounted(async () => {
     trayMode.value = !!mode.trayMode
     floatingMode.value = !!mode.floatingMode
     globalShortcutEnabled.value = mode.globalShortcutEnabled !== false
+    globalShortcut.value = mode.globalShortcut?.trim() || DEFAULT_GLOBAL_SHORTCUT
+    globalShortcutRegistered.value = mode.globalShortcutRegistered
     syncingFromEvent = false
   })
+
+  const mode = await window.api.getMode()
+  globalShortcutRegistered.value = mode.globalShortcutRegistered
 
   windowModeReady.value = true
 })
@@ -76,7 +89,8 @@ async function save(): Promise<void> {
       window: {
         trayMode: trayMode.value,
         floatingMode: floatingMode.value,
-        globalShortcutEnabled: globalShortcutEnabled.value
+        globalShortcutEnabled: globalShortcutEnabled.value,
+        globalShortcut: globalShortcut.value
       }
     })
     // 窗口行为已在勾选时即时生效，保存时仅持久化其余配置
@@ -209,9 +223,17 @@ async function openUserDataDir(): Promise<void> {
             <input v-model="globalShortcutEnabled" type="checkbox" class="rounded mt-0.5" />
             <span>
               全局快捷键
-              <span class="block text-[11px] sb-text-faint mt-0.5">按 <kbd class="px-1 py-0.5 rounded sb-bg-inset border sb-border-subtle font-mono text-[10px]">Ctrl+Shift+A</kbd> 快速显示主界面</span>
+              <span class="block text-[11px] sb-text-faint mt-0.5">在任意应用中按下快捷键，快速显示主界面</span>
             </span>
           </label>
+          <div v-if="globalShortcutEnabled" class="pl-6 space-y-2">
+            <label class="block text-[12px] sb-text-muted">快捷键组合</label>
+            <ShortcutRecorder v-model="globalShortcut" />
+            <p class="text-[11px] sb-text-faint">点击输入框后按下新的组合键；按 Esc 取消录制</p>
+            <p v-if="!globalShortcutRegistered" class="text-[11px] text-amber-400">
+              当前快捷键无法注册，可能已被其他程序占用，请尝试其他组合
+            </p>
+          </div>
         </div>
       </section>
 
