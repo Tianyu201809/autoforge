@@ -69,7 +69,7 @@ const resizing = ref(false)
 const runSplitTopPct = ref(RUN_SPLIT_DEFAULT)
 const runSplitResizing = ref(false)
 const viewingSessionId = ref<string | null>(null)
-const runResultSectionExpanded = ref(true)
+const runResultSectionExpanded = ref(false)
 
 function getMaxPanelWidth(): number {
   return Math.min(
@@ -608,6 +608,7 @@ watch(
     editModeActive.value = false
     syncScheduleFromScript()
     viewingSessionId.value = null
+    runResultSectionExpanded.value = false
     resetFileEditor()
     if (props.initialTab) activeTab.value = props.initialTab
     await Promise.all([loadContent(), loadEnvironments()])
