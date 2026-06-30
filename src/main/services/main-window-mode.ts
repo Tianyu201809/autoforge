@@ -22,6 +22,8 @@ export type WindowModeState = Required<AppWindowConfig> & {
   /** 全局快捷键是否已成功注册（禁用时恒为 true） */
   globalShortcutRegistered: boolean
 }
+
+let tray: Tray | null = null
 let registeredShortcut: string | null = null
 let appQuitting = false
 let getMainWindow: () => BrowserWindow | null = () => null
