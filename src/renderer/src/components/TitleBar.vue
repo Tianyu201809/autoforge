@@ -1,15 +1,17 @@
 <script setup lang="ts">
 import { onMounted, onUnmounted, ref } from 'vue'
-import { Copy, CircleDot, Minus, PanelBottom, Square, X } from 'lucide-vue-next'
+import { Copy, CircleDot, Minus, Notebook, PanelBottom, Square, X } from 'lucide-vue-next'
 import appIcon from '@build/icon.png?url'
 import ThemeToggle from './ThemeToggle.vue'
 import { useWindowMaximized } from '../composables/useWindowMaximized'
+import { useGlobalEnvNotebook } from '../composables/useGlobalEnvNotebook'
 
 defineProps<{
   breadcrumb: string
 }>()
 
 const { isMaximized, toggleMaximize } = useWindowMaximized()
+const { active: notebookActive, toggle: toggleNotebook } = useGlobalEnvNotebook()
 
 const floatingMode = ref(false)
 const trayMode = ref(false)
@@ -60,6 +62,15 @@ function close(): void {
       <span class="text-[13px] sb-text-muted font-medium">{{ breadcrumb }}</span>
     </div>
     <div class="flex items-center gap-1" style="-webkit-app-region: no-drag">
+      <button
+        type="button"
+        class="w-8 h-8 flex items-center justify-center rounded-md transition-colors"
+        :class="notebookActive ? 'text-[var(--sb-accent-solid)] sb-bg-inset' : 'sb-text-muted hover:sb-text-primary sb-bg-hover'"
+        title="全局变量笔记本"
+        @click="toggleNotebook"
+      >
+        <Notebook class="w-4 h-4" :stroke-width="1.5" />
+      </button>
       <ThemeToggle />
       <button
         type="button"

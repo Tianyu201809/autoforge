@@ -18,6 +18,7 @@ export const DEFAULT_WINDOW_CONFIG: Required<AppWindowConfig> = {
   globalShortcut: DEFAULT_GLOBAL_SHORTCUT
 }
 export type WindowModeState = Required<AppWindowConfig> & {
+  /** 主窗口对用户可见（非隐藏、非最小化） */
   visible: boolean
   /** 全局快捷键是否已成功注册（禁用时恒为 true） */
   globalShortcutRegistered: boolean
@@ -40,12 +41,17 @@ export function resolveWindowConfig(config?: AppWindowConfig): Required<AppWindo
   }
 }
 
+function isMainWindowShown(win: BrowserWindow | null): boolean {
+  if (!win || win.isDestroyed()) return false
+  return win.isVisible() && !win.isMinimized()
+}
+
 function buildWindowModeState(): WindowModeState {
   const resolved = resolveWindowConfig(readWindowConfig())
   const win = getMainWindow()
   return {
     ...resolved,
-    visible: win ? win.isVisible() : false,
+    visible: isMainWindowShown(win),
     globalShortcutRegistered:
       !resolved.globalShortcutEnabled || registeredShortcut === resolved.globalShortcut
   }
@@ -241,6 +247,8 @@ export function attachMainWindowModeHandlers(win: BrowserWindow): void {
   win.on('close', (event) => handleMainWindowClose(event))
   win.on('show', () => broadcastModeChange())
   win.on('hide', () => broadcastModeChange())
+  win.on('minimize', () => broadcastModeChange())
+  win.on('restore', () => broadcastModeChange())
 }
 
 export function getWindowModeState(): WindowModeState {

@@ -18,7 +18,10 @@ import RunResultModal from './components/RunResultModal.vue'
 import ToastHost from './components/ToastHost.vue'
 import ConfirmDialogHost from './components/ConfirmDialogHost.vue'
 import PromptDialogHost from './components/PromptDialogHost.vue'
+import GlobalEnvNotebook from './components/GlobalEnvNotebook.vue'
 import { askConfirm } from './composables/useConfirmDialog'
+import { useGlobalEnvNotebook } from './composables/useGlobalEnvNotebook'
+import { startInsertFocusTracking } from './utils/insert-focused-field'
 
 const {
   filteredScripts,
@@ -286,8 +289,18 @@ async function handleDockTerminal(): Promise<void> {
 }
 
 let unsubTerminalClosed: (() => void) | undefined
+let stopFocusTracking: (() => void) | undefined
+let offWindowMode: (() => void) | undefined
+
+const { dismiss: dismissEnvNotebook } = useGlobalEnvNotebook()
 
 onMounted(() => {
+  stopFocusTracking = startInsertFocusTracking()
+  offWindowMode = window.api.onModeChange((mode) => {
+    if (!mode.visible) dismissEnvNotebook()
+  })
+  document.addEventListener('visibilitychange', onDocumentVisibilityChange)
+
   unsubTerminalClosed = window.autoforge.terminal.onClosed(() => {
     terminalDetached.value = false
     if (trackedSessionIds.value.length) {
@@ -299,8 +312,15 @@ onMounted(() => {
   })
 })
 
+function onDocumentVisibilityChange(): void {
+  if (document.hidden) dismissEnvNotebook()
+}
+
 onUnmounted(() => {
   unsubTerminalClosed?.()
+  stopFocusTracking?.()
+  offWindowMode?.()
+  document.removeEventListener('visibilitychange', onDocumentVisibilityChange)
 })
 </script>
 
@@ -412,5 +432,6 @@ onUnmounted(() => {
     <ToastHost />
     <ConfirmDialogHost />
     <PromptDialogHost />
+    <GlobalEnvNotebook />
   </div>
 </template>

@@ -29,18 +29,13 @@ import ScriptRunProgressPanel from './ScriptRunProgressPanel.vue'
 import { formatScriptRunProgressSummary } from '../../../shared/script-progress'
 import CodeEditor from './CodeEditor.vue'
 import SchemaValueField from './SchemaValueField.vue'
-import GlobalEnvReferencePanel from './GlobalEnvReferencePanel.vue'
 import ScriptWorkspaceSidebar from './ScriptWorkspaceSidebar.vue'
 import { useScriptFileEditor } from '../composables/useScriptFileEditor'
 import { MANIFEST_FILENAME } from '../../../shared/script-contract'
 import { extractRunResultOutputDir } from '../../../shared/run-result'
 import { parseParamAttachments } from '../../../shared/param-attachments'
 import { defaultSchemaValue } from '../../../shared/schema-values'
-import {
-  isExplicitEnvConfigValue,
-  listGlobalEnvReferences,
-  resolveEnvFieldValue
-} from '../../../shared/env-resolution'
+import { isExplicitEnvConfigValue, resolveEnvFieldValue } from '../../../shared/env-resolution'
 import { promptUnsavedFiles } from '../utils/unsaved-files-prompt'
 
 type DetailPanelTab = 'detail' | 'params' | 'edit' | 'log' | 'config' | 'history'
@@ -355,41 +350,6 @@ function syncEnvVars(): void {
     vars[def.key] = resolveEnvFieldValue(def.key, def, scriptConfig, profile?.variables).value
   }
   envVars.value = vars
-}
-
-const selectedProfile = computed(() => environments.value.find((e) => e.id === selectedEnvId.value) ?? null)
-
-const currentScriptEnvConfig = computed(
-  () => props.script.configByEnv?.[selectedEnvId.value] ?? {}
-)
-
-function envFieldSource(def: (typeof props.script.envSchema)[number]): 'script' | 'global' | 'default' | 'empty' {
-  return resolveEnvFieldValue(
-    def.key,
-    def,
-    currentScriptEnvConfig.value,
-    selectedProfile.value?.variables
-  ).source
-}
-
-function applyGlobalEnvRef(key: string): void {
-  const globalValue = selectedProfile.value?.variables[key]
-  if (!isExplicitEnvConfigValue(globalValue)) return
-  envVars.value = { ...envVars.value, [key]: globalValue }
-}
-
-function applyAllGlobalEnvRefs(): void {
-  const items = listGlobalEnvReferences(
-    props.script.envSchema,
-    selectedProfile.value?.variables,
-    currentScriptEnvConfig.value,
-    envVars.value
-  )
-  const next = { ...envVars.value }
-  for (const item of items) {
-    if (!item.matched) next[item.key] = item.globalValue
-  }
-  envVars.value = next
 }
 
 function resolvedDefaultEnvId(): string {
@@ -1345,39 +1305,10 @@ async function handleRename(): Promise<void> {
         <p class="mt-1 text-[11px] sb-text-faint">不同环境可配置不同的账号、URL 等，运行时可切换</p>
       </div>
 
-      <GlobalEnvReferencePanel
-        v-if="script.envSchema.length"
-        :profile="selectedProfile"
-        :schema="script.envSchema"
-        :script-config="currentScriptEnvConfig"
-        :current-values="envVars"
-        @apply="applyGlobalEnvRef"
-        @apply-all="applyAllGlobalEnvRefs"
-      />
-
       <div v-if="script.envSchema.length">
         <h3 class="sb-field-title mb-2">环境变量</h3>
-        <p class="text-[11px] sb-text-faint mb-3">固定环境配置（账号、URL 等），按环境保存，通过 ctx.env 访问；支持 text、select、boolean、attachment 等类型，值均为字符串</p>
+        <p class="text-[11px] sb-text-faint mb-3">固定环境配置（账号、URL 等），按环境保存，通过 ctx.env 访问；支持 text、select、boolean、attachment 等类型，值均为字符串。可使用标题栏「全局变量笔记本」快速填入。</p>
         <div v-for="def in script.envSchema" :key="def.key" class="mb-3">
-          <div
-            v-if="envFieldSource(def) === 'global' || (isExplicitEnvConfigValue(selectedProfile?.variables[def.key]) && envVars[def.key] !== selectedProfile?.variables[def.key])"
-            class="flex items-center justify-end gap-2 mb-0.5 min-h-[18px]"
-          >
-            <span
-              v-if="envFieldSource(def) === 'global'"
-              class="mr-auto text-[10px] px-1.5 py-0.5 rounded border text-sky-400/80 border-sky-500/20 bg-sky-500/5"
-            >
-              来自全局环境
-            </span>
-            <button
-              v-if="isExplicitEnvConfigValue(selectedProfile?.variables[def.key]) && envVars[def.key] !== selectedProfile?.variables[def.key]"
-              type="button"
-              class="text-[11px] text-sky-400/90 hover:text-sky-400 transition-colors"
-              @click="applyGlobalEnvRef(def.key)"
-            >
-              引用全局
-            </button>
-          </div>
           <SchemaValueField
             v-model="envVars[def.key]"
             :def="def"
