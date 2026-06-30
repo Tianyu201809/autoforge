@@ -1,4 +1,5 @@
 import { contextBridge, ipcRenderer, type IpcRendererEvent } from 'electron'
+import pkg from '../../package.json'
 import { IPC } from '../shared/ipc-channels'
 import { bindScriptDropImportZone, type DropImportHandlers } from './script-drop'
 import type {
@@ -86,6 +87,7 @@ const api = {
     return () => ipcRenderer.removeListener(IPC.EVENT_WINDOW_MODE, handler)
   },
   versions: {
+    app: pkg.version,
     node: process.versions.node,
     electron: process.versions.electron
   }

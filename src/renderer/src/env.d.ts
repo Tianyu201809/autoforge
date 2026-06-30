@@ -79,6 +79,7 @@ export interface WindowApi {
   setMode: (patch: Partial<AppWindowConfig>) => Promise<WindowModeState>
   onModeChange: (callback: (mode: WindowModeState) => void) => () => void
   versions: {
+    app: string
     node: string
     electron: string
   }

@@ -7,6 +7,8 @@ import ThemeToggle from './ThemeToggle.vue'
 import ShortcutRecorder from './ShortcutRecorder.vue'
 import { askConfirm } from '../composables/useConfirmDialog'
 
+const appVersion = window.api.versions.app
+
 const emit = defineEmits<{ close: [] }>()
 
 const browserPath = ref('')
@@ -200,6 +202,18 @@ async function openUserDataDir(): Promise<void> {
     </div>
 
     <div class="max-w-2xl px-6 py-6 space-y-8">
+      <!-- 产品版本 -->
+      <section class="space-y-3">
+        <h2 class="text-[13px] font-medium sb-text-secondary">产品版本</h2>
+        <div class="rounded-lg border sb-border sb-bg-surface px-4 py-3 flex items-center justify-between gap-4">
+          <div class="min-w-0">
+            <p class="text-[13px] sb-text-secondary">Autoforge</p>
+            <p class="text-[11px] sb-text-faint mt-0.5">本机自动化脚本锻造与管理桌面应用</p>
+          </div>
+          <span class="text-[13px] font-mono sb-text-primary shrink-0">v{{ appVersion }}</span>
+        </div>
+      </section>
+
       <!-- 窗口行为 -->
       <section class="space-y-3">
         <h2 class="text-[13px] font-medium sb-text-secondary">窗口行为</h2>
