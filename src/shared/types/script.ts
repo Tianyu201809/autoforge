@@ -9,6 +9,21 @@ export interface CronConfig {
   enabled: boolean
 }
 
+/** 脚本用户偏好 — 与 scripts 表分离存储 */
+export interface ScriptPreference {
+  starred?: boolean
+  archived?: boolean
+  recentRunAt?: string
+  schedule?: CronConfig
+  defaultEnvId?: string
+  /** 脚本在各环境下的 env 专属配置值 */
+  configByEnv?: Record<string, Record<string, string>>
+  /** 脚本在各环境下上次保存的运行参数 */
+  paramsByEnv?: Record<string, Record<string, string>>
+  /** @deprecated 旧版全局参数，读取时会迁移到 paramsByEnv */
+  savedParams?: Record<string, string>
+}
+
 /** 环境 Profile — 一组可复用的环境变量 */
 export interface EnvironmentProfile {
   id: string

@@ -193,8 +193,7 @@ queued → validating → installing-deps → starting → running → completed
 
 ```
 userData/
-├── autoforge-data.json       # 脚本注册表、环境 Profile、应用配置
-├── execution-history.json    # 执行历史（最多 5000 条，保留 90 天）
+├── autoforge.db              # SQLite：脚本注册表、环境、分类、配置、执行历史
 ├── script-inputs/            # 运行参数附件缓存
 ├── scripts/
 │   └── {scriptId}/
@@ -216,6 +215,7 @@ Autoforge/
 ├── src/
 │   ├── main/                 # Electron 主进程
 │   │   ├── index.ts          # 应用入口
+│   │   ├── db/               # SQLite 持久化层
 │   │   ├── ipc/handlers.ts   # IPC 路由
 │   │   └── services/         # 核心业务服务
 │   ├── preload/              # 预加载桥接（contextBridge）

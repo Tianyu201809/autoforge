@@ -217,7 +217,7 @@ export class ScriptRunnerService {
     const existing = process.env.NODE_PATH ?? ''
     const merged = [...paths, ...existing.split(process.platform === 'win32' ? ';' : ':').filter(Boolean)]
     process.env.NODE_PATH = merged.join(process.platform === 'win32' ? ';' : ':')
-    // eslint-disable-next-line @typescript-eslint/no-require-imports
+     
     require('module').Module._initPaths()
   }
 

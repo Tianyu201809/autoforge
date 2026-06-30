@@ -11,8 +11,9 @@
 
 ```
 userData/
-├── autoforge-data.json       # 脚本注册表、环境 Profile、分类、应用配置
-├── execution-history.json    # 执行历史（最多 5000 条，保留 90 天）
+├── autoforge.db              # SQLite：脚本注册表、环境、分类、配置、执行历史
+├── autoforge-data.json.migrated.bak       # 旧版 JSON 迁移备份（如有）
+├── execution-history.json.migrated.bak  # 旧版 JSON 迁移备份（如有）
 ├── script-inputs/            # 运行参数附件缓存
 ├── scripts/
 │   └── {scriptId}/
@@ -29,11 +30,12 @@ userData/
 
 | 模块 | 职责 |
 |------|------|
+| `db` | SQLite 持久化（sql.js WASM，无需 native 编译） |
 | `script-workspace` | 脚本包的导入、存储、读写 |
 | `script-registry` | 脚本 CRUD，对接 store |
-| `script-store` | 持久化：脚本元数据、环境 Profile、偏好 |
+| `script-store` | 持久化：脚本元数据、环境 Profile、偏好（SQLite repository） |
 | `script-runner` | 执行引擎：生命周期、动态加载、上下文注入 |
-| `execution-history` | 运行记录持久化、按日查询、重启后 reconcile |
+| `execution-history` | 运行记录持久化、按日查询、重启后 reconcile（SQLite） |
 | `script-param-inputs` | 运行参数附件 staging 与缓存清理 |
 | `dependency-manager` | npm install（脚本级 / 全局级） |
 | `script-sdk` | 向脚本注入 browser、paths 等能力 |
@@ -91,4 +93,6 @@ run(ctx) → 日志/结果 → UI
 
 ## 迁移说明
 
-旧版 ScriptBox 数据（`script-box-data.json`）会在首次保存时自动迁移至 `autoforge-data.json`。旧版 `scriptbox.json` 清单仍可导入，保存后会写入 `autoforge.json`。
+首次启动 v1.2+ 时，若存在旧版 JSON 数据（`autoforge-data.json` / `script-box-data.json` / `execution-history.json`），会自动导入 `autoforge.db` 并将原文件重命名为 `*.migrated.bak`。
+
+旧版 ScriptBox 清单（`scriptbox.json`）仍可导入，保存后会写入 `autoforge.json`。

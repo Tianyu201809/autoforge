@@ -4,6 +4,7 @@ bootstrapUtf8()
 
 import { app, BrowserWindow, ipcMain, shell } from 'electron'
 import { join } from 'path'
+import { closeDatabase, initDatabase } from './db/database'
 import { getAppIconImage } from './services/app-icon'
 import { registerIpcHandlers } from './ipc/handlers'
 import { attachWindowMaximizeEvents } from './services/window-chrome'
@@ -71,10 +72,12 @@ function createWindow(): void {
   }
 }
 
-app.whenReady().then(() => {
+app.whenReady().then(async () => {
   if (process.platform === 'win32') {
     app.setAppUserModelId('com.autoforge.app')
   }
+
+  await initDatabase(app.getPath('userData'))
 
   registerIpcHandlers(() => mainWindow)
 
@@ -114,6 +117,10 @@ app.whenReady().then(() => {
   app.on('activate', () => {
     if (BrowserWindow.getAllWindows().length === 0) createWindow()
   })
+})
+
+app.on('before-quit', () => {
+  closeDatabase()
 })
 
 app.on('window-all-closed', () => {
