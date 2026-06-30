@@ -30,7 +30,15 @@ export class ScriptStore {
 
   getScripts(): ScriptMeta[] {
     const repos = this.ensureInitialized()
-    return repos.scripts.listAll().map((s) => this.applyPreference(s))
+    const seen = new Set<string>()
+    return repos.scripts
+      .listAll()
+      .filter((s) => {
+        if (!s.id || seen.has(s.id)) return false
+        seen.add(s.id)
+        return true
+      })
+      .map((s) => this.applyPreference(s))
   }
 
   private mergeParamsByEnv(pref: ScriptPreference, script: ScriptMeta): Record<string, Record<string, string>> {

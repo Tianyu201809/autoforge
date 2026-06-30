@@ -1,5 +1,6 @@
 import { computed, onMounted, ref } from 'vue'
 import { matchPinyinQuery } from '../utils/pinyin-match'
+import { useToast } from './useToast'
 import type {
   CategoryDefinition,
   CategoryItem,
@@ -37,21 +38,27 @@ const showSettings = ref(false)
 const showDevGuide = ref(false)
 const showExecutionHistory = ref(false)
 const showCategoryManager = ref(false)
+const { pushToast } = useToast()
+let refreshGeneration = 0
 
 async function refresh(): Promise<void> {
   if (!window.autoforge) return
+  const generation = ++refreshGeneration
   loading.value = true
   try {
     const [data, defs] = await Promise.all([
       window.autoforge.scripts.list(),
       window.autoforge.categories.list()
     ])
+    if (generation !== refreshGeneration) return
     scripts.value = data.scripts
     stats.value = data.stats
     categories.value = data.categories
     categoryDefinitions.value = defs
   } finally {
-    loading.value = false
+    if (generation === refreshGeneration) {
+      loading.value = false
+    }
   }
 }
 
@@ -169,9 +176,21 @@ async function toggleArchive(id: string): Promise<void> {
   await refresh()
 }
 
-async function deleteScript(id: string): Promise<void> {
-  await window.autoforge.scripts.delete(id)
+async function deleteScript(id: string): Promise<boolean> {
+  const scriptId = id?.trim()
+  if (!scriptId) return false
+
+  const ok = await window.autoforge.scripts.delete(scriptId)
+  if (!ok) {
+    pushToast({
+      type: 'error',
+      title: '删除失败',
+      message: '未能删除该脚本，请确认脚本仍存在后重试'
+    })
+    return false
+  }
   await refresh()
+  return true
 }
 
 function setNavFilter(filter: NavFilter): void {

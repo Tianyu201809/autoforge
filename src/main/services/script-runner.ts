@@ -110,6 +110,14 @@ export class ScriptRunnerService {
     return session
   }
 
+  stopAllForScript(scriptId: string): void {
+    for (const { session } of this.sessions.values()) {
+      if (session.scriptId === scriptId && session.status === 'running') {
+        this.stop(session.id)
+      }
+    }
+  }
+
   stop(sessionId: string): RunSession | null {
     const active = this.sessions.get(sessionId)
     if (!active) return null

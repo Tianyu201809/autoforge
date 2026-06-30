@@ -85,7 +85,10 @@ export function registerIpcHandlers(getWindow: () => BrowserWindow | null): void
   })
 
   ipcMain.handle(IPC.SCRIPTS_DELETE, (_event, id: string) => {
-    const ok = scriptRegistry.delete(id)
+    const scriptId = typeof id === 'string' ? id.trim() : ''
+    if (!scriptId) return false
+    runner.stopAllForScript(scriptId)
+    const ok = scriptRegistry.delete(scriptId)
     if (ok) scheduler.reload(scriptRegistry.listAll())
     return ok
   })

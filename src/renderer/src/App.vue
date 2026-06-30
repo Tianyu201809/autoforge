@@ -254,7 +254,11 @@ async function handleDelete(scriptId: string): Promise<void> {
     variant: 'danger'
   })
   if (!confirmed) return
-  await deleteScript(scriptId)
+  const ok = await deleteScript(scriptId)
+  if (!ok) return
+  if (selectedScriptId.value === scriptId) {
+    selectedScriptId.value = null
+  }
   detailVisible.value = false
 }
 

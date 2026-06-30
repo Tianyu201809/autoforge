@@ -13,7 +13,12 @@ export class ScriptRegistry {
 
   importFromPath(sourcePath: string): ScriptMeta {
     const meta = scriptWorkspace.import(sourcePath)
-    return scriptStore.addScript(meta)
+    try {
+      return scriptStore.addScript(meta)
+    } catch (err) {
+      scriptWorkspace.deleteScript(meta.id, meta.workspacePath)
+      throw err
+    }
   }
 
   update(id: string, patch: Partial<ScriptMeta>): ScriptMeta | null {
@@ -21,11 +26,19 @@ export class ScriptRegistry {
   }
 
   delete(id: string): boolean {
-    const ok = scriptStore.deleteScript(id)
-    if (ok) {
-      scriptWorkspace.deleteScript(id)
+    const scriptId = id?.trim()
+    if (!scriptId) return false
+
+    const script = scriptStore.getScriptById(scriptId)
+    if (!script) {
+      scriptWorkspace.deleteScript(scriptId)
+      return true
     }
-    return ok
+
+    const workspacePath = script.workspacePath
+    const dbDeleted = scriptStore.deleteScript(scriptId)
+    scriptWorkspace.deleteScript(scriptId, workspacePath)
+    return dbDeleted || !scriptStore.getScriptById(scriptId)
   }
 
   refreshFromWorkspace(): void {

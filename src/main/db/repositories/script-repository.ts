@@ -102,6 +102,8 @@ export class ScriptRepository {
   }
 
   delete(id: string): boolean {
+    this.db.prepare('DELETE FROM script_preferences WHERE script_id = ?').run(id)
+    this.db.prepare('DELETE FROM execution_records WHERE script_id = ?').run(id)
     const result = this.db.prepare('DELETE FROM scripts WHERE id = ?').run(id)
     return result.changes > 0
   }

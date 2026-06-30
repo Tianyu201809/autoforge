@@ -227,10 +227,18 @@ export class ScriptWorkspace {
     return this.importFromFile(sourcePath)
   }
 
-  deleteScript(scriptId: string): void {
-    const dir = this.getScriptDir(scriptId)
-    if (existsSync(dir)) {
-      rmSync(dir, { recursive: true, force: true })
+  deleteScript(scriptId: string, workspacePath?: string): void {
+    const dirs = new Set<string>([resolve(this.getScriptDir(scriptId))])
+    if (workspacePath) {
+      dirs.add(resolve(workspacePath))
+    }
+    for (const dir of dirs) {
+      if (!existsSync(dir)) continue
+      try {
+        rmSync(dir, { recursive: true, force: true, maxRetries: 3, retryDelay: 100 })
+      } catch {
+        /* 文件占用等情况下尽力清理，不因 rm 失败阻断 DB 删除结果 */
+      }
     }
   }
 
