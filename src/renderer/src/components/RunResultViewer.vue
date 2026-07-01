@@ -422,6 +422,8 @@ watch(
   overscroll-behavior: contain;
   padding: 0.5rem 0.625rem 0.625rem;
   background: var(--sb-bg-log);
+  user-select: text;
+  cursor: text;
 }
 
 .rr-viewer-tree-scroll--fill {
@@ -469,6 +471,7 @@ watch(
   background: transparent;
   color: var(--sb-text-faint);
   cursor: pointer;
+  user-select: none;
   flex-shrink: 0;
 }
 
@@ -511,6 +514,7 @@ watch(
   font: inherit;
   color: var(--sb-text-muted);
   cursor: pointer;
+  user-select: none;
 }
 
 :deep(.rr-json-bracket) {
@@ -537,6 +541,14 @@ watch(
 
 :deep(.rr-json-close) {
   opacity: 0.85;
+}
+
+:deep(.rr-json-string),
+:deep(.rr-json-number),
+:deep(.rr-json-boolean),
+:deep(.rr-json-null),
+:deep(.rr-json-key) {
+  user-select: text;
 }
 
 :deep(.rr-json-string) {
