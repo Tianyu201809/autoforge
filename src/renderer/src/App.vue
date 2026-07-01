@@ -18,9 +18,9 @@ import RunResultModal from './components/RunResultModal.vue'
 import ToastHost from './components/ToastHost.vue'
 import ConfirmDialogHost from './components/ConfirmDialogHost.vue'
 import PromptDialogHost from './components/PromptDialogHost.vue'
-import GlobalEnvNotebook from './components/GlobalEnvNotebook.vue'
+import ScratchpadPanel from './components/ScratchpadPanel.vue'
 import { askConfirm } from './composables/useConfirmDialog'
-import { useGlobalEnvNotebook } from './composables/useGlobalEnvNotebook'
+import { useScratchpad } from './composables/useScratchpad'
 import { startInsertFocusTracking } from './utils/insert-focused-field'
 
 const {
@@ -292,12 +292,12 @@ let unsubTerminalClosed: (() => void) | undefined
 let stopFocusTracking: (() => void) | undefined
 let offWindowMode: (() => void) | undefined
 
-const { dismiss: dismissEnvNotebook } = useGlobalEnvNotebook()
+const { dismiss: dismissScratchpad } = useScratchpad()
 
 onMounted(() => {
   stopFocusTracking = startInsertFocusTracking()
   offWindowMode = window.api.onModeChange((mode) => {
-    if (!mode.visible) dismissEnvNotebook()
+    if (!mode.visible) dismissScratchpad()
   })
   document.addEventListener('visibilitychange', onDocumentVisibilityChange)
 
@@ -313,7 +313,7 @@ onMounted(() => {
 })
 
 function onDocumentVisibilityChange(): void {
-  if (document.hidden) dismissEnvNotebook()
+  if (document.hidden) dismissScratchpad()
 }
 
 onUnmounted(() => {
@@ -432,6 +432,6 @@ onUnmounted(() => {
     <ToastHost />
     <ConfirmDialogHost />
     <PromptDialogHost />
-    <GlobalEnvNotebook />
+    <ScratchpadPanel />
   </div>
 </template>

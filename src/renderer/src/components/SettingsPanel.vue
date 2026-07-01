@@ -267,7 +267,7 @@ async function openUserDataDir(): Promise<void> {
             新建
           </button>
         </div>
-        <p class="text-[11px] sb-text-faint">创建开发 / 测试 / 生产等环境。填写后可在标题栏「全局变量笔记本」中快速引用到各脚本输入框。</p>
+        <p class="text-[11px] sb-text-faint">创建开发 / 测试 / 生产等环境，供脚本通过 ctx.env 读取。填写常用片段可使用标题栏「小记」快速填入输入框。</p>
 
         <div class="flex gap-2 flex-wrap">
           <button

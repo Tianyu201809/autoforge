@@ -1307,7 +1307,7 @@ async function handleRename(): Promise<void> {
 
       <div v-if="script.envSchema.length">
         <h3 class="sb-field-title mb-2">环境变量</h3>
-        <p class="text-[11px] sb-text-faint mb-3">固定环境配置（账号、URL 等），按环境保存，通过 ctx.env 访问；支持 text、select、boolean、attachment 等类型，值均为字符串。可使用标题栏「全局变量笔记本」快速填入。</p>
+        <p class="text-[11px] sb-text-faint mb-3">固定环境配置（账号、URL 等），按环境保存，通过 ctx.env 访问；支持 text、select、boolean、attachment 等类型，值均为字符串。可使用标题栏「小记」快速填入。</p>
         <div v-for="def in script.envSchema" :key="def.key" class="mb-3">
           <SchemaValueField
             v-model="envVars[def.key]"

@@ -1,16 +1,16 @@
 export type InsertableField = HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement
 
-const NOTEBOOK_SELECTOR = '[data-global-env-notebook]'
+const SCRATCHPAD_SELECTOR = '[data-scratchpad-panel]'
 
 let lastFocused: InsertableField | null = null
 
-function isInsideNotebook(el: Element | null): boolean {
-  return !!el?.closest(NOTEBOOK_SELECTOR)
+function isInsideScratchpad(el: Element | null): boolean {
+  return !!el?.closest(SCRATCHPAD_SELECTOR)
 }
 
 export function isInsertableField(el: unknown): el is InsertableField {
   if (!(el instanceof HTMLElement)) return false
-  if (isInsideNotebook(el)) return false
+  if (isInsideScratchpad(el)) return false
   if (el instanceof HTMLTextAreaElement) return !el.readOnly && !el.disabled
   if (el instanceof HTMLInputElement) {
     if (el.readOnly || el.disabled) return false

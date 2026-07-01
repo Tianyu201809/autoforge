@@ -4,14 +4,14 @@ import { Copy, CircleDot, Minus, Notebook, PanelBottom, Square, X } from 'lucide
 import appIcon from '@build/icon.png?url'
 import ThemeToggle from './ThemeToggle.vue'
 import { useWindowMaximized } from '../composables/useWindowMaximized'
-import { useGlobalEnvNotebook } from '../composables/useGlobalEnvNotebook'
+import { useScratchpad } from '../composables/useScratchpad'
 
 defineProps<{
   breadcrumb: string
 }>()
 
 const { isMaximized, toggleMaximize } = useWindowMaximized()
-const { active: notebookActive, toggle: toggleNotebook } = useGlobalEnvNotebook()
+const { active: scratchpadActive, toggle: toggleScratchpad } = useScratchpad()
 
 const floatingMode = ref(false)
 const trayMode = ref(false)
@@ -65,9 +65,9 @@ function close(): void {
       <button
         type="button"
         class="w-8 h-8 flex items-center justify-center rounded-md transition-colors"
-        :class="notebookActive ? 'text-[var(--sb-accent-solid)] sb-bg-inset' : 'sb-text-muted hover:sb-text-primary sb-bg-hover'"
-        title="全局变量笔记本"
-        @click="toggleNotebook"
+        :class="scratchpadActive ? 'text-[var(--sb-accent-solid)] sb-bg-inset' : 'sb-text-muted hover:sb-text-primary sb-bg-hover'"
+        title="小记"
+        @click="toggleScratchpad"
       >
         <Notebook class="w-4 h-4" :stroke-width="1.5" />
       </button>

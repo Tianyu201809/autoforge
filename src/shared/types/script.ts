@@ -121,6 +121,15 @@ export interface AppWindowConfig {
   globalShortcut?: string
 }
 
+/** 小记条目 — 用户自填的快速填入片段，与全局环境变量无关 */
+export interface ScratchpadEntry {
+  id: string
+  /** 显示标签，便于检索与识别 */
+  label: string
+  /** 点击后填入聚焦输入框的内容 */
+  value: string
+}
+
 export interface AppConfig {
   browser?: {
     executablePath?: string
@@ -129,6 +138,8 @@ export interface AppConfig {
   scriptsDirectory?: string
   logLevel?: LogLevel
   window?: AppWindowConfig
+  /** 小记模块 — 独立于环境 Profile 的快速填入信息 */
+  scratchpad?: ScratchpadEntry[]
 }
 
 export interface SystemMemoryInfo {
