@@ -37,6 +37,9 @@ import { parseParamAttachments } from '../../../shared/param-attachments'
 import { defaultSchemaValue } from '../../../shared/schema-values'
 import { isExplicitEnvConfigValue, resolveEnvFieldValue } from '../../../shared/env-resolution'
 import { promptUnsavedFiles } from '../utils/unsaved-files-prompt'
+import { useToast } from '../composables/useToast'
+
+const { pushToast } = useToast()
 
 type DetailPanelTab = 'detail' | 'params' | 'edit' | 'log' | 'config' | 'history'
 
@@ -450,6 +453,13 @@ async function saveDetail(): Promise<void> {
     }
 
     emit('refresh')
+    pushToast({ type: 'success', title: '已保存', message: '脚本详情已保存' })
+  } catch (err) {
+    pushToast({
+      type: 'error',
+      title: '保存失败',
+      message: err instanceof Error ? err.message : '无法保存脚本详情'
+    })
   } finally {
     detailSaving.value = false
   }
@@ -466,6 +476,14 @@ async function saveParams(): Promise<void> {
     await cleanupAttachmentDiff(props.script.paramSchema, beforeParams, nextParams, 'removed')
     await window.autoforge.scripts.setParams(props.script.id, selectedEnvId.value, nextParams)
     emit('refresh')
+    const envName = environments.value.find((e) => e.id === selectedEnvId.value)?.name ?? '当前环境'
+    pushToast({ type: 'success', title: '已保存', message: `${envName} 的运行参数已保存` })
+  } catch (err) {
+    pushToast({
+      type: 'error',
+      title: '保存失败',
+      message: err instanceof Error ? err.message : '无法保存运行参数'
+    })
   } finally {
     detailSaving.value = false
   }
@@ -663,10 +681,20 @@ async function saveEditMode(): Promise<void> {
     if (isAnyDirty.value) {
       const dirtyPaths = getDirtyPaths()
       const ok = await saveAllDirtyFiles()
-      if (!ok) return
+      if (!ok) {
+        pushToast({ type: 'error', title: '保存失败', message: '部分脚本文件未能写入磁盘' })
+        return
+      }
       if (dirtyPaths.includes(MANIFEST_FILENAME)) emit('refresh')
+      pushToast({ type: 'success', title: '已保存', message: '脚本文件已保存' })
     }
     editModeActive.value = false
+  } catch (err) {
+    pushToast({
+      type: 'error',
+      title: '保存失败',
+      message: err instanceof Error ? err.message : '无法保存脚本文件'
+    })
   } finally {
     saving.value = false
   }
@@ -723,6 +751,14 @@ async function saveConfig(): Promise<void> {
       schedule: { expression: cronExpression.value, enabled: cronEnabled.value }
     })
     emit('refresh')
+    const envName = environments.value.find((e) => e.id === selectedEnvId.value)?.name ?? '当前环境'
+    pushToast({ type: 'success', title: '已保存', message: `${envName} 的配置与定时任务已保存` })
+  } catch (err) {
+    pushToast({
+      type: 'error',
+      title: '保存失败',
+      message: err instanceof Error ? err.message : '无法保存配置'
+    })
   } finally {
     saving.value = false
   }

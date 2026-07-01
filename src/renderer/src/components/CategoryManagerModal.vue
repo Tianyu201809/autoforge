@@ -67,11 +67,19 @@ async function saveForm(): Promise<void> {
         label,
         colorPreset: formColor.value
       })
+      pushToast({ type: 'success', title: '已保存', message: `分类「${label}」已更新` })
     } else {
       await window.autoforge.categories.create(label, formColor.value)
+      pushToast({ type: 'success', title: '已创建', message: `分类「${label}」已创建` })
     }
     cancelEdit()
     emit('refresh')
+  } catch (err) {
+    pushToast({
+      type: 'error',
+      title: '保存失败',
+      message: err instanceof Error ? err.message : '无法保存分类'
+    })
   } finally {
     saving.value = false
   }

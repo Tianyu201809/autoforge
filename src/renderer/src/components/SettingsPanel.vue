@@ -6,6 +6,9 @@ import { DEFAULT_GLOBAL_SHORTCUT } from '../../../shared/accelerator'
 import ThemeToggle from './ThemeToggle.vue'
 import ShortcutRecorder from './ShortcutRecorder.vue'
 import { askConfirm } from '../composables/useConfirmDialog'
+import { useToast } from '../composables/useToast'
+
+const { pushToast } = useToast()
 
 const appVersion = window.api.versions.app
 
@@ -97,6 +100,12 @@ async function save(): Promise<void> {
     })
     // 窗口行为已在勾选时即时生效，保存时仅持久化其余配置
     saved.value = true
+  } catch (err) {
+    pushToast({
+      type: 'error',
+      title: '保存失败',
+      message: err instanceof Error ? err.message : '无法保存设置'
+    })
   } finally {
     saving.value = false
   }
@@ -134,10 +143,19 @@ async function saveEnv(): Promise<void> {
       ),
       isDefault: env.isDefault
     })
-    if (!updated) return
+    if (!updated) {
+      pushToast({ type: 'error', title: '保存失败', message: '无法更新环境配置' })
+      return
+    }
     environments.value = await window.autoforge.env.list()
     syncEditingEnv(envId)
     envSaved.value = true
+  } catch (err) {
+    pushToast({
+      type: 'error',
+      title: '保存失败',
+      message: err instanceof Error ? err.message : '无法保存环境'
+    })
   } finally {
     savingEnv.value = false
   }

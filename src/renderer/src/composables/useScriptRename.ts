@@ -25,6 +25,7 @@ export async function renameScript(scriptId: string, currentName: string): Promi
       })
       return false
     }
+    pushToast({ type: 'success', title: '已保存', message: `脚本已重命名为「${trimmed}」` })
     return true
   } catch (err) {
     pushToast({

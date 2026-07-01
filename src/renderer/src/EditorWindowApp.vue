@@ -6,6 +6,9 @@ import PopoutTitleBar from './components/PopoutTitleBar.vue'
 import ScriptWorkspaceSidebar from './components/ScriptWorkspaceSidebar.vue'
 import type { EditorSessionPayload } from './env.d.ts'
 import { useScriptFileEditor } from './composables/useScriptFileEditor'
+import { useToast } from './composables/useToast'
+
+const { pushToast } = useToast()
 
 const session = ref<EditorSessionPayload | null>(null)
 const pinned = ref(false)
@@ -89,12 +92,21 @@ async function dockBack(): Promise<void> {
 async function saveScript(): Promise<void> {
   if (!session.value || !editDirty.value || editReadonly.value) return
   saving.value = true
+  const path = activeFilePath.value
   try {
-    const path = activeFilePath.value
     const ok = await saveActiveFile()
     if (ok) {
       await window.autoforge.editor.notifySaved(session.value.scriptId, path)
+      pushToast({ type: 'success', title: '已保存', message: path })
+    } else {
+      pushToast({ type: 'error', title: '保存失败', message: `无法保存 ${path}` })
     }
+  } catch (err) {
+    pushToast({
+      type: 'error',
+      title: '保存失败',
+      message: err instanceof Error ? err.message : `无法保存 ${path}`
+    })
   } finally {
     saving.value = false
   }
