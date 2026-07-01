@@ -6,6 +6,7 @@ import { useWindowMaximized } from '../composables/useWindowMaximized'
 defineProps<{
   breadcrumb: string
   subtitle?: string
+  subtitleType?: 'success' | 'error'
   pinned?: boolean
 }>()
 
@@ -35,7 +36,11 @@ function close(): void {
       <span class="text-[13px] font-semibold sb-text-primary tracking-wide flex-shrink-0">Autoforge</span>
       <span class="sb-text-faint flex-shrink-0">/</span>
       <span class="text-[13px] sb-text-muted font-medium truncate">{{ breadcrumb }}</span>
-      <span v-if="subtitle" class="text-[11px] sb-text-faint truncate hidden sm:inline">{{ subtitle }}</span>
+      <span
+        v-if="subtitle"
+        class="text-[11px] truncate hidden sm:inline"
+        :class="subtitleType === 'error' ? 'text-red-400' : subtitleType === 'success' ? 'text-emerald-400' : 'sb-text-faint'"
+      >{{ subtitle }}</span>
     </div>
     <div class="flex items-center gap-1 flex-shrink-0" style="-webkit-app-region: no-drag">
       <button

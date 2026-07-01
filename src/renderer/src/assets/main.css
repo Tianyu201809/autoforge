@@ -296,6 +296,20 @@ body {
   box-shadow: inset 3px 0 0 color-mix(in srgb, #34d399 65%, transparent);
 }
 
+.detail-panel-status.is-save-success {
+  background: linear-gradient(
+    90deg,
+    color-mix(in srgb, #34d399 10%, var(--sb-bg-panel)) 0%,
+    color-mix(in srgb, #34d399 4%, var(--sb-bg-panel)) 100%
+  );
+  box-shadow: inset 3px 0 0 color-mix(in srgb, #34d399 65%, transparent);
+}
+
+.detail-panel-status.is-save-success .detail-panel-status-icon {
+  background: color-mix(in srgb, #34d399 12%, var(--sb-bg-inset));
+  border-color: color-mix(in srgb, #34d399 22%, var(--sb-border-subtle));
+}
+
 .detail-panel-status.is-error {
   background: linear-gradient(
     90deg,

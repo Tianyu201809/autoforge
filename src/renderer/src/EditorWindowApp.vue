@@ -6,9 +6,15 @@ import PopoutTitleBar from './components/PopoutTitleBar.vue'
 import ScriptWorkspaceSidebar from './components/ScriptWorkspaceSidebar.vue'
 import type { EditorSessionPayload } from './env.d.ts'
 import { useScriptFileEditor } from './composables/useScriptFileEditor'
-import { useToast } from './composables/useToast'
+import { usePanelSaveFeedback } from './composables/usePanelSaveFeedback'
 
-const { pushToast } = useToast()
+const { saveFeedback, showSaveFeedback } = usePanelSaveFeedback()
+const saveStatusSubtitle = computed(() => {
+  if (!saveFeedback.value) return undefined
+  return saveFeedback.value.message
+    ? `${saveFeedback.value.title} · ${saveFeedback.value.message}`
+    : saveFeedback.value.title
+})
 
 const session = ref<EditorSessionPayload | null>(null)
 const pinned = ref(false)
@@ -97,16 +103,16 @@ async function saveScript(): Promise<void> {
     const ok = await saveActiveFile()
     if (ok) {
       await window.autoforge.editor.notifySaved(session.value.scriptId, path)
-      pushToast({ type: 'success', title: '已保存', message: path })
+      showSaveFeedback('success', '已保存', path)
     } else {
-      pushToast({ type: 'error', title: '保存失败', message: `无法保存 ${path}` })
+      showSaveFeedback('error', '保存失败', `无法保存 ${path}`)
     }
   } catch (err) {
-    pushToast({
-      type: 'error',
-      title: '保存失败',
-      message: err instanceof Error ? err.message : `无法保存 ${path}`
-    })
+    showSaveFeedback(
+      'error',
+      '保存失败',
+      err instanceof Error ? err.message : `无法保存 ${path}`
+    )
   } finally {
     saving.value = false
   }
@@ -117,6 +123,8 @@ async function saveScript(): Promise<void> {
   <div class="flex flex-col h-full sb-bg-panel">
     <PopoutTitleBar
       :breadcrumb="editorBreadcrumb"
+      :subtitle="saveStatusSubtitle"
+      :subtitle-type="saveFeedback?.type"
       :pinned="pinned"
       @toggle-pin="togglePin"
       @dock="dockBack"

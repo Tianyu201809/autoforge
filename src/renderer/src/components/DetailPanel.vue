@@ -37,9 +37,9 @@ import { parseParamAttachments } from '../../../shared/param-attachments'
 import { defaultSchemaValue } from '../../../shared/schema-values'
 import { isExplicitEnvConfigValue, resolveEnvFieldValue } from '../../../shared/env-resolution'
 import { promptUnsavedFiles } from '../utils/unsaved-files-prompt'
-import { useToast } from '../composables/useToast'
+import { usePanelSaveFeedback } from '../composables/usePanelSaveFeedback'
 
-const { pushToast } = useToast()
+const { saveFeedback, showSaveFeedback, clearSaveFeedback } = usePanelSaveFeedback()
 
 type DetailPanelTab = 'detail' | 'params' | 'edit' | 'log' | 'config' | 'history'
 
@@ -305,6 +305,12 @@ const runResultSectionBrief = computed(() => {
 
 const statusLabel = computed(() => {
   if (isRunning.value) return { text: '运行中', class: 'text-emerald-400', icon: 'running' as const }
+  if (saveFeedback.value) {
+    if (saveFeedback.value.type === 'success') {
+      return { text: saveFeedback.value.title, class: 'text-emerald-400', icon: 'success' as const }
+    }
+    return { text: saveFeedback.value.title, class: 'text-red-400', icon: 'error' as const }
+  }
   if (props.script.status === 'error') return { text: '运行异常', class: 'text-red-400', icon: 'error' as const }
   return { text: '空闲', class: 'sb-text-muted', icon: 'idle' as const }
 })
@@ -326,6 +332,8 @@ function formatRunFinishedAt(iso: string): string {
 const sessionProgressSummary = computed(() => formatScriptRunProgressSummary(session.value?.runProgress))
 
 const headerStatusSubtext = computed(() => {
+  if (isRunning.value && sessionProgressSummary.value) return sessionProgressSummary.value
+  if (saveFeedback.value?.message) return saveFeedback.value.message
   if (sessionProgressSummary.value) return sessionProgressSummary.value
   if (session.value?.phase) return session.value.phase
   return props.script.meta
@@ -453,13 +461,13 @@ async function saveDetail(): Promise<void> {
     }
 
     emit('refresh')
-    pushToast({ type: 'success', title: '已保存', message: '脚本详情已保存' })
+    showSaveFeedback('success', '已保存', '脚本详情已保存')
   } catch (err) {
-    pushToast({
-      type: 'error',
-      title: '保存失败',
-      message: err instanceof Error ? err.message : '无法保存脚本详情'
-    })
+    showSaveFeedback(
+      'error',
+      '保存失败',
+      err instanceof Error ? err.message : '无法保存脚本详情'
+    )
   } finally {
     detailSaving.value = false
   }
@@ -477,13 +485,13 @@ async function saveParams(): Promise<void> {
     await window.autoforge.scripts.setParams(props.script.id, selectedEnvId.value, nextParams)
     emit('refresh')
     const envName = environments.value.find((e) => e.id === selectedEnvId.value)?.name ?? '当前环境'
-    pushToast({ type: 'success', title: '已保存', message: `${envName} 的运行参数已保存` })
+    showSaveFeedback('success', '已保存', `${envName} 的运行参数已保存`)
   } catch (err) {
-    pushToast({
-      type: 'error',
-      title: '保存失败',
-      message: err instanceof Error ? err.message : '无法保存运行参数'
-    })
+    showSaveFeedback(
+      'error',
+      '保存失败',
+      err instanceof Error ? err.message : '无法保存运行参数'
+    )
   } finally {
     detailSaving.value = false
   }
@@ -555,6 +563,9 @@ onUnmounted(() => {
 watch(
   () => props.script.id,
   async (newId, oldId) => {
+    if (oldId && newId !== oldId) {
+      clearSaveFeedback()
+    }
     if (oldId && newId !== oldId && editModeActive.value && isAnyDirty.value) {
       const choice = promptUnsavedFiles(getDirtyPaths(), '切换脚本', { allowStay: true })
       if (choice === 'cancel') {
@@ -682,19 +693,19 @@ async function saveEditMode(): Promise<void> {
       const dirtyPaths = getDirtyPaths()
       const ok = await saveAllDirtyFiles()
       if (!ok) {
-        pushToast({ type: 'error', title: '保存失败', message: '部分脚本文件未能写入磁盘' })
+        showSaveFeedback('error', '保存失败', '部分脚本文件未能写入磁盘')
         return
       }
       if (dirtyPaths.includes(MANIFEST_FILENAME)) emit('refresh')
-      pushToast({ type: 'success', title: '已保存', message: '脚本文件已保存' })
+      showSaveFeedback('success', '已保存', '脚本文件已保存')
     }
     editModeActive.value = false
   } catch (err) {
-    pushToast({
-      type: 'error',
-      title: '保存失败',
-      message: err instanceof Error ? err.message : '无法保存脚本文件'
-    })
+    showSaveFeedback(
+      'error',
+      '保存失败',
+      err instanceof Error ? err.message : '无法保存脚本文件'
+    )
   } finally {
     saving.value = false
   }
@@ -752,13 +763,13 @@ async function saveConfig(): Promise<void> {
     })
     emit('refresh')
     const envName = environments.value.find((e) => e.id === selectedEnvId.value)?.name ?? '当前环境'
-    pushToast({ type: 'success', title: '已保存', message: `${envName} 的配置与定时任务已保存` })
+    showSaveFeedback('success', '已保存', `${envName} 的配置与定时任务已保存`)
   } catch (err) {
-    pushToast({
-      type: 'error',
-      title: '保存失败',
-      message: err instanceof Error ? err.message : '无法保存配置'
-    })
+    showSaveFeedback(
+      'error',
+      '保存失败',
+      err instanceof Error ? err.message : '无法保存配置'
+    )
   } finally {
     saving.value = false
   }
@@ -833,8 +844,11 @@ async function handleRename(): Promise<void> {
   iconPickerOpen.value = false
   renaming.value = true
   try {
-    const ok = await renameScript(props.script.id, props.script.name)
-    if (ok) emit('refresh')
+    const newName = await renameScript(props.script.id, props.script.name)
+    if (newName) {
+      showSaveFeedback('success', '已保存', `脚本已重命名为「${newName}」`)
+      emit('refresh')
+    }
   } finally {
     renaming.value = false
   }
@@ -966,7 +980,17 @@ async function handleRename(): Promise<void> {
 
     <div
       class="detail-panel-status flex-shrink-0 border-b sb-border-subtle"
-      :class="isRunning ? 'is-running' : statusLabel.icon === 'error' ? 'is-error' : 'is-idle'"
+      :class="
+        isRunning
+          ? 'is-running'
+          : saveFeedback
+            ? saveFeedback.type === 'error'
+              ? 'is-error'
+              : 'is-save-success'
+            : statusLabel.icon === 'error'
+              ? 'is-error'
+              : 'is-idle'
+      "
     >
       <div class="flex items-center gap-3 px-4 py-2.5 min-w-0">
         <div class="detail-panel-status-icon flex-shrink-0">
@@ -990,10 +1014,11 @@ async function handleRename(): Promise<void> {
           />
         </div>
         <div class="min-w-0 flex-1">
-          <p class="text-[12px] font-semibold leading-tight sb-field-label">{{ statusLabel.text }}</p>
+          <p class="text-[12px] font-semibold leading-tight" :class="statusLabel.class">{{ statusLabel.text }}</p>
           <p
             v-if="headerStatusSubtext"
-            class="text-[11px] sb-text-muted truncate leading-tight mt-0.5"
+            class="text-[11px] truncate leading-tight mt-0.5"
+            :class="saveFeedback ? statusLabel.class : 'sb-text-muted'"
             :title="headerStatusSubtext"
           >
             {{ headerStatusSubtext }}

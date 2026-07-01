@@ -23,6 +23,9 @@ import type { CategoryDefinition, ScriptItem } from '../../../shared/types/scrip
 import { scriptLanguageBadge } from '../../../shared/script-language'
 import { resolveScriptIcon } from '../lib/script-icon-map'
 import { renameScript } from '../composables/useScriptRename'
+import { useToast } from '../composables/useToast'
+
+const { pushToast } = useToast()
 
 const props = defineProps<{
   script: ScriptItem
@@ -238,8 +241,11 @@ async function handleRename(): Promise<void> {
   closeMenu()
   renaming.value = true
   try {
-    const ok = await renameScript(props.script.id, props.script.name)
-    if (ok) emit('categoryChanged')
+    const newName = await renameScript(props.script.id, props.script.name)
+    if (newName) {
+      pushToast({ type: 'success', title: '已保存', message: `脚本已重命名为「${newName}」` })
+      emit('categoryChanged')
+    }
   } finally {
     renaming.value = false
   }

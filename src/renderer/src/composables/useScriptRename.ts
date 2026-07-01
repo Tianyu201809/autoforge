@@ -1,7 +1,8 @@
 import { askPrompt } from './usePromptDialog'
 import { useToast } from './useToast'
 
-export async function renameScript(scriptId: string, currentName: string): Promise<boolean> {
+/** 成功时返回新名称，取消/失败时返回 false */
+export async function renameScript(scriptId: string, currentName: string): Promise<string | false> {
   const { pushToast } = useToast()
   const name = await askPrompt({
     title: '重命名脚本',
@@ -25,8 +26,7 @@ export async function renameScript(scriptId: string, currentName: string): Promi
       })
       return false
     }
-    pushToast({ type: 'success', title: '已保存', message: `脚本已重命名为「${trimmed}」` })
-    return true
+    return trimmed
   } catch (err) {
     pushToast({
       type: 'error',
