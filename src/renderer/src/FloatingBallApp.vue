@@ -108,7 +108,6 @@ onUnmounted(() => {
   border: 0;
   border-radius: 9999px;
   overflow: hidden;
-  cursor: grab;
   background: transparent;
   outline: none;
   touch-action: none;
@@ -198,7 +197,6 @@ onUnmounted(() => {
 }
 
 .ball--active {
-  cursor: grabbing;
   animation: none;
 }
 
