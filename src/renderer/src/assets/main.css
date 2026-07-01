@@ -153,6 +153,40 @@ body {
   flex-shrink: 0;
 }
 
+.detail-panel-open-dir {
+  width: 36px;
+  height: 36px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 9px;
+  border: 1px solid color-mix(in srgb, var(--sb-accent-solid) 12%, var(--sb-border-subtle));
+  background: color-mix(in srgb, var(--sb-accent-solid) 5%, var(--sb-bg-inset));
+  color: var(--sb-text-secondary);
+  cursor: pointer;
+  flex-shrink: 0;
+  transition:
+    background 0.15s ease,
+    color 0.15s ease,
+    border-color 0.15s ease,
+    transform 0.12s ease;
+}
+
+.detail-panel-open-dir:hover {
+  color: var(--sb-accent-solid);
+  background: color-mix(in srgb, var(--sb-accent-solid) 12%, var(--sb-bg-inset));
+  border-color: color-mix(in srgb, var(--sb-accent-solid) 26%, var(--sb-border-subtle));
+}
+
+.detail-panel-open-dir:active {
+  transform: scale(0.96);
+}
+
+.detail-panel-open-dir-icon {
+  width: 17px;
+  height: 17px;
+}
+
 .detail-panel-run-toggle {
   width: 44px;
   height: 44px;

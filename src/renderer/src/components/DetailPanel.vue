@@ -887,6 +887,14 @@ async function handleRename(): Promise<void> {
       <div class="detail-panel-header-tools">
         <button
           type="button"
+          class="detail-panel-open-dir"
+          title="打开目录"
+          @click="openScriptLocation"
+        >
+          <FolderOpen class="detail-panel-open-dir-icon" :stroke-width="1.75" />
+        </button>
+        <button
+          type="button"
           class="detail-panel-run-toggle"
           :class="isRunning ? 'is-running' : 'is-idle'"
           :title="isRunning ? '停止' : '运行'"
@@ -1042,14 +1050,6 @@ async function handleRename(): Promise<void> {
       </div>
 
       <div class="detail-panel-footer flex-shrink-0 px-3 flex items-center gap-1.5">
-        <button
-          type="button"
-          class="h-7 px-2 flex items-center gap-1 rounded-md text-[11px] sb-text-muted border sb-border hover:sb-text-primary hover:sb-bg-hover transition-colors"
-          @click="openScriptLocation"
-        >
-          <FolderOpen class="w-3 h-3" :stroke-width="1.5" />
-          打开目录
-        </button>
         <button
           type="button"
           class="h-7 px-2 flex items-center gap-1 rounded-md text-[11px] text-red-400/80 border sb-border hover:text-red-400 hover:border-red-500/30 transition-colors"
