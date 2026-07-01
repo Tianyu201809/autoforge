@@ -1,4 +1,5 @@
 import { bootstrapUtf8 } from '../shared/encoding'
+import { IPC } from '../shared/ipc-channels'
 
 bootstrapUtf8()
 
@@ -7,7 +8,12 @@ import { join } from 'path'
 import { closeDatabase, initDatabase } from './db/database'
 import { getAppIconImage } from './services/app-icon'
 import { registerIpcHandlers } from './ipc/handlers'
-import { attachWindowMaximizeEvents } from './services/window-chrome'
+import {
+  applyMainWindowPin,
+  attachWindowMaximizeEvents,
+  isMainWindowPinned,
+  toggleMainWindowPin
+} from './services/window-chrome'
 import {
   applyWindowMode,
   attachMainWindowModeHandlers,
@@ -38,6 +44,7 @@ function createWindow(): void {
   })
 
   attachWindowMaximizeEvents(mainWindow)
+  applyMainWindowPin(mainWindow)
   attachMainWindowModeHandlers(mainWindow)
 
   mainWindow.webContents.on('did-fail-load', (_event, code, desc, url) => {
@@ -110,6 +117,15 @@ app.whenReady().then(async () => {
 
   ipcMain.handle('window:is-maximized', (event) => {
     return BrowserWindow.fromWebContents(event.sender)?.isMaximized() ?? false
+  })
+
+  ipcMain.handle(IPC.WINDOW_TOGGLE_PIN, (event) => {
+    const win = BrowserWindow.fromWebContents(event.sender)
+    return toggleMainWindowPin(win)
+  })
+
+  ipcMain.handle(IPC.WINDOW_IS_PINNED, () => {
+    return isMainWindowPinned()
   })
 
   createWindow()

@@ -62,6 +62,8 @@ const api = {
   maximize: (): void => ipcRenderer.send('window:maximize'),
   close: (): void => ipcRenderer.send('window:close'),
   isMaximized: (): Promise<boolean> => ipcRenderer.invoke('window:is-maximized'),
+  isPinned: (): Promise<boolean> => ipcRenderer.invoke(IPC.WINDOW_IS_PINNED),
+  togglePin: (): Promise<boolean> => ipcRenderer.invoke(IPC.WINDOW_TOGGLE_PIN),
   onMaximizedChange: (callback: (maximized: boolean) => void): (() => void) => {
     const handler = (_event: IpcRendererEvent, maximized: boolean) => callback(maximized)
     ipcRenderer.on('window:maximized-changed', handler)

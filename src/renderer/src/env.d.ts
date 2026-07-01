@@ -71,6 +71,8 @@ export interface WindowApi {
   maximize: () => void
   close: () => void
   isMaximized: () => Promise<boolean>
+  isPinned: () => Promise<boolean>
+  togglePin: () => Promise<boolean>
   onMaximizedChange: (callback: (maximized: boolean) => void) => () => void
   show: () => Promise<void>
   hide: () => Promise<void>

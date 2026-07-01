@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { onMounted, onUnmounted, ref } from 'vue'
-import { Copy, CircleDot, Minus, Notebook, PanelBottom, Square, X } from 'lucide-vue-next'
+import { Copy, CircleDot, Minus, Notebook, PanelBottom, Pin, PinOff, Square, X } from 'lucide-vue-next'
 import appIcon from '@build/icon.png?url'
 import ThemeToggle from './ThemeToggle.vue'
 import { useWindowMaximized } from '../composables/useWindowMaximized'
@@ -15,10 +15,12 @@ const { active: scratchpadActive, toggle: toggleScratchpad } = useScratchpad()
 
 const floatingMode = ref(false)
 const trayMode = ref(false)
+const pinned = ref(false)
 
 let offModeChange: (() => void) | undefined
 
 onMounted(async () => {
+  pinned.value = await window.api.isPinned()
   const mode = await window.api.getMode()
   floatingMode.value = !!mode.floatingMode
   trayMode.value = !!mode.trayMode
@@ -35,6 +37,10 @@ onUnmounted(() => {
 async function toggleFloating(): Promise<void> {
   const next = await window.api.setMode({ floatingMode: !floatingMode.value })
   floatingMode.value = !!next.floatingMode
+}
+
+async function togglePin(): Promise<void> {
+  pinned.value = await window.api.togglePin()
 }
 
 function minimize(): void {
@@ -72,6 +78,16 @@ function close(): void {
         <Notebook class="w-4 h-4" :stroke-width="1.5" />
       </button>
       <ThemeToggle />
+      <button
+        type="button"
+        class="w-8 h-8 flex items-center justify-center rounded-md transition-colors"
+        :class="pinned ? 'text-[var(--sb-accent-solid)] sb-bg-inset' : 'sb-text-muted hover:sb-text-primary sb-bg-hover'"
+        :title="pinned ? '取消置顶' : '窗口置顶'"
+        @click="togglePin"
+      >
+        <PinOff v-if="pinned" class="w-4 h-4" :stroke-width="1.5" />
+        <Pin v-else class="w-4 h-4" :stroke-width="1.5" />
+      </button>
       <button
         type="button"
         class="w-8 h-8 flex items-center justify-center rounded-md transition-colors"

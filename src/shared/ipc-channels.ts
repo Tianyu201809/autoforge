@@ -126,6 +126,8 @@ export const IPC = {
   WINDOW_SHOW: 'window:show',
   WINDOW_HIDE: 'window:hide',
   WINDOW_TOGGLE: 'window:toggle',
+  WINDOW_TOGGLE_PIN: 'window:toggle-pin',
+  WINDOW_IS_PINNED: 'window:is-pinned',
   WINDOW_GET_MODE: 'window:get-mode',
   WINDOW_SET_MODE: 'window:set-mode',
   EVENT_WINDOW_MODE: 'event:window-mode'
