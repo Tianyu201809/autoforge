@@ -1,25 +1,15 @@
 # Autoforge 脚本规范参考
 
-来源：[docs/script-spec.md](../../docs/script-spec.md)
+来源：[docs/Autoforge脚本开发规范文档说明.md](../../../docs/Autoforge脚本开发规范文档说明.md)
 
 ## 脚本包结构
 
 Autoforge 脚本是**目录包**，必须包含 `autoforge.json` 与入口文件；入口必须导出 `run` 函数。
 
-**JavaScript：**
-
 ```
 my-script/
 ├── autoforge.json
 └── index.mjs
-```
-
-**Python：**
-
-```
-my-script/
-├── autoforge.json    # "language": "python", "entry": "index.py"
-└── index.py
 ```
 
 ## autoforge.json 字段
@@ -30,14 +20,13 @@ my-script/
 | `name` | string | ✅ | 显示名称 |
 | `description` | string | | 描述 |
 | `version` | string | | 语义化版本，默认 `1.0.0` |
-| `entry` | string | | 入口文件；JS 默认 `index.mjs`，Python 常用 `index.py` |
-| `language` | string | | `javascript`（默认）或 `python`；省略时按 entry 扩展名推断 |
+| `entry` | string | | 入口文件，默认 `index.mjs` |
 | `category` | string | | `browser` / `local` / `scrape` / `file` / `system` |
 | `categoryLabel` | string | | 分类显示名 |
 | `icon` | string | | UI 图标 |
 | `env` | EnvVarDefinition[] | | 环境变量 schema |
 | `params` | ParamDefinition[] | | 运行业务参数 schema |
-| `dependencies` | Record<string,string> | | JS：npm 依赖；Python：pip 依赖（安装至 `.venv`） |
+| `dependencies` | Record<string,string> | | npm 依赖，运行前自动安装 |
 | `browser` | `{ headless?: boolean }` | | 浏览器启动选项；`headless: true` 无头，默认 `false` |
 
 ### 浏览器无头模式
@@ -57,8 +46,7 @@ my-script/
 | 用途 | 固定环境配置：账号、密码、API 地址、Token | 业务输入：订单号、日期、任务 ID、待处理文件 |
 | 变化频率 | 按环境长期固定 | 每次运行可能不同 |
 | 平台位置 | 脚本详情 → **配置** Tab | 脚本详情 → **详情** Tab |
-| JS 访问 | `ctx.env.KEY` | `ctx.params.KEY` |
-| Python 访问 | `ctx.env.get("KEY")` | `ctx.params.get("KEY")` |
+| 脚本访问 | `ctx.env.KEY` | `ctx.params.KEY` |
 | 持久化 | 按环境（configByEnv） | 按环境（paramsByEnv） |
 
 选用原则：
@@ -67,34 +55,106 @@ my-script/
 - 每次任务/业务才变 → `params`
 - 每次运行需上传的本地文件 → `params` 且 `type: "attachment"`
 
-## env / params schema
+## env schema
 
 | 字段 | 类型 | 说明 |
 |------|------|------|
-| `key` | string | 变量名 |
+| `key` | string | 变量名，`ctx.env[key]` |
 | `label` | string | UI 标签 |
 | `description` | string | 说明 |
 | `required` | boolean | 是否必填 |
 | `secret` | boolean | 敏感值（仅 `text` 有效） |
 | `type` | 见下 | 默认 `text` |
 | `options` | `(string \| {label,value})[]` | `select`/`radio`/`checkbox` 候选项 |
-| `default` | string | 必须为字符串 |
+| `default` | string | 见下表 |
 
-**`type` 取值：** `text`、`textarea`、`number`、`select`、`radio`、`checkbox`、`boolean`、`attachment`。
+**`type` 取值（与 params 相同）：** `text`、`textarea`、`number`、`select`、`radio`、`checkbox`、`boolean`、`attachment`。`ctx.env[key]` **始终是字符串**；复合类型需脚本内解析。
 
-- `checkbox` / `attachment`：值为 JSON 数组字符串
-- `boolean`：值为 `"true"` / `"false"`
+```json
+{
+  "env": [
+    {
+      "key": "API_URL",
+      "label": "API 地址",
+      "required": true,
+      "default": "https://api.example.com"
+    },
+    {
+      "key": "USE_MOCK",
+      "label": "Mock 模式",
+      "type": "boolean",
+      "default": "false"
+    }
+  ]
+}
+```
+
+合并优先级：`autoforge.json 默认值` → `全局 Profile 共享变量` → `脚本专属配置（最高）`
+
+env 的 `attachment` 缓存路径：`{userData}/script-inputs/{scriptId}/env/{envId}/{key}/`（按环境分别保存）。
+
+## params schema
+
+| 字段 | 类型 | 说明 |
+|------|------|------|
+| `key` | string | 参数名，`ctx.params[key]` |
+| `label` | string | UI 标签 |
+| `description` | string | 说明 |
+| `required` | boolean | 是否必填 |
+| `secret` | boolean | 敏感值（仅 `text` 有效） |
+| `type` | 见下 | 默认 `text` |
+| `options` | `(string \| {label,value})[]` | `select`/`radio`/`checkbox` 候选项 |
+| `default` | string | 见下表 |
+
+**`type` 取值：** `text`（单行）、`textarea`（多行）、`number`（数字）、`select`（下拉单选）、`radio`（单选组）、`checkbox`（多选组，值为 JSON 数组字符串，默认 `[]`）、`boolean`（开关，值 `"true"`/`"false"`，默认 `"false"`）、`attachment`（文件，JSON 数组字符串，默认 `[]`）。`select`/`radio`/`checkbox` 需配 `options`。
+
+合并优先级：`autoforge.json 默认值` → `上次保存值` → `本次运行传入（最高）`
+
+定时任务、卡片快捷启动使用上次保存的参数；必填未填则失败并提示在「详情」Tab 补全。
+
+### 附件类型（`type: "attachment"`）
+
+| | **`text`（默认）** | **`attachment`** |
+|---|---|---|
+| UI | 单行文本 | 文件多选 + 附件列表 |
+| `ctx.params[key]` | 普通字符串 | **JSON 数组字符串** |
+| 必填校验 | 字符串非空 | 至少 1 个有效附件 |
+| `secret` | 支持 | 不适用 |
+
+存储：平台复制到 `{userData}/script-inputs/{scriptId}/{paramKey}/`，同名自动重命名。
+
+```typescript
+interface ParamAttachmentItem {
+  name: string   // 缓存目录中的文件名
+  path: string   // 绝对路径，可直接 fs.readFile
+  size?: number
+}
+```
+
+平台运行前校验附件路径是否存在；取消或移除附件时会清理不再引用的缓存。
+
+## 平台配置
+
+### 配置 Tab（env）
+
+1. 选择运行环境（开发/测试/生产）
+2. 填写账号、密码、URL 等固定环境配置
+3. 保存配置 — 每个脚本、每个环境独立
+
+### 详情 Tab（params）
+
+1. 选择运行环境（决定使用哪套 env）
+2. 填写运行参数：文本直接输入；附件「选择文件」多选上传
+3. 点击「运行」— 参数按当前环境自动保存，切换环境后加载该环境下已保存的值
 
 ## run(ctx) 上下文
-
-**JavaScript：**
 
 ```typescript
 interface ScriptRunContext {
   sessionId: string
   scriptId: string
   env: Record<string, string>
-  params: Record<string, string>
+  params: Record<string, string> // attachment 为 JSON 数组字符串
   signal: AbortSignal
   log: (level: 'INFO' | 'WARN' | 'ERROR', message: string) => void
   stage: (input: { name: string; label?: string; message?: string }) => void
@@ -113,13 +173,23 @@ interface ScriptRunContext {
 }
 ```
 
-**Python：** 同上语义；`ctx.signal.aborted` 为 bool；`ctx.sdk.paths.script_dir` / `user_data` 为 snake_case。
-
 ### 日志 / 阶段 / 进度 / 返回值 / 取消
 
-- 返回值 → `session.result`；抛错 → failed
+- `ctx.log('INFO'|'WARN'|'ERROR', message)` → UI 日志面板
+- `ctx.stage({ name, label?, message? })` → 自定义执行阶段
+- `ctx.progress({ scope: 'task'|'total', current, total?, label?, message?, unit? })` → 单任务或总进度
+- 控制行：`@autoforge/ctl ` + JSON（见 `src/shared/script-progress.ts`）
+- 返回值 → `session.result`；抛 Error → failed
 - UI 展示最近一次**成功**运行的返回值
-- 监听 abort；浏览器脚本 abort 时关闭 browser
+- 监听 `ctx.signal.aborted`；浏览器脚本 abort 时关闭 browser
+
+### 返回值展示格式
+
+| 返回值类型 | UI 展示 |
+|-----------|---------|
+| 对象、数组 | JSON（缩进 2 空格） |
+| 字符串 | 原样文本 |
+| `null` / `undefined` | 不显示「运行结果」 |
 
 ### 产物目录字段
 
@@ -132,62 +202,24 @@ interface ScriptRunContext {
 5. `exportDir`
 6. `savedTo`
 
+不显示的情况：无返回值、非对象、字段为空、最近一次运行失败。
+
 ## 依赖管理
 
-| 语言 | 脚本级 | 全局 |
-|------|--------|------|
-| JavaScript | `dependencies` → 脚本目录 `npm install` | 设置 → 全局 npm → `userData/runtime` |
-| Python | `dependencies` → pip 安装至脚本 `.venv` | 设置 → 全局 Python 依赖 → `userData/runtime-python` |
-
-Python 可在 **设置 → Python** 配置 pip 镜像与解释器路径。
+- **脚本级**：`autoforge.json` 的 `dependencies`，首次运行前 `npm install`
+- **全局**：设置 → 全局 npm 依赖 → `userData/runtime/node_modules`
 
 ## 上传方式
 
 1. **脚本包目录**：含 `autoforge.json` 的文件夹
-2. **单文件**：`.js` / `.mjs` / `.cjs` / `.py`，平台自动包装
+2. **单文件**：`.js` / `.mjs` / `.cjs`，平台自动包装
 
-## 本仓库示例（examples/）
+## 本仓库示例（packages/）
 
-| 路径 | 语言 | 说明 |
-|------|------|------|
-| `examples/hello-world/` | JS | env + params 最小示例 |
-| `examples/hello-world-py/` | Python | stage / progress / log |
-| `examples/playwright-py/` | Python | Playwright 浏览器 + env + params |
-
-## 脚本内解析示例
-
-**JavaScript — checkbox：**
-
-```javascript
-function parseCheckbox(raw) {
-  if (!raw?.trim()) return []
-  try {
-    const v = JSON.parse(raw)
-    return Array.isArray(v) ? v.filter((x) => typeof x === 'string') : []
-  } catch {
-    return []
-  }
-}
-```
-
-**Python — checkbox：**
-
-```python
-import json
-
-def parse_checkbox(raw: str) -> list[str]:
-    if not raw or not raw.strip():
-        return []
-    try:
-        v = json.loads(raw)
-        return [x for x in v if isinstance(x, str)] if isinstance(v, list) else []
-    except json.JSONDecodeError:
-        return []
-```
-
-**Python — boolean / number：**
-
-```python
-dry_run = ctx.params.get("DRY_RUN") == "true"
-limit = int(ctx.params.get("LIMIT") or "10")
-```
+| 包 | 类型 | 说明 |
+|---|---|---|
+| `packages/crowdsourcing-token/` | JS | 浏览器自动化 + env + dependencies |
+| `packages/ai-news-fetch/` | JS | 数据采集 + env + params + 产物落盘 |
+| `packages/floorplan-export/` | TS | 文件导出 + env + params + 本地测试 |
+| `packages/resume-screening/` | TS | 附件 + LLM + outputDir + HTML 报告 |
+| `packages/model-preview/` | TS | 浏览器预览 + params |
