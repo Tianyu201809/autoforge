@@ -71,7 +71,11 @@ export class ScriptStore {
 
   addScript(meta: Omit<ScriptMeta, 'starred' | 'archived'>): ScriptMeta {
     const repos = this.ensureInitialized()
-    repos.scripts.insert(meta)
+    const withImported: Omit<ScriptMeta, 'starred' | 'archived'> = {
+      ...meta,
+      importedAt: meta.importedAt ?? new Date().toISOString()
+    }
+    repos.scripts.insert(withImported)
     const script = repos.scripts.getById(meta.id)!
     return this.applyPreference(script)
   }

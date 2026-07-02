@@ -119,6 +119,9 @@ const filteredScripts = computed(() => {
       if (sortBy.value === 'recentRun') {
         return (b.recentRunAt ?? '').localeCompare(a.recentRunAt ?? '')
       }
+      if (sortBy.value === 'importedAt') {
+        return (b.importedAt ?? '').localeCompare(a.importedAt ?? '')
+      }
       return a.name.localeCompare(b.name, 'zh-CN')
     })
   }

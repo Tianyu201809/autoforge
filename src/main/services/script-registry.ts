@@ -1,6 +1,16 @@
 import type { ScriptMeta } from '../../shared/types/script'
+import { existsSync, statSync } from 'fs'
 import { scriptStore } from './script-store'
 import { scriptWorkspace } from './script-workspace'
+
+function resolveWorkspaceImportedAt(workspacePath: string): string {
+  if (workspacePath && existsSync(workspacePath)) {
+    const stat = statSync(workspacePath)
+    const time = stat.birthtimeMs > 0 ? stat.birthtime : stat.mtime
+    return time.toISOString()
+  }
+  return new Date().toISOString()
+}
 
 export class ScriptRegistry {
   listAll(): ScriptMeta[] {
@@ -49,7 +59,10 @@ export class ScriptRegistry {
       try {
         const manifest = scriptWorkspace.readManifest(scriptWorkspace.getScriptDir(id))
         const meta = scriptWorkspace.manifestToMeta(id, manifest)
-        scriptStore.addScript(meta as ScriptMeta)
+        scriptStore.addScript({
+          ...meta,
+          importedAt: resolveWorkspaceImportedAt(meta.workspacePath)
+        } as ScriptMeta)
       } catch {
         /* skip invalid packages */
       }

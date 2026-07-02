@@ -1,6 +1,7 @@
-import { existsSync, mkdirSync } from 'fs'
+import { existsSync, mkdirSync, statSync } from 'fs'
 import { join } from 'path'
 import { MIGRATION_001 } from './migrations/001-initial'
+import { MIGRATION_002 } from './migrations/002-script-imported-at'
 import { migrateFromJsonIfNeeded } from './migrate-from-json'
 import { openSqliteDatabase, type SqliteDatabase } from './sqlite-adapter'
 
@@ -59,6 +60,35 @@ function runMigrations(database: SqliteDatabase): void {
     database.exec(MIGRATION_001)
     database.prepare('INSERT INTO schema_migrations (version) VALUES (?)').run(1)
     seedDefaults(database)
+  }
+
+  const versionRow = database.prepare('SELECT MAX(version) AS version FROM schema_migrations').get() as {
+    version: number | null
+  }
+  const currentVersion = versionRow.version ?? 0
+
+  if (currentVersion < 2) {
+    database.exec(MIGRATION_002)
+    backfillImportedAt(database)
+    database.prepare('INSERT INTO schema_migrations (version) VALUES (?)').run(2)
+  }
+}
+
+/** 为已有脚本回填 imported_at（优先工作区目录创建时间） */
+function backfillImportedAt(database: SqliteDatabase): void {
+  const rows = database
+    .prepare('SELECT id, workspace_path, imported_at FROM scripts WHERE imported_at IS NULL')
+    .all() as { id: string; workspace_path: string; imported_at: string | null }[]
+
+  const update = database.prepare('UPDATE scripts SET imported_at = ? WHERE id = ?')
+  for (const row of rows) {
+    let importedAt = new Date(0).toISOString()
+    if (row.workspace_path && existsSync(row.workspace_path)) {
+      const stat = statSync(row.workspace_path)
+      const time = stat.birthtimeMs > 0 ? stat.birthtime : stat.mtime
+      importedAt = time.toISOString()
+    }
+    update.run(importedAt, row.id)
   }
 }
 

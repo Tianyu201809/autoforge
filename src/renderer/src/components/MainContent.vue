@@ -73,7 +73,8 @@ const statCards = [
 
 const sortLabels: Record<ScriptSortBy, string> = {
   name: '名称',
-  recentRun: '最近运行'
+  recentRun: '最近运行',
+  importedAt: '上传时间'
 }
 
 function patchFilter(patch: Partial<ScriptListFilter>): void {

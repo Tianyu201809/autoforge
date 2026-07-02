@@ -49,6 +49,8 @@ export interface ScriptMeta {
   iconBg: string
   iconBorder: string
   version: string
+  /** 导入/上传到 Autoforge 的时间（ISO 8601） */
+  importedAt?: string
   starred: boolean
   archived: boolean
   recentRunAt?: string
@@ -246,7 +248,7 @@ export interface CategoryItem {
 }
 
 export type ScriptStatusFilter = 'all' | 'running' | 'idle' | 'error'
-export type ScriptSortBy = 'name' | 'recentRun'
+export type ScriptSortBy = 'name' | 'recentRun' | 'importedAt'
 
 export interface ScriptListFilter {
   status: ScriptStatusFilter
