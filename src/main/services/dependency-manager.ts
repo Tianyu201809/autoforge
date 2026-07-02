@@ -5,10 +5,14 @@ import { decodeUtf8, spawnUtf8Command, UTF8 } from '../../shared/encoding'
 import { LEGACY_MANIFEST_FILENAME, MANIFEST_FILENAME } from '../../shared/script-contract'
 import type { ScriptLanguage } from '../../shared/script-language'
 import type { DependencyInstallResult, GlobalDependency } from '../../shared/types/script'
-import { installPythonScriptDeps } from './python-script-runner'
+import { needsScriptDepsInstall, writeDepsLock } from './script-deps-cache'
 import { pythonDependencyManager } from './python-dependency-manager'
 import { resolvePythonExecutable } from './python-resolver'
 import { scriptStore } from './script-store'
+
+interface InstallScriptDepsOptions {
+  force?: boolean
+}
 
 function resolveManifestPath(scriptDir: string): string | null {
   const primary = join(scriptDir, MANIFEST_FILENAME)
@@ -19,14 +23,12 @@ function resolveManifestPath(scriptDir: string): string | null {
 }
 
 export class DependencyManager {
-  /** 在脚本目录安装 manifest 中声明的依赖 */
+  /** 在脚本目录安装 manifest 中声明的依赖；默认在依赖未变更且环境就绪时跳过 */
   async installScriptDeps(
     scriptDir: string,
-    language: ScriptLanguage = 'javascript'
+    language: ScriptLanguage = 'javascript',
+    options: InstallScriptDepsOptions = {}
   ): Promise<DependencyInstallResult> {
-    if (language === 'python') {
-      return installPythonScriptDeps(scriptDir)
-    }
     const manifestPath = resolveManifestPath(scriptDir)
     if (!manifestPath) {
       return { ok: false, stdout: '', stderr: `缺少 ${MANIFEST_FILENAME}` }
@@ -35,21 +37,41 @@ export class DependencyManager {
     const manifest = JSON.parse(readFileSync(manifestPath, UTF8)) as {
       dependencies?: Record<string, string>
     }
-    const deps = manifest.dependencies
-    if (!deps || !Object.keys(deps).length) {
+    const deps = manifest.dependencies ?? {}
+    if (!Object.keys(deps).length) {
       return { ok: true, stdout: '无依赖需要安装', stderr: '' }
     }
 
-    const pkgPath = join(scriptDir, 'package.json')
-    const pkg = {
-      name: `autoforge-script-${Date.now()}`,
-      private: true,
-      type: 'module',
-      dependencies: deps
+    const pipIndexUrl = language === 'python' ? scriptStore.getConfig().python?.pipIndexUrl : undefined
+    if (!options.force && !needsScriptDepsInstall(scriptDir, language, deps, pipIndexUrl)) {
+      return { ok: true, stdout: '依赖已就绪，跳过安装', stderr: '' }
     }
-    writeFileSync(pkgPath, JSON.stringify(pkg, null, 2), UTF8)
 
-    return this.runNpmInstall(scriptDir)
+    let result: DependencyInstallResult
+    if (language === 'python') {
+      const python = await resolvePythonExecutable(scriptStore.getConfig().python)
+      result = await pythonDependencyManager.installScriptDeps(scriptDir, python, pipIndexUrl)
+    } else {
+      const pkgPath = join(scriptDir, 'package.json')
+      const pkg = {
+        name: 'autoforge-script',
+        private: true,
+        type: 'module',
+        dependencies: deps
+      }
+      writeFileSync(pkgPath, JSON.stringify(pkg, null, 2), UTF8)
+      result = await this.runNpmInstall(scriptDir)
+    }
+
+    if (result.ok) {
+      writeDepsLock(scriptDir, {
+        dependencies: deps,
+        language,
+        ...(language === 'python' && pipIndexUrl?.trim() ? { pipIndexUrl: pipIndexUrl.trim() } : {})
+      })
+    }
+
+    return result
   }
 
   /** 安装全局运行时依赖 */

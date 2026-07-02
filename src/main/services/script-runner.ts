@@ -14,6 +14,7 @@ import {
   type ScriptControlMessage
 } from '../../shared/script-progress'
 import { dependencyManager } from './dependency-manager'
+import { needsScriptDepsInstall } from './script-deps-cache'
 import { executionHistory } from './execution-history'
 import { createLog, logBus } from './log-bus'
 import { ScriptLifecycleBus } from './script-lifecycle'
@@ -24,7 +25,7 @@ import { scriptStore } from './script-store'
 import { scriptWorkspace } from './script-workspace'
 import { formatScriptRunProgressSummary } from '../../shared/script-progress'
 import { broadcastToRenderers } from './window-broadcast'
-import { installPythonScriptDeps, killPythonProcess, runPythonScript } from './python-script-runner'
+import { killPythonProcess, runPythonScript } from './python-script-runner'
 import { resolvePythonExecutable } from './python-resolver'
 
 interface ActiveSession {
@@ -182,15 +183,7 @@ export class ScriptRunnerService {
         throw new Error(`入口文件不存在: ${script.entry}`)
       }
 
-      if (script.dependencies && Object.keys(script.dependencies).length) {
-        this.setPhase(session, 'installing-deps', '安装脚本依赖…')
-        log('INFO', '正在安装 npm 依赖…')
-        const result = await dependencyManager.installScriptDeps(script.workspacePath, script.language)
-        if (!result.ok) {
-          throw new Error(`依赖安装失败: ${result.stderr || result.stdout}`)
-        }
-        log('INFO', '依赖安装完成')
-      }
+      await this.ensureScriptDeps(session, script, log)
 
       this.setPhase(session, 'starting', '加载脚本模块…')
       this.addScriptModulePaths(script.workspacePath)
@@ -259,15 +252,7 @@ export class ScriptRunnerService {
 
       await resolvePythonExecutable(scriptStore.getConfig().python)
 
-      if (script.dependencies && Object.keys(script.dependencies).length) {
-        this.setPhase(session, 'installing-deps', '安装脚本依赖…')
-        log('INFO', '正在安装 pip 依赖…')
-        const result = await installPythonScriptDeps(script.workspacePath)
-        if (!result.ok) {
-          throw new Error(`依赖安装失败: ${result.stderr || result.stdout}`)
-        }
-        log('INFO', '依赖安装完成')
-      }
+      await this.ensureScriptDeps(session, script, log)
 
       this.setPhase(session, 'starting', '启动 Python 脚本…')
       this.setPhase(session, 'running', '脚本运行中…')
@@ -317,6 +302,31 @@ export class ScriptRunnerService {
       this.pushLog(session.id, 'ERROR', message)
       this.failSession(session.id, message)
     }
+  }
+
+  /** 仅在依赖缺失或 manifest 变更时安装脚本依赖 */
+  private async ensureScriptDeps(
+    session: RunSession,
+    script: ScriptMeta,
+    log: (level: LogLine['level'], message: string) => void
+  ): Promise<void> {
+    const deps = script.dependencies
+    if (!deps || !Object.keys(deps).length) return
+
+    const pipIndexUrl =
+      script.language === 'python' ? scriptStore.getConfig().python?.pipIndexUrl : undefined
+    if (!needsScriptDepsInstall(script.workspacePath, script.language, deps, pipIndexUrl)) {
+      log('INFO', '依赖已就绪，跳过安装')
+      return
+    }
+
+    this.setPhase(session, 'installing-deps', '安装脚本依赖…')
+    log('INFO', script.language === 'python' ? '正在安装 pip 依赖…' : '正在安装 npm 依赖…')
+    const result = await dependencyManager.installScriptDeps(script.workspacePath, script.language)
+    if (!result.ok) {
+      throw new Error(`依赖安装失败: ${result.stderr || result.stdout}`)
+    }
+    log('INFO', '依赖安装完成')
   }
 
   /** 将脚本 node_modules 与全局 runtime node_modules 加入模块搜索路径 */

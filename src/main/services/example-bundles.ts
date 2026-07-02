@@ -59,6 +59,14 @@ export function importBundledExample(exampleId: string): ScriptMeta {
   return scriptWorkspace.importFromDirectory(example.sourcePath)
 }
 
+/** 去掉 Cursor skill 文件顶部的 YAML frontmatter */
+function stripYamlFrontmatter(markdown: string): string {
+  if (!markdown.startsWith('---')) return markdown
+  const end = markdown.indexOf('---', 3)
+  if (end === -1) return markdown
+  return markdown.slice(end + 3).replace(/^\s*\n/, '')
+}
+
 /** 读取开发规范 markdown（docs/script-spec.md） */
 export function readDevGuideMarkdown(): string {
   const candidates = app.isPackaged
@@ -71,4 +79,18 @@ export function readDevGuideMarkdown(): string {
     }
   }
   return '# 脚本开发规范\n\n未找到 script-spec.md'
+}
+
+/** 读取脚本创建流程（skills/autoforge-script-create/SKILL.md） */
+export function readDevGuideSkillCreateMarkdown(): string {
+  const candidates = app.isPackaged
+    ? [join(process.resourcesPath, 'skills', 'autoforge-script-create', 'SKILL.md')]
+    : [join(app.getAppPath(), 'skills', 'autoforge-script-create', 'SKILL.md')]
+
+  for (const path of candidates) {
+    if (existsSync(path)) {
+      return stripYamlFrontmatter(readFileSync(path, UTF8))
+    }
+  }
+  return '# 脚本创建流程\n\n未找到 autoforge-script-create/SKILL.md'
 }

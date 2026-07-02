@@ -182,6 +182,7 @@ export interface AutoforgeApi {
   }
   devGuide: {
     get: () => Promise<string>
+    getSkillCreate: () => Promise<string>
   }
   system: {
     memory: () => Promise<SystemMemoryInfo>

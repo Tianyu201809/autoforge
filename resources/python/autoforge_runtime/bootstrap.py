@@ -9,7 +9,7 @@ import sys
 import traceback
 
 from autoforge_runtime.context import ScriptContext
-from autoforge_runtime.protocol import emit_error, emit_result
+from autoforge_runtime.protocol import _ensure_utf8_stdio, emit_error, emit_result
 
 
 def load_module_from_path(entry_path: str):
@@ -65,6 +65,7 @@ async def _main_async(ctx: ScriptContext, entry_path: str):
 
 
 def main() -> None:
+    _ensure_utf8_stdio()
     entry_path = os.environ.get("AUTOFORGE_ENTRY_PATH")
     ctx_json = os.environ.get("AUTOFORGE_CTX_JSON")
     if not entry_path or not ctx_json:

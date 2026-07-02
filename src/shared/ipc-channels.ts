@@ -84,6 +84,7 @@ export const IPC = {
   EXAMPLES_LIST: 'examples:list',
   EXAMPLES_IMPORT: 'examples:import',
   DEV_GUIDE_GET: 'dev-guide:get',
+  DEV_GUIDE_SKILL_CREATE_GET: 'dev-guide:skill-create:get',
 
 
 

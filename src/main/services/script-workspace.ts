@@ -30,6 +30,7 @@ import { scriptStore } from './script-store'
 export { MANIFEST_FILENAME }
 
 const IGNORED_DIR_NAMES = new Set(['node_modules', '.git', '.svn', '__pycache__', '.venv', 'dist-electron', 'release'])
+const IGNORED_FILE_NAMES = new Set(['.autoforge-deps.json'])
 
 function toPosixPath(filePath: string): string {
   return filePath.replace(/\\/g, '/')
@@ -281,6 +282,7 @@ export class ScriptWorkspace {
           continue
         }
         if (!entry.isFile()) continue
+        if (IGNORED_FILE_NAMES.has(entry.name)) continue
         const fullPath = join(dir, entry.name)
         files.push(toPosixPath(relative(root, fullPath)))
       }

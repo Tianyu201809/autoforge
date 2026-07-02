@@ -88,6 +88,10 @@
         "to": "docs/script-spec.md"
       },
       {
+        "from": "skills/autoforge-script-create/SKILL.md",
+        "to": "skills/autoforge-script-create/SKILL.md"
+      },
+      {
         "from": "resources/python",
         "to": "python",
         "filter": [

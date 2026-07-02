@@ -1,10 +1,21 @@
 import json
+import io
 import sys
 
 LOG_PREFIX = "@autoforge/log "
 CTL_PREFIX = "@autoforge/ctl "
 RESULT_PREFIX = "@autoforge/result "
 ERROR_PREFIX = "@autoforge/error "
+
+
+def _ensure_utf8_stdio() -> None:
+    """Windows 下强制 stdout/stderr 使用 UTF-8，避免中文控制消息乱码。"""
+    if sys.platform != "win32":
+        return
+    if hasattr(sys.stdout, "buffer"):
+        sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding="utf-8", line_buffering=True)
+    if hasattr(sys.stderr, "buffer"):
+        sys.stderr = io.TextIOWrapper(sys.stderr.buffer, encoding="utf-8", line_buffering=True)
 
 
 def emit_log(level: str, message: str) -> None:

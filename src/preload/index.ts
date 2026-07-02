@@ -213,7 +213,8 @@ const autoforge = {
     import: (exampleId: string): Promise<ScriptItem> => ipcRenderer.invoke(IPC.EXAMPLES_IMPORT, exampleId)
   },
   devGuide: {
-    get: (): Promise<string> => ipcRenderer.invoke(IPC.DEV_GUIDE_GET)
+    get: (): Promise<string> => ipcRenderer.invoke(IPC.DEV_GUIDE_GET),
+    getSkillCreate: (): Promise<string> => ipcRenderer.invoke(IPC.DEV_GUIDE_SKILL_CREATE_GET)
   },
   system: {
     memory: (): Promise<SystemMemoryInfo> => ipcRenderer.invoke(IPC.SYSTEM_MEMORY),

@@ -5,7 +5,7 @@ import { MANIFEST_FILENAME } from '../../shared/script-contract'
 import type { AppConfig, AppWindowConfig, EnvironmentProfile, ExecutionHistoryQuery, ScriptIcon, ScriptMeta } from '../../shared/types/script'
 import { findCategoryDefinition } from '../services/category-service'
 import { dependencyManager } from '../services/dependency-manager'
-import { importBundledExample, listBundledExamples, readDevGuideMarkdown } from '../services/example-bundles'
+import { importBundledExample, listBundledExamples, readDevGuideMarkdown, readDevGuideSkillCreateMarkdown } from '../services/example-bundles'
 import { getBrowserStatus } from '../services/browser-path'
 import { detectPythonStatus } from '../services/python-resolver'
 import {
@@ -206,7 +206,7 @@ export function registerIpcHandlers(getWindow: () => BrowserWindow | null): void
   ipcMain.handle(IPC.SCRIPTS_INSTALL_DEPS, async (_event, id: string) => {
     const script = scriptRegistry.getById(id)
     if (!script) return { ok: false, stdout: '', stderr: '脚本不存在' }
-    return dependencyManager.installScriptDeps(script.workspacePath, script.language)
+    return dependencyManager.installScriptDeps(script.workspacePath, script.language, { force: true })
   })
 
   ipcMain.handle(IPC.SCRIPTS_SET_ENV_CONFIG, (_event, id: string, envId: string, values: Record<string, string>) => {
@@ -408,6 +408,8 @@ export function registerIpcHandlers(getWindow: () => BrowserWindow | null): void
   })
 
   ipcMain.handle(IPC.DEV_GUIDE_GET, () => readDevGuideMarkdown())
+
+  ipcMain.handle(IPC.DEV_GUIDE_SKILL_CREATE_GET, () => readDevGuideSkillCreateMarkdown())
 
   ipcMain.handle(IPC.SYSTEM_MEMORY, () => {
     const mem = process.memoryUsage()
