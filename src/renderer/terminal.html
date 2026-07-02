@@ -6,10 +6,19 @@
     <title>Autoforge 终端</title>
     <script>
       ;(function () {
-        var t =
-          localStorage.getItem('autoforge-theme') ||
-          localStorage.getItem('scriptbox-theme')
-        document.documentElement.setAttribute('data-theme', t === 'light' ? 'light' : 'dark')
+        var MODES = { forge: 'dark', obsidian: 'dark', forest: 'dark', sand: 'light', ivory: 'light', blossom: 'light' }
+        var skin =
+          localStorage.getItem('autoforge-skin') ||
+          (function () {
+            var t =
+              localStorage.getItem('autoforge-theme') || localStorage.getItem('scriptbox-theme')
+            if (t === 'light') return 'sand'
+            if (t === 'dark') return 'forge'
+            return 'forge'
+          })()
+        if (!MODES[skin]) skin = 'forge'
+        document.documentElement.setAttribute('data-theme', MODES[skin])
+        document.documentElement.setAttribute('data-skin', skin)
       })()
     </script>
   </head>

@@ -3,7 +3,7 @@ import { onMounted, onUnmounted, ref, toRaw, watch } from 'vue'
 import { CheckCircle2, Plus, Trash2, X, XCircle } from 'lucide-vue-next'
 import type { BrowserStatusInfo, EnvironmentProfile } from '../../../shared/types/script'
 import { DEFAULT_GLOBAL_SHORTCUT } from '../../../shared/accelerator'
-import ThemeToggle from './ThemeToggle.vue'
+import SkinPicker from './SkinPicker.vue'
 import ShortcutRecorder from './ShortcutRecorder.vue'
 import { askConfirm } from '../composables/useConfirmDialog'
 import { useToast } from '../composables/useToast'
@@ -280,8 +280,8 @@ async function browseExternalEditor(): Promise<void> {
       <!-- 外观 -->
       <section class="space-y-3">
         <h2 class="text-[13px] font-medium sb-text-secondary">外观皮肤</h2>
-        <p class="text-[11px] sb-text-faint">也可点击标题栏右侧的太阳 / 月亮图标快速切换</p>
-        <ThemeToggle variant="segment" />
+        <p class="text-[11px] sb-text-faint">选择整体配色风格；标题栏太阳 / 月亮图标可在同系列深浅皮肤间快速切换</p>
+        <SkinPicker />
       </section>
 
       <!-- 环境 Profile -->

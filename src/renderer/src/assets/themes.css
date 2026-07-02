@@ -1,7 +1,8 @@
-/* Autoforge 双主题 — 深色「锻炉」/ 浅色「砂纸」 */
+/* Autoforge 多皮肤 — 深色锻炉 / 曜石 / 松野 · 浅色暖纸 / 素纸 / 浅樱 */
 
-:root,
-[data-theme='dark'] {
+/* ── 锻炉（深色默认）── */
+[data-theme='dark'][data-skin='forge'],
+[data-theme='dark']:not([data-skin]) {
   color-scheme: dark;
 
   --sb-bg-base: #0c0a09;
@@ -15,15 +16,6 @@
   --sb-bg-hover: rgba(68, 64, 60, 0.45);
   --sb-bg-muted: rgba(41, 37, 36, 0.35);
   --sb-bg-inset: rgba(41, 37, 36, 0.55);
-
-  --sb-terminal-bg: var(--sb-editor-bg);
-  --sb-terminal-header: var(--sb-bg-panel);
-  --sb-terminal-sidebar: var(--sb-editor-toolbar);
-  --sb-terminal-border: var(--sb-border-subtle);
-  --sb-terminal-highlight: color-mix(in srgb, var(--sb-accent-solid) 6%, var(--sb-editor-bg));
-  --sb-terminal-text: var(--sb-editor-text);
-  --sb-terminal-text-muted: var(--sb-text-muted);
-  --sb-terminal-text-faint: var(--sb-text-faint);
 
   --sb-text-primary: #fafaf9;
   --sb-text-secondary: #d6d3d1;
@@ -68,7 +60,127 @@
   --sb-hl-key: #fcd34d;
 }
 
-[data-theme='light'] {
+/* ── 曜石（深色）── */
+[data-theme='dark'][data-skin='obsidian'] {
+  color-scheme: dark;
+
+  --sb-bg-base: #0a0f14;
+  --sb-bg-panel: #0d1218;
+  --sb-bg-surface: rgba(15, 23, 42, 0.42);
+  --sb-bg-elevated: rgba(30, 41, 59, 0.48);
+  --sb-bg-input: rgba(15, 23, 42, 0.72);
+  --sb-bg-card: rgba(15, 23, 42, 0.32);
+  --sb-bg-card-hover: rgba(30, 41, 59, 0.52);
+  --sb-bg-log: #060a0e;
+  --sb-bg-hover: rgba(51, 65, 85, 0.45);
+  --sb-bg-muted: rgba(30, 41, 59, 0.38);
+  --sb-bg-inset: rgba(30, 41, 59, 0.58);
+
+  --sb-text-primary: #f1f5f9;
+  --sb-text-secondary: #cbd5e1;
+  --sb-text-muted: #94a3b8;
+  --sb-text-faint: #64748b;
+  --sb-text-label: #e2e8f0;
+  --sb-text-inverse: #0f172a;
+
+  --sb-border: rgba(100, 116, 139, 0.55);
+  --sb-border-subtle: rgba(71, 85, 105, 0.48);
+  --sb-border-input: rgba(100, 116, 139, 0.62);
+
+  --sb-accent-bg: linear-gradient(135deg, #06b6d4 0%, #0891b2 100%);
+  --sb-accent-solid: #22d3ee;
+  --sb-accent-text: #ecfeff;
+  --sb-accent-hover: #67e8f9;
+
+  --sb-titlebar: rgba(10, 15, 20, 0.94);
+  --sb-logo-bg: linear-gradient(145deg, #67e8f9 0%, #0891b2 55%, #0e7490 100%);
+  --sb-logo-text: #ecfeff;
+  --sb-ring: #64748b;
+
+  --sb-grain-opacity: 0.04;
+  --sb-glow: rgba(34, 211, 238, 0.14);
+
+  --sb-editor-bg: #080c10;
+  --sb-editor-toolbar: #0d1218;
+  --sb-editor-gutter: #0a0e13;
+  --sb-editor-gutter-text: #475569;
+  --sb-editor-gutter-active: #94a3b8;
+  --sb-editor-line-active: rgba(34, 211, 238, 0.07);
+  --sb-editor-badge: rgba(30, 41, 59, 0.82);
+  --sb-editor-text: #cbd5e1;
+  --sb-editor-caret: #67e8f9;
+  --sb-editor-selection-bg: rgba(34, 211, 238, 0.2);
+  --sb-hl-keyword: #7dd3fc;
+  --sb-hl-string: #86efac;
+  --sb-hl-comment: #64748b;
+  --sb-hl-number: #a5f3fc;
+  --sb-hl-boolean: #c4b5fd;
+  --sb-hl-fn: #fde68a;
+  --sb-hl-key: #bae6fd;
+}
+
+/* ── 松野（深色）── */
+[data-theme='dark'][data-skin='forest'] {
+  color-scheme: dark;
+
+  --sb-bg-base: #0a120e;
+  --sb-bg-panel: #0d1611;
+  --sb-bg-surface: rgba(20, 35, 28, 0.42);
+  --sb-bg-elevated: rgba(30, 48, 38, 0.48);
+  --sb-bg-input: rgba(20, 35, 28, 0.72);
+  --sb-bg-card: rgba(20, 35, 28, 0.32);
+  --sb-bg-card-hover: rgba(30, 48, 38, 0.52);
+  --sb-bg-log: #060b08;
+  --sb-bg-hover: rgba(45, 65, 52, 0.45);
+  --sb-bg-muted: rgba(30, 48, 38, 0.38);
+  --sb-bg-inset: rgba(30, 48, 38, 0.58);
+
+  --sb-text-primary: #ecfdf5;
+  --sb-text-secondary: #d1fae5;
+  --sb-text-muted: #86b09a;
+  --sb-text-faint: #5f7d6c;
+  --sb-text-label: #d1fae5;
+  --sb-text-inverse: #14532d;
+
+  --sb-border: rgba(74, 120, 95, 0.52);
+  --sb-border-subtle: rgba(55, 90, 72, 0.45);
+  --sb-border-input: rgba(74, 120, 95, 0.58);
+
+  --sb-accent-bg: linear-gradient(135deg, #10b981 0%, #059669 100%);
+  --sb-accent-solid: #34d399;
+  --sb-accent-text: #ecfdf5;
+  --sb-accent-hover: #6ee7b7;
+
+  --sb-titlebar: rgba(10, 18, 14, 0.94);
+  --sb-logo-bg: linear-gradient(145deg, #6ee7b7 0%, #059669 55%, #047857 100%);
+  --sb-logo-text: #ecfdf5;
+  --sb-ring: #5f7d6c;
+
+  --sb-grain-opacity: 0.05;
+  --sb-glow: rgba(52, 211, 153, 0.12);
+
+  --sb-editor-bg: #080f0b;
+  --sb-editor-toolbar: #0d1611;
+  --sb-editor-gutter: #0a110d;
+  --sb-editor-gutter-text: #4d6b58;
+  --sb-editor-gutter-active: #86b09a;
+  --sb-editor-line-active: rgba(52, 211, 153, 0.07);
+  --sb-editor-badge: rgba(30, 48, 38, 0.82);
+  --sb-editor-text: #d1fae5;
+  --sb-editor-caret: #6ee7b7;
+  --sb-editor-selection-bg: rgba(52, 211, 153, 0.2);
+  --sb-hl-keyword: #fde68a;
+  --sb-hl-string: #a7f3d0;
+  --sb-hl-comment: #5f7d6c;
+  --sb-hl-number: #fcd34d;
+  --sb-hl-boolean: #c4b5fd;
+  --sb-hl-fn: #7dd3fc;
+  --sb-hl-key: #bbf7d0;
+}
+
+/* ── 暖纸（浅色默认）── */
+[data-theme='light'][data-skin='sand'],
+[data-theme='light']:not([data-skin]) {
   color-scheme: light;
 
   --sb-bg-base: #f5f0e8;
@@ -82,15 +194,6 @@
   --sb-bg-hover: rgba(28, 25, 23, 0.06);
   --sb-bg-muted: rgba(28, 25, 23, 0.04);
   --sb-bg-inset: rgba(28, 25, 23, 0.05);
-
-  --sb-terminal-bg: var(--sb-editor-bg);
-  --sb-terminal-header: var(--sb-bg-panel);
-  --sb-terminal-sidebar: var(--sb-editor-toolbar);
-  --sb-terminal-border: var(--sb-border-subtle);
-  --sb-terminal-highlight: color-mix(in srgb, var(--sb-accent-solid) 5%, var(--sb-editor-bg));
-  --sb-terminal-text: var(--sb-editor-text);
-  --sb-terminal-text-muted: var(--sb-text-muted);
-  --sb-terminal-text-faint: var(--sb-text-faint);
 
   --sb-text-primary: #1c1917;
   --sb-text-secondary: #57534e;
@@ -133,6 +236,147 @@
   --sb-hl-boolean: #7c3aed;
   --sb-hl-fn: #0369a1;
   --sb-hl-key: #92400e;
+}
+
+/* ── 素纸（浅色）── */
+[data-theme='light'][data-skin='ivory'] {
+  color-scheme: light;
+
+  --sb-bg-base: #f4f6f8;
+  --sb-bg-panel: #fafbfc;
+  --sb-bg-surface: rgba(255, 255, 255, 0.88);
+  --sb-bg-elevated: #ffffff;
+  --sb-bg-input: #ffffff;
+  --sb-bg-card: rgba(255, 255, 255, 0.92);
+  --sb-bg-card-hover: #ffffff;
+  --sb-bg-log: #e8ecf0;
+  --sb-bg-hover: rgba(15, 23, 42, 0.05);
+  --sb-bg-muted: rgba(15, 23, 42, 0.03);
+  --sb-bg-inset: rgba(15, 23, 42, 0.04);
+
+  --sb-text-primary: #0f172a;
+  --sb-text-secondary: #334155;
+  --sb-text-muted: #64748b;
+  --sb-text-faint: #94a3b8;
+  --sb-text-label: #1e293b;
+  --sb-text-inverse: #f8fafc;
+
+  --sb-border: #c8d0da;
+  --sb-border-subtle: #d8dee6;
+  --sb-border-input: #b8c4d0;
+
+  --sb-accent-bg: linear-gradient(135deg, #2563eb 0%, #1d4ed8 100%);
+  --sb-accent-solid: #2563eb;
+  --sb-accent-text: #eff6ff;
+  --sb-accent-hover: #3b82f6;
+
+  --sb-titlebar: rgba(250, 251, 252, 0.92);
+  --sb-logo-bg: linear-gradient(145deg, #3b82f6 0%, #1d4ed8 100%);
+  --sb-logo-text: #eff6ff;
+  --sb-ring: #cbd5e1;
+
+  --sb-grain-opacity: 0.05;
+  --sb-glow: rgba(37, 99, 235, 0.08);
+
+  --sb-editor-bg: #eef1f5;
+  --sb-editor-toolbar: #e8ecf0;
+  --sb-editor-gutter: #e2e8f0;
+  --sb-editor-gutter-text: #94a3b8;
+  --sb-editor-gutter-active: #475569;
+  --sb-editor-line-active: rgba(37, 99, 235, 0.07);
+  --sb-editor-badge: rgba(15, 23, 42, 0.05);
+  --sb-editor-text: #334155;
+  --sb-editor-caret: #2563eb;
+  --sb-editor-selection-bg: rgba(37, 99, 235, 0.16);
+  --sb-hl-keyword: #1d4ed8;
+  --sb-hl-string: #047857;
+  --sb-hl-comment: #94a3b8;
+  --sb-hl-number: #b45309;
+  --sb-hl-boolean: #7c3aed;
+  --sb-hl-fn: #0369a1;
+  --sb-hl-key: #1e40af;
+}
+
+/* ── 浅樱（浅色）── */
+[data-theme='light'][data-skin='blossom'] {
+  color-scheme: light;
+
+  --sb-bg-base: #faf5f5;
+  --sb-bg-panel: #fdf8f8;
+  --sb-bg-surface: rgba(255, 251, 251, 0.9);
+  --sb-bg-elevated: #ffffff;
+  --sb-bg-input: #ffffff;
+  --sb-bg-card: rgba(255, 251, 251, 0.94);
+  --sb-bg-card-hover: #ffffff;
+  --sb-bg-log: #f5e8ea;
+  --sb-bg-hover: rgba(136, 19, 55, 0.05);
+  --sb-bg-muted: rgba(136, 19, 55, 0.03);
+  --sb-bg-inset: rgba(136, 19, 55, 0.04);
+
+  --sb-text-primary: #431407;
+  --sb-text-secondary: #7c2d12;
+  --sb-text-muted: #9a3412;
+  --sb-text-faint: #c2410c;
+  --sb-text-label: #581c0c;
+  --sb-text-inverse: #fff1f2;
+
+  --sb-border: #e8c4c8;
+  --sb-border-subtle: #f0d4d8;
+  --sb-border-input: #ddb8be;
+
+  --sb-accent-bg: linear-gradient(135deg, #e11d48 0%, #be123c 100%);
+  --sb-accent-solid: #e11d48;
+  --sb-accent-text: #fff1f2;
+  --sb-accent-hover: #f43f5e;
+
+  --sb-titlebar: rgba(253, 248, 248, 0.92);
+  --sb-logo-bg: linear-gradient(145deg, #fb7185 0%, #be123c 100%);
+  --sb-logo-text: #fff1f2;
+  --sb-ring: #f0d4d8;
+
+  --sb-grain-opacity: 0.06;
+  --sb-glow: rgba(225, 29, 72, 0.08);
+
+  --sb-editor-bg: #f8eded;
+  --sb-editor-toolbar: #f5e8ea;
+  --sb-editor-gutter: #f0e0e3;
+  --sb-editor-gutter-text: #c2410c;
+  --sb-editor-gutter-active: #7c2d12;
+  --sb-editor-line-active: rgba(225, 29, 72, 0.07);
+  --sb-editor-badge: rgba(136, 19, 55, 0.05);
+  --sb-editor-text: #57534e;
+  --sb-editor-caret: #e11d48;
+  --sb-editor-selection-bg: rgba(225, 29, 72, 0.14);
+  --sb-hl-keyword: #be123c;
+  --sb-hl-string: #047857;
+  --sb-hl-comment: #c2410c;
+  --sb-hl-number: #9a3412;
+  --sb-hl-boolean: #7c3aed;
+  --sb-hl-fn: #0369a1;
+  --sb-hl-key: #881337;
+}
+
+/* 终端变量 — 各皮肤共用结构 */
+[data-theme='dark'] {
+  --sb-terminal-bg: var(--sb-editor-bg);
+  --sb-terminal-header: var(--sb-bg-panel);
+  --sb-terminal-sidebar: var(--sb-editor-toolbar);
+  --sb-terminal-border: var(--sb-border-subtle);
+  --sb-terminal-highlight: color-mix(in srgb, var(--sb-accent-solid) 6%, var(--sb-editor-bg));
+  --sb-terminal-text: var(--sb-editor-text);
+  --sb-terminal-text-muted: var(--sb-text-muted);
+  --sb-terminal-text-faint: var(--sb-text-faint);
+}
+
+[data-theme='light'] {
+  --sb-terminal-bg: var(--sb-editor-bg);
+  --sb-terminal-header: var(--sb-bg-panel);
+  --sb-terminal-sidebar: var(--sb-editor-toolbar);
+  --sb-terminal-border: var(--sb-border-subtle);
+  --sb-terminal-highlight: color-mix(in srgb, var(--sb-accent-solid) 5%, var(--sb-editor-bg));
+  --sb-terminal-text: var(--sb-editor-text);
+  --sb-terminal-text-muted: var(--sb-text-muted);
+  --sb-terminal-text-faint: var(--sb-text-faint);
 }
 
 /* 语义化工具类 */
@@ -204,7 +448,7 @@
   }
 }
 
-/* 纸纹 / 锻炉质感 */
+/* 纸纹 / 质感叠加 */
 body::before {
   content: '';
   position: fixed;
