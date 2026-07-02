@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { onMounted, onUnmounted, ref, toRaw, watch } from 'vue'
 import { CheckCircle2, Plus, Trash2, X, XCircle } from 'lucide-vue-next'
-import type { BrowserStatusInfo, EnvironmentProfile } from '../../../shared/types/script'
+import type { BrowserStatusInfo, EnvironmentProfile, GlobalDependency, PythonStatusInfo } from '../../../shared/types/script'
 import { DEFAULT_GLOBAL_SHORTCUT } from '../../../shared/accelerator'
 import SkinPicker from './SkinPicker.vue'
 import ShortcutRecorder from './ShortcutRecorder.vue'
@@ -15,6 +15,9 @@ const appVersion = window.api.versions.app
 const emit = defineEmits<{ close: [] }>()
 
 const browserPath = ref('')
+const pythonPath = ref('')
+const pipIndexUrl = ref('')
+const runTimeoutSeconds = ref(0)
 const externalEditorPath = ref('')
 const logLevel = ref<'INFO' | 'WARN' | 'ERROR'>('INFO')
 const trayMode = ref(false)
@@ -25,6 +28,13 @@ const globalShortcutRegistered = ref(true)
 const saving = ref(false)
 const saved = ref(false)
 const browserStatus = ref<BrowserStatusInfo | null>(null)
+const pythonStatus = ref<PythonStatusInfo | null>(null)
+const detectingPython = ref(false)
+const globalPythonDeps = ref<GlobalDependency[]>([])
+const globalDepName = ref('')
+const globalDepVersion = ref('')
+const installingGlobalDep = ref(false)
+const loadingGlobalDeps = ref(false)
 const windowModeReady = ref(false)
 
 const environments = ref<EnvironmentProfile[]>([])
@@ -56,6 +66,9 @@ watch([trayMode, floatingMode, globalShortcutEnabled, globalShortcut], () => {
 onMounted(async () => {
   const config = await window.autoforge.config.get()
   browserPath.value = config.browser?.executablePath ?? ''
+  pythonPath.value = config.python?.executablePath ?? ''
+  pipIndexUrl.value = config.python?.pipIndexUrl ?? ''
+  runTimeoutSeconds.value = config.script?.runTimeoutSeconds ?? 0
   externalEditorPath.value = config.externalEditor?.executablePath ?? ''
   logLevel.value = config.logLevel ?? 'INFO'
   trayMode.value = !!config.window?.trayMode
@@ -63,6 +76,8 @@ onMounted(async () => {
   globalShortcutEnabled.value = config.window?.globalShortcutEnabled !== false
   globalShortcut.value = config.window?.globalShortcut?.trim() || DEFAULT_GLOBAL_SHORTCUT
   browserStatus.value = await window.autoforge.system.browserStatus()
+  pythonStatus.value = await window.autoforge.system.pythonDetect()
+  await loadGlobalPythonDeps()
   environments.value = await window.autoforge.env.list()
   editingEnv.value = environments.value.find((e) => e.isDefault) ?? environments.value[0] ?? null
 
@@ -92,6 +107,13 @@ async function save(): Promise<void> {
   try {
     await window.autoforge.config.set({
       browser: { executablePath: browserPath.value || undefined },
+      python: {
+        executablePath: pythonPath.value || undefined,
+        pipIndexUrl: pipIndexUrl.value.trim() || undefined
+      },
+      script: {
+        runTimeoutSeconds: runTimeoutSeconds.value > 0 ? Math.floor(runTimeoutSeconds.value) : undefined
+      },
       externalEditor: { executablePath: externalEditorPath.value || undefined },
       logLevel: logLevel.value,
       window: {
@@ -212,6 +234,108 @@ async function openUserDataDir(): Promise<void> {
 async function browseExternalEditor(): Promise<void> {
   const path = await window.autoforge.system.pickExternalEditor()
   if (path) externalEditorPath.value = path
+}
+
+async function browsePython(): Promise<void> {
+  const path = await window.autoforge.system.pickPython()
+  if (path) pythonPath.value = path
+}
+
+async function detectPython(): Promise<void> {
+  detectingPython.value = true
+  try {
+    if (pythonPath.value.trim()) {
+      await window.autoforge.config.set({
+        python: {
+          executablePath: pythonPath.value.trim(),
+          pipIndexUrl: pipIndexUrl.value.trim() || undefined
+        }
+      })
+    }
+    pythonStatus.value = await window.autoforge.system.pythonDetect()
+  } finally {
+    detectingPython.value = false
+  }
+}
+
+async function loadGlobalPythonDeps(): Promise<void> {
+  loadingGlobalDeps.value = true
+  try {
+    globalPythonDeps.value = await window.api.deps.listGlobal('python')
+  } catch (err) {
+    pushToast({
+      type: 'error',
+      title: '加载失败',
+      message: err instanceof Error ? err.message : '无法加载全局 Python 依赖'
+    })
+  } finally {
+    loadingGlobalDeps.value = false
+  }
+}
+
+async function installGlobalPythonDep(): Promise<void> {
+  const name = globalDepName.value.trim()
+  if (!name) return
+  installingGlobalDep.value = true
+  try {
+    const result = await window.api.deps.installGlobal(
+      name,
+      globalDepVersion.value.trim() || undefined,
+      'python'
+    )
+    if (!result.ok) {
+      pushToast({
+        type: 'error',
+        title: '安装失败',
+        message: result.stderr || result.stdout || 'pip install 失败'
+      })
+      return
+    }
+    globalDepName.value = ''
+    globalDepVersion.value = ''
+    await loadGlobalPythonDeps()
+    pushToast({ type: 'success', title: '已安装', message: name })
+  } catch (err) {
+    pushToast({
+      type: 'error',
+      title: '安装失败',
+      message: err instanceof Error ? err.message : '无法安装依赖'
+    })
+  } finally {
+    installingGlobalDep.value = false
+  }
+}
+
+async function removeGlobalPythonDep(name: string): Promise<void> {
+  const confirmed = await askConfirm({
+    title: '移除全局依赖',
+    message: `确定从全局 Python 环境中移除「${name}」？`,
+    confirmLabel: '移除',
+    variant: 'danger'
+  })
+  if (!confirmed) return
+  installingGlobalDep.value = true
+  try {
+    const result = await window.api.deps.removeGlobal(name, 'python')
+    if (!result.ok) {
+      pushToast({
+        type: 'error',
+        title: '移除失败',
+        message: result.stderr || result.stdout || '操作失败'
+      })
+      return
+    }
+    await loadGlobalPythonDeps()
+    pushToast({ type: 'success', title: '已移除', message: name })
+  } catch (err) {
+    pushToast({
+      type: 'error',
+      title: '移除失败',
+      message: err instanceof Error ? err.message : '无法移除依赖'
+    })
+  } finally {
+    installingGlobalDep.value = false
+  }
 }
 </script>
 
@@ -396,6 +520,129 @@ async function browseExternalEditor(): Promise<void> {
           <label class="text-[12px] sb-text-muted">浏览器路径（可选）</label>
           <input v-model="browserPath" placeholder="留空自动检测" class="mt-1 w-full h-9 px-3 rounded-lg sb-input border text-[13px] font-mono outline-none" />
           <p class="mt-1 text-[11px] sb-text-faint">无头模式请在各脚本的详情面板或 autoforge.json 中单独配置</p>
+        </div>
+      </section>
+
+      <section class="space-y-3">
+        <h2 class="text-[13px] font-medium sb-text-secondary">Python（脚本执行）</h2>
+        <div v-if="pythonStatus" class="rounded-lg border sb-border sb-bg-surface p-3 space-y-2">
+          <div class="flex items-center gap-2 text-[12px]">
+            <CheckCircle2 v-if="pythonStatus.found" class="w-3.5 h-3.5 text-emerald-400" :stroke-width="1.5" />
+            <XCircle v-else class="w-3.5 h-3.5 text-amber-400" :stroke-width="1.5" />
+            <span :class="pythonStatus.found ? 'text-emerald-400' : 'text-amber-400'">
+              {{
+                pythonStatus.found
+                  ? `Python ${pythonStatus.version} · ${pythonStatus.executable}`
+                  : `未检测到 Python ${pythonStatus.minVersion}+`
+              }}
+            </span>
+          </div>
+          <p v-if="pythonStatus.error && !pythonStatus.found" class="text-[11px] text-amber-400/90">
+            {{ pythonStatus.error }}
+          </p>
+        </div>
+        <div>
+          <label class="text-[12px] sb-text-muted">Python 路径（可选）</label>
+          <div class="mt-1 flex gap-2">
+            <input
+              v-model="pythonPath"
+              placeholder="留空自动检测本机 Python"
+              class="flex-1 min-w-0 h-9 px-3 rounded-lg sb-input border text-[13px] font-mono outline-none"
+            />
+            <button
+              type="button"
+              class="h-9 px-3 rounded-lg text-[12px] sb-text-muted border sb-border hover:sb-text-secondary hover:sb-bg-hover transition-colors flex-shrink-0"
+              @click="browsePython"
+            >
+              浏览…
+            </button>
+            <button
+              type="button"
+              class="h-9 px-3 rounded-lg text-[12px] sb-text-muted border sb-border hover:sb-text-secondary hover:sb-bg-hover transition-colors flex-shrink-0 disabled:opacity-50"
+              :disabled="detectingPython"
+              @click="detectPython"
+            >
+              检测
+            </button>
+          </div>
+          <p class="mt-1 text-[11px] sb-text-faint">Python 脚本在独立子进程中运行，需本机安装 Python 3.9+</p>
+        </div>
+        <div>
+          <label class="text-[12px] sb-text-muted">pip 镜像源（可选）</label>
+          <input
+            v-model="pipIndexUrl"
+            placeholder="如 https://pypi.tuna.tsinghua.edu.cn/simple"
+            class="mt-1 w-full h-9 px-3 rounded-lg sb-input border text-[13px] font-mono outline-none"
+          />
+          <p class="mt-1 text-[11px] sb-text-faint">用于脚本依赖与全局 Python 依赖安装，留空使用 PyPI 默认源</p>
+        </div>
+        <div>
+          <label class="text-[12px] sb-text-muted">运行超时（秒）</label>
+          <input
+            v-model.number="runTimeoutSeconds"
+            type="number"
+            min="0"
+            step="1"
+            placeholder="0 表示不限制"
+            class="mt-1 w-full h-9 px-3 rounded-lg sb-input border text-[13px] outline-none"
+          />
+          <p class="mt-1 text-[11px] sb-text-faint">JS 与 Python 脚本共用；超时后自动停止运行</p>
+        </div>
+        <div class="rounded-lg border sb-border sb-bg-surface p-4 space-y-3">
+          <div class="flex items-center justify-between gap-2">
+            <div>
+              <p class="text-[13px] sb-text-secondary">全局 Python 依赖</p>
+              <p class="text-[11px] sb-text-faint mt-0.5">安装至 userData/runtime-python，所有 Python 脚本共享</p>
+            </div>
+            <button
+              type="button"
+              class="text-[12px] sb-text-muted hover:sb-text-secondary disabled:opacity-50"
+              :disabled="loadingGlobalDeps || installingGlobalDep"
+              @click="loadGlobalPythonDeps"
+            >
+              刷新
+            </button>
+          </div>
+          <div v-if="loadingGlobalDeps" class="text-[12px] sb-text-faint">加载中…</div>
+          <div v-else-if="!globalPythonDeps.length" class="text-[12px] sb-text-faint">尚未安装全局依赖</div>
+          <div v-else class="space-y-1.5">
+            <div
+              v-for="dep in globalPythonDeps"
+              :key="dep.name"
+              class="flex items-center gap-2 text-[12px]"
+            >
+              <span class="font-mono sb-text-secondary flex-1 truncate">{{ dep.name }}</span>
+              <span class="sb-text-faint truncate max-w-[40%]">{{ dep.version }}</span>
+              <button
+                type="button"
+                class="sb-text-faint hover:text-red-400 disabled:opacity-50"
+                :disabled="installingGlobalDep"
+                @click="removeGlobalPythonDep(dep.name)"
+              >
+                <Trash2 class="w-3.5 h-3.5" :stroke-width="1.5" />
+              </button>
+            </div>
+          </div>
+          <div class="flex gap-2">
+            <input
+              v-model="globalDepName"
+              placeholder="包名，如 requests"
+              class="flex-1 h-8 px-3 rounded-lg sb-input border text-[12px] font-mono outline-none"
+            />
+            <input
+              v-model="globalDepVersion"
+              placeholder="版本（可选）"
+              class="flex-1 h-8 px-3 rounded-lg sb-input border text-[12px] font-mono outline-none"
+            />
+            <button
+              type="button"
+              class="h-8 px-3 rounded-lg sb-bg-inset sb-text-secondary text-[12px] disabled:opacity-50"
+              :disabled="installingGlobalDep || !globalDepName.trim()"
+              @click="installGlobalPythonDep"
+            >
+              {{ installingGlobalDep ? '安装中…' : '安装' }}
+            </button>
+          </div>
         </div>
       </section>
 

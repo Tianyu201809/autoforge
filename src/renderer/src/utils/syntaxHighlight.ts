@@ -64,7 +64,34 @@ export function highlightJson(code: string): string {
   return escaped.replace(/\x00S(\d+)\x00/g, (_, i) => placeholders[Number(i)])
 }
 
-export function highlightCode(code: string, language: 'javascript' | 'json'): string {
+export function highlightPython(code: string): string {
+  const placeholders: string[] = []
+  let escaped = escapeHtml(code)
+
+  escaped = escaped.replace(/("""[\s\S]*?"""|'''[\s\S]*?'''|"(?:\\.|[^"\\])*"|'(?:\\.|[^'\\])*')/g, (m) => {
+    placeholders.push(wrap('sb-hl-string', m))
+    return `\x00S${placeholders.length - 1}\x00`
+  })
+
+  escaped = escaped.replace(/(#.*)/g, (m) => {
+    placeholders.push(wrap('sb-hl-comment', m))
+    return `\x00S${placeholders.length - 1}\x00`
+  })
+
+  const pyKeywords =
+    /\b(async|await|break|class|continue|def|del|elif|else|except|False|finally|for|from|global|if|import|in|is|lambda|None|nonlocal|not|or|pass|raise|return|True|try|while|with|yield)\b/g
+  escaped = escaped.replace(pyKeywords, (m) => wrap('sb-hl-keyword', m))
+  escaped = escaped.replace(/\b(\d+\.?\d*)\b/g, (m) => wrap('sb-hl-number', m))
+  escaped = escaped.replace(/\b([a-zA-Z_][\w]*)\s*(?=\()/g, (_, name) => wrap('sb-hl-fn', name))
+
+  return escaped.replace(/\x00S(\d+)\x00/g, (_, i) => placeholders[Number(i)])
+}
+
+export function highlightCode(
+  code: string,
+  language: 'javascript' | 'json' | 'python'
+): string {
   if (language === 'json') return highlightJson(code)
+  if (language === 'python') return highlightPython(code)
   return highlightJavaScript(code)
 }

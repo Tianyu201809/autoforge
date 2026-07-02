@@ -99,6 +99,10 @@ export const IPC = {
 
   SYSTEM_OPEN_IN_EXTERNAL_EDITOR: 'system:open-in-external-editor',
 
+  SYSTEM_PYTHON_DETECT: 'system:python-detect',
+
+  SYSTEM_PICK_PYTHON: 'system:pick-python',
+
 
 
   EVENT_LOG: 'event:log',

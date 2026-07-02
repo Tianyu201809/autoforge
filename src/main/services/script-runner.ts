@@ -3,6 +3,7 @@ import { existsSync } from 'fs'
 import { join } from 'path'
 import { pathToFileURL } from 'url'
 import type { BrowserWindow } from 'electron'
+import type { ChildProcess } from 'child_process'
 import { IPC } from '../../shared/ipc-channels'
 import type { ScriptRunFn, ScriptStageInput, ScriptProgressInput } from '../../shared/script-contract'
 import type { LogLine, RunSession, ScriptMeta, ExecutionTrigger } from '../../shared/types/script'
@@ -23,10 +24,14 @@ import { scriptStore } from './script-store'
 import { scriptWorkspace } from './script-workspace'
 import { formatScriptRunProgressSummary } from '../../shared/script-progress'
 import { broadcastToRenderers } from './window-broadcast'
+import { installPythonScriptDeps, killPythonProcess, runPythonScript } from './python-script-runner'
+import { resolvePythonExecutable } from './python-resolver'
 
 interface ActiveSession {
   session: RunSession
   abortController: AbortController
+  childProcess?: ChildProcess
+  runTimeoutHandle?: ReturnType<typeof setTimeout>
 }
 
 export class ScriptRunnerService {
@@ -124,6 +129,9 @@ export class ScriptRunnerService {
 
     this.setPhase(active.session, 'stopping', '正在停止…')
     active.abortController.abort()
+    killPythonProcess(active.childProcess)
+    active.childProcess = undefined
+    this.clearRunTimeout(sessionId)
 
     active.session.status = 'stopped'
     active.session.phase = 'stopped'
@@ -138,6 +146,19 @@ export class ScriptRunnerService {
   }
 
   private async executePackage(
+    session: RunSession,
+    script: ScriptMeta,
+    env: Record<string, string>,
+    params: Record<string, string>,
+    abortController: AbortController
+  ): Promise<void> {
+    if (script.language === 'python') {
+      return this.executePythonPackage(session, script, env, params, abortController)
+    }
+    return this.executeJsPackage(session, script, env, params, abortController)
+  }
+
+  private async executeJsPackage(
     session: RunSession,
     script: ScriptMeta,
     env: Record<string, string>,
@@ -164,7 +185,7 @@ export class ScriptRunnerService {
       if (script.dependencies && Object.keys(script.dependencies).length) {
         this.setPhase(session, 'installing-deps', '安装脚本依赖…')
         log('INFO', '正在安装 npm 依赖…')
-        const result = await dependencyManager.installScriptDeps(script.workspacePath)
+        const result = await dependencyManager.installScriptDeps(script.workspacePath, script.language)
         if (!result.ok) {
           throw new Error(`依赖安装失败: ${result.stderr || result.stdout}`)
         }
@@ -183,6 +204,7 @@ export class ScriptRunnerService {
       }
 
       this.setPhase(session, 'running', '脚本运行中…')
+      this.armRunTimeout(session.id)
       const config = scriptStore.getConfig()
       const ctx = {
         sessionId: session.id,
@@ -204,6 +226,88 @@ export class ScriptRunnerService {
       }
 
       this.completeSession(session.id, result)
+    } catch (error) {
+      if (abortController.signal.aborted) {
+        this.stop(session.id)
+        return
+      }
+      const message = error instanceof Error ? error.message : String(error)
+      this.pushLog(session.id, 'ERROR', message)
+      this.failSession(session.id, message)
+    }
+  }
+
+  private async executePythonPackage(
+    session: RunSession,
+    script: ScriptMeta,
+    env: Record<string, string>,
+    params: Record<string, string>,
+    abortController: AbortController
+  ): Promise<void> {
+    const log = (level: LogLine['level'], message: string): void => {
+      this.pushLog(session.id, level, message)
+    }
+
+    const active = (): ActiveSession | undefined => this.sessions.get(session.id)
+
+    try {
+      this.setPhase(session, 'validating', '校验脚本包…')
+      const entryPath = scriptWorkspace.getEntryPath(script)
+      if (!existsSync(entryPath)) {
+        throw new Error(`入口文件不存在: ${script.entry}`)
+      }
+
+      await resolvePythonExecutable(scriptStore.getConfig().python)
+
+      if (script.dependencies && Object.keys(script.dependencies).length) {
+        this.setPhase(session, 'installing-deps', '安装脚本依赖…')
+        log('INFO', '正在安装 pip 依赖…')
+        const result = await installPythonScriptDeps(script.workspacePath)
+        if (!result.ok) {
+          throw new Error(`依赖安装失败: ${result.stderr || result.stdout}`)
+        }
+        log('INFO', '依赖安装完成')
+      }
+
+      this.setPhase(session, 'starting', '启动 Python 脚本…')
+      this.setPhase(session, 'running', '脚本运行中…')
+      this.armRunTimeout(session.id)
+
+      const outcome = await runPythonScript(
+        script,
+        session.id,
+        env,
+        params,
+        {
+          log,
+          control: (control) => {
+            const current = active()
+            if (current) this.handleScriptControl(current.session, control)
+          },
+          onPid: (pid) => {
+            session.pid = pid
+            this.broadcastSession(session)
+          },
+          isAborted: () => abortController.signal.aborted
+        },
+        () => active()?.childProcess,
+        (child) => {
+          const current = active()
+          if (current) current.childProcess = child
+        }
+      )
+
+      if (abortController.signal.aborted || outcome.aborted) {
+        this.stop(session.id)
+        return
+      }
+
+      if (outcome.ok) {
+        this.completeSession(session.id, outcome.result)
+        return
+      }
+
+      throw new Error(outcome.errorMessage ?? 'Python 脚本执行失败')
     } catch (error) {
       if (abortController.signal.aborted) {
         this.stop(session.id)
@@ -265,6 +369,7 @@ export class ScriptRunnerService {
   private completeSession(sessionId: string, result?: unknown): void {
     const active = this.sessions.get(sessionId)
     if (!active) return
+    this.clearRunTimeout(sessionId)
     active.session.status = 'success'
     active.session.phase = 'completed'
     active.session.finishedAt = new Date().toISOString()
@@ -285,6 +390,7 @@ export class ScriptRunnerService {
   private failSession(sessionId: string, message: string): void {
     const active = this.sessions.get(sessionId)
     if (!active) return
+    this.clearRunTimeout(sessionId)
     active.session.status = 'error'
     active.session.phase = 'failed'
     active.session.finishedAt = new Date().toISOString()
@@ -309,6 +415,32 @@ export class ScriptRunnerService {
   private broadcastSession(session: RunSession): void {
     logBus.emitSession(session)
     broadcastToRenderers(IPC.EVENT_SESSION, session)
+  }
+
+  private getRunTimeoutSeconds(): number {
+    const seconds = scriptStore.getConfig().script?.runTimeoutSeconds
+    return typeof seconds === 'number' && seconds > 0 ? Math.floor(seconds) : 0
+  }
+
+  private armRunTimeout(sessionId: string): void {
+    const seconds = this.getRunTimeoutSeconds()
+    if (!seconds) return
+    const active = this.sessions.get(sessionId)
+    if (!active) return
+    this.clearRunTimeout(sessionId)
+    active.runTimeoutHandle = setTimeout(() => {
+      const current = this.sessions.get(sessionId)
+      if (!current || current.session.status !== 'running') return
+      this.pushLog(sessionId, 'ERROR', `运行超时（${seconds} 秒），已自动停止`)
+      this.stop(sessionId)
+    }, seconds * 1000)
+  }
+
+  private clearRunTimeout(sessionId: string): void {
+    const active = this.sessions.get(sessionId)
+    if (!active?.runTimeoutHandle) return
+    clearTimeout(active.runTimeoutHandle)
+    active.runTimeoutHandle = undefined
   }
 }
 

@@ -1,7 +1,8 @@
 /** 脚本向平台报告执行阶段与进度的控制协议 */
 
-/** 控制行前缀 — 脚本可通过 ctx.log('INFO', prefix + JSON) 发送 */
-export const SCRIPT_CONTROL_PREFIX = '@autoforge/ctl '
+import { SCRIPT_CONTROL_PREFIX } from './script-protocol'
+
+export { SCRIPT_CONTROL_PREFIX }
 
 export type ScriptProgressScope = 'task' | 'total'
 

@@ -1,0 +1,20 @@
+{
+  "autoforge": "1.0",
+  "name": "Hello Autoforge (Python)",
+  "description": "Python 最小可运行脚本示例",
+  "version": "1.0.0",
+  "language": "python",
+  "entry": "index.py",
+  "category": "local",
+  "env": [
+    { "key": "GREETING", "label": "问候语", "default": "Hello" }
+  ],
+  "params": [
+    {
+      "key": "TARGET",
+      "label": "目标名称",
+      "description": "业务参数示例，通过 ctx.params 访问",
+      "default": "Autoforge"
+    }
+  ]
+}

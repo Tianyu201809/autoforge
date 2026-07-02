@@ -126,7 +126,7 @@ export interface ScriptManifest {
   env?: EnvVarDefinition[]
   /** 脚本声明的运行业务参数 schema（每次运行可不同） */
   params?: ParamDefinition[]
-  /** npm 依赖，会在脚本目录执行 npm install */
+  /** npm / pip 依赖（按 language 分流安装），运行前自动安装 */
   dependencies?: Record<string, string>
   /** 浏览器启动选项（使用 sdk.browser.launch 时生效） */
   browser?: {

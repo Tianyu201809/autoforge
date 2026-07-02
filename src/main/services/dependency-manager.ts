@@ -3,7 +3,12 @@ import { existsSync, readFileSync, writeFileSync } from 'fs'
 import { join } from 'path'
 import { decodeUtf8, spawnUtf8Command, UTF8 } from '../../shared/encoding'
 import { LEGACY_MANIFEST_FILENAME, MANIFEST_FILENAME } from '../../shared/script-contract'
+import type { ScriptLanguage } from '../../shared/script-language'
 import type { DependencyInstallResult, GlobalDependency } from '../../shared/types/script'
+import { installPythonScriptDeps } from './python-script-runner'
+import { pythonDependencyManager } from './python-dependency-manager'
+import { resolvePythonExecutable } from './python-resolver'
+import { scriptStore } from './script-store'
 
 function resolveManifestPath(scriptDir: string): string | null {
   const primary = join(scriptDir, MANIFEST_FILENAME)
@@ -15,7 +20,13 @@ function resolveManifestPath(scriptDir: string): string | null {
 
 export class DependencyManager {
   /** 在脚本目录安装 manifest 中声明的依赖 */
-  async installScriptDeps(scriptDir: string): Promise<DependencyInstallResult> {
+  async installScriptDeps(
+    scriptDir: string,
+    language: ScriptLanguage = 'javascript'
+  ): Promise<DependencyInstallResult> {
+    if (language === 'python') {
+      return installPythonScriptDeps(scriptDir)
+    }
     const manifestPath = resolveManifestPath(scriptDir)
     if (!manifestPath) {
       return { ok: false, stdout: '', stderr: `缺少 ${MANIFEST_FILENAME}` }
@@ -41,8 +52,21 @@ export class DependencyManager {
     return this.runNpmInstall(scriptDir)
   }
 
-  /** 安装全局运行时依赖到 userData/runtime */
-  async installGlobal(packageName: string, version = 'latest'): Promise<DependencyInstallResult> {
+  /** 安装全局运行时依赖 */
+  async installGlobal(
+    packageName: string,
+    version = 'latest',
+    language: ScriptLanguage = 'javascript'
+  ): Promise<DependencyInstallResult> {
+    if (language === 'python') {
+      const python = await resolvePythonExecutable(scriptStore.getConfig().python)
+      return pythonDependencyManager.installGlobal(
+        packageName,
+        version,
+        python,
+        scriptStore.getConfig().python?.pipIndexUrl
+      )
+    }
     const { app } = await import('electron')
     const runtimeDir = join(app.getPath('userData'), 'runtime')
     if (!existsSync(runtimeDir)) {
@@ -68,8 +92,11 @@ export class DependencyManager {
     return join(app.getPath('userData'), 'runtime', 'node_modules')
   }
 
-  /** 列出已安装的全局依赖（来自 userData/runtime/package.json） */
-  listGlobal(): GlobalDependency[] {
+  /** 列出已安装的全局依赖 */
+  listGlobal(language: ScriptLanguage = 'javascript'): GlobalDependency[] {
+    if (language === 'python') {
+      return pythonDependencyManager.listGlobal()
+    }
     const { app } = require('electron') as { app: { getPath: (name: string) => string } }
     const pkgPath = join(app.getPath('userData'), 'runtime', 'package.json')
     if (!existsSync(pkgPath)) return []
@@ -83,8 +110,19 @@ export class DependencyManager {
       .sort((a, b) => a.name.localeCompare(b.name))
   }
 
-  /** 从全局 runtime 移除依赖并重新 npm install */
-  async removeGlobal(packageName: string): Promise<DependencyInstallResult> {
+  /** 从全局 runtime 移除依赖 */
+  async removeGlobal(
+    packageName: string,
+    language: ScriptLanguage = 'javascript'
+  ): Promise<DependencyInstallResult> {
+    if (language === 'python') {
+      const python = await resolvePythonExecutable(scriptStore.getConfig().python)
+      return pythonDependencyManager.removeGlobal(
+        packageName,
+        python,
+        scriptStore.getConfig().python?.pipIndexUrl
+      )
+    }
     const { app } = await import('electron')
     const runtimeDir = join(app.getPath('userData'), 'runtime')
     const pkgPath = join(runtimeDir, 'package.json')

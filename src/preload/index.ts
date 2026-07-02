@@ -6,6 +6,7 @@ import type {
   AppConfig,
   AppWindowConfig,
   BrowserStatusInfo,
+  PythonStatusInfo,
   CategoryDefinition,
   DependencyInstallResult,
   ExecutionDaySummary,
@@ -26,6 +27,7 @@ import type {
   SystemMemoryInfo
 } from '../shared/types/script'
 import type { ScriptIcon, ScriptLifecycleEvent } from '../shared/script-contract'
+import type { ScriptLanguage } from '../shared/script-language'
 
 export interface EditorFileStatePayload {
   content: string
@@ -195,11 +197,16 @@ const autoforge = {
     set: (config: Partial<AppConfig>): Promise<AppConfig> => ipcRenderer.invoke(IPC.CONFIG_SET, config)
   },
   deps: {
-    installGlobal: (packageName: string, version?: string): Promise<DependencyInstallResult> =>
-      ipcRenderer.invoke(IPC.DEPS_INSTALL_GLOBAL, packageName, version),
-    listGlobal: (): Promise<GlobalDependency[]> => ipcRenderer.invoke(IPC.DEPS_LIST_GLOBAL),
-    removeGlobal: (packageName: string): Promise<DependencyInstallResult> =>
-      ipcRenderer.invoke(IPC.DEPS_REMOVE_GLOBAL, packageName)
+    installGlobal: (
+      packageName: string,
+      version?: string,
+      language?: ScriptLanguage
+    ): Promise<DependencyInstallResult> =>
+      ipcRenderer.invoke(IPC.DEPS_INSTALL_GLOBAL, packageName, version, language),
+    listGlobal: (language?: ScriptLanguage): Promise<GlobalDependency[]> =>
+      ipcRenderer.invoke(IPC.DEPS_LIST_GLOBAL, language),
+    removeGlobal: (packageName: string, language?: ScriptLanguage): Promise<DependencyInstallResult> =>
+      ipcRenderer.invoke(IPC.DEPS_REMOVE_GLOBAL, packageName, language)
   },
   examples: {
     list: (): Promise<BundledExampleInfo[]> => ipcRenderer.invoke(IPC.EXAMPLES_LIST),
@@ -211,6 +218,8 @@ const autoforge = {
   system: {
     memory: (): Promise<SystemMemoryInfo> => ipcRenderer.invoke(IPC.SYSTEM_MEMORY),
     browserStatus: (): Promise<BrowserStatusInfo> => ipcRenderer.invoke(IPC.SYSTEM_BROWSER_STATUS),
+    pythonDetect: (): Promise<PythonStatusInfo> => ipcRenderer.invoke(IPC.SYSTEM_PYTHON_DETECT),
+    pickPython: (): Promise<string | null> => ipcRenderer.invoke(IPC.SYSTEM_PICK_PYTHON),
     openPath: (targetPath: string): Promise<boolean> => ipcRenderer.invoke(IPC.SYSTEM_OPEN_PATH, targetPath),
     userDataPath: (): Promise<string> => ipcRenderer.invoke(IPC.SYSTEM_USER_DATA_PATH),
     pickExternalEditor: (): Promise<string | null> =>

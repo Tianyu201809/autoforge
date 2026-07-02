@@ -42,12 +42,13 @@ export async function run(ctx) {
 | `description` | string | | 描述 |
 | `version` | string | | 语义化版本，默认 `1.0.0` |
 | `entry` | string | | 入口文件，默认 `index.mjs` |
+| `language` | string | | 脚本语言：`javascript`（默认）或 `python`；省略时按 entry 扩展名推断 |
 | `category` | string | | 分类 key：`browser` / `local` / `scrape` / `file` / `system` |
 | `categoryLabel` | string | | 分类显示名 |
 | `icon` | string | | UI 图标 |
 | `env` | EnvVarDefinition[] | | 环境变量 schema（固定环境配置） |
 | `params` | ParamDefinition[] | | 运行业务参数 schema（每次运行可不同） |
-| `dependencies` | Record<string,string> | | npm 依赖，运行前自动安装 |
+| `dependencies` | Record<string,string> | | 依赖：JS 脚本为 npm 包；Python 脚本为 pip 包（运行前自动安装至脚本 `.venv`） |
 | `browser` | `{ headless?: boolean }` | | 浏览器启动选项；`headless: true` 为无头模式，默认 `false` |
 
 ### 浏览器无头模式
@@ -524,12 +525,60 @@ export async function run(ctx) {
 
 在 **设置 → 全局 npm 依赖** 中安装，存入 `userData/runtime/node_modules`，所有脚本共享。
 
+Python 脚本的全局 pip 依赖在 **设置 → Python → 全局 Python 依赖** 中管理，存入 `userData/runtime-python/.venv`，通过 `PYTHONPATH` 对所有 Python 脚本可见。
+
+### pip 镜像与运行超时
+
+在 **设置 → Python** 中可配置：
+
+| 配置项 | 说明 |
+|---|---|
+| pip 镜像源 | 如 `https://pypi.tuna.tsinghua.edu.cn/simple`，用于脚本 `.venv` 与全局 Python 依赖安装 |
+| 运行超时（秒） | JS 与 Python 共用；`0` 表示不限制，超时后自动停止脚本 |
+
+## Python 脚本
+
+Python 脚本与 JavaScript 脚本使用相同的 `autoforge.json` 清单与 `run(ctx)` 契约，在**独立子进程**中运行（需本机 Python 3.9+，可在 **设置 → Python** 配置路径）。
+
+**autoforge.json**
+
+```json
+{
+  "autoforge": "1.0",
+  "name": "我的 Python 脚本",
+  "language": "python",
+  "entry": "index.py",
+  "dependencies": {
+    "requests": ">=2.31.0"
+  }
+}
+```
+
+**index.py**
+
+```python
+async def run(ctx):
+    ctx.log("INFO", "开始执行")
+    value = ctx.params.get("KEY", "")
+    return {"ok": True, "value": value}
+```
+
+| 项 | 说明 |
+|---|---|
+| `ctx.env` / `ctx.params` | 与 JS 相同，均为字符串字典 |
+| `ctx.log` / `ctx.stage` / `ctx.progress` | 与 JS 相同语义 |
+| `ctx.sdk.paths` | `user_data`、`script_dir` 路径 |
+| `ctx.sdk.browser` | `await ctx.sdk.browser.launch()`，需 `dependencies` 含 `playwright`；启动参数与 JS 侧一致 |
+| `dependencies` | pip 安装至脚本目录 `.venv`；也可在设置页安装全局 Python 依赖 |
+
 ## 上传方式
 
 1. **脚本包目录**：包含 `autoforge.json` 的文件夹
-2. **单文件**：`.js` / `.mjs` / `.cjs`，会自动包装为脚本包
+2. **单文件**：`.js` / `.mjs` / `.cjs` / `.py`，会自动包装为脚本包
 
 ## 示例
 
-- `examples/hello-world/` — 最小示例，含 `env` 与 `params` 区分演示
+- `examples/hello-world/` — JS 最小示例，含 `env` 与 `params` 区分演示
+- `examples/hello-world-py/` — Python 最小示例
+- `examples/playwright-py/` — Python Playwright 浏览器自动化示例
 - `examples/crowdsourcing-token/` — 浏览器自动化 + 环境变量 + 依赖

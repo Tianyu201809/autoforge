@@ -9,8 +9,9 @@ export interface ScriptFileState {
   loaded: boolean
 }
 
-export function languageForPath(path: string): 'javascript' | 'json' {
+export function languageForPath(path: string): 'javascript' | 'json' | 'python' {
   if (path.endsWith('.json')) return 'json'
+  if (path.endsWith('.py')) return 'python'
   return 'javascript'
 }
 

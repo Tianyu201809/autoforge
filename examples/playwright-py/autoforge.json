@@ -1,0 +1,33 @@
+{
+  "autoforge": "1.0",
+  "name": "Playwright 示例 (Python)",
+  "description": "使用 ctx.sdk.browser.launch 打开网页并读取标题",
+  "version": "1.0.0",
+  "language": "python",
+  "entry": "index.py",
+  "category": "browser",
+  "icon": "globe",
+  "browser": {
+    "headless": true
+  },
+  "dependencies": {
+    "playwright": ">=1.50.0"
+  },
+  "env": [
+    {
+      "key": "PAGE_URL",
+      "label": "目标 URL",
+      "description": "要打开的网页地址",
+      "default": "https://example.com"
+    }
+  ],
+  "params": [
+    {
+      "key": "WAIT_MS",
+      "label": "加载等待 (ms)",
+      "description": "打开页面后额外等待毫秒数，便于动态内容加载",
+      "type": "number",
+      "default": "2000"
+    }
+  ]
+}

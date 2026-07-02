@@ -130,9 +130,28 @@ export interface ScratchpadEntry {
   value: string
 }
 
+export interface PythonStatusInfo {
+  found: boolean
+  executable: string | null
+  version: string | null
+  minVersion: string
+  error?: string
+}
+
 export interface AppConfig {
   browser?: {
     executablePath?: string
+  }
+  /** 本机 Python 解释器（Python 脚本执行） */
+  python?: {
+    executablePath?: string
+    minVersion?: string
+    /** pip 镜像源，如 https://pypi.tuna.tsinghua.edu.cn/simple */
+    pipIndexUrl?: string
+  }
+  /** 脚本运行超时（秒），0 表示不限制 */
+  script?: {
+    runTimeoutSeconds?: number
   }
   /** 外部代码编辑器，用于打开脚本工作区目录 */
   externalEditor?: {

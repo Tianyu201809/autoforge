@@ -29,7 +29,7 @@ import { scriptStore } from './script-store'
 
 export { MANIFEST_FILENAME }
 
-const IGNORED_DIR_NAMES = new Set(['node_modules', '.git', '.svn', '__pycache__', 'dist-electron', 'release'])
+const IGNORED_DIR_NAMES = new Set(['node_modules', '.git', '.svn', '__pycache__', '.venv', 'dist-electron', 'release'])
 
 function toPosixPath(filePath: string): string {
   return filePath.replace(/\\/g, '/')

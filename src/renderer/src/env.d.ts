@@ -10,6 +10,7 @@ import type {
   AppConfig,
   AppWindowConfig,
   BrowserStatusInfo,
+  PythonStatusInfo,
   CategoryDefinition,
   DependencyInstallResult,
   ExecutionDaySummary,
@@ -164,9 +165,16 @@ export interface AutoforgeApi {
     set: (config: Partial<AppConfig>) => Promise<AppConfig>
   }
   deps: {
-    installGlobal: (packageName: string, version?: string) => Promise<DependencyInstallResult>
-    listGlobal: () => Promise<GlobalDependency[]>
-    removeGlobal: (packageName: string) => Promise<DependencyInstallResult>
+    installGlobal: (
+      packageName: string,
+      version?: string,
+      language?: import('../../shared/script-language').ScriptLanguage
+    ) => Promise<DependencyInstallResult>
+    listGlobal: (language?: import('../../shared/script-language').ScriptLanguage) => Promise<GlobalDependency[]>
+    removeGlobal: (
+      packageName: string,
+      language?: import('../../shared/script-language').ScriptLanguage
+    ) => Promise<DependencyInstallResult>
   }
   examples: {
     list: () => Promise<BundledExampleInfo[]>
@@ -178,6 +186,8 @@ export interface AutoforgeApi {
   system: {
     memory: () => Promise<SystemMemoryInfo>
     browserStatus: () => Promise<BrowserStatusInfo>
+    pythonDetect: () => Promise<PythonStatusInfo>
+    pickPython: () => Promise<string | null>
     openPath: (targetPath: string) => Promise<boolean>
     userDataPath: () => Promise<string>
     pickExternalEditor: () => Promise<string | null>

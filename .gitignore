@@ -6,3 +6,6 @@ resources/browsers
 .DS_Store
 Thumbs.db
 release/
+__pycache__/
+*.pyc
+.venv/

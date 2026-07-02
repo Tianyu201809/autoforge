@@ -7,7 +7,7 @@ const props = withDefaults(
   defineProps<{
     modelValue: string
     filename?: string
-    language?: 'javascript' | 'json'
+    language?: 'javascript' | 'json' | 'python'
     dirty?: boolean
     readonly?: boolean
     placeholder?: string
@@ -51,7 +51,11 @@ const highlighted = computed(() => {
   return highlightCode(props.modelValue, props.language) + '\n'
 })
 
-const languageLabel = computed(() => (props.language === 'json' ? 'JSON' : 'JavaScript'))
+const languageLabel = computed(() => {
+  if (props.language === 'json') return 'JSON'
+  if (props.language === 'python') return 'Python'
+  return 'JavaScript'
+})
 
 function updateCursor(): void {
   const el = textareaRef.value

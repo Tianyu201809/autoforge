@@ -7,6 +7,7 @@ import { findCategoryDefinition } from '../services/category-service'
 import { dependencyManager } from '../services/dependency-manager'
 import { importBundledExample, listBundledExamples, readDevGuideMarkdown } from '../services/example-bundles'
 import { getBrowserStatus } from '../services/browser-path'
+import { detectPythonStatus } from '../services/python-resolver'
 import {
   openInExternalEditor,
   resolveExternalEditorPath
@@ -205,7 +206,7 @@ export function registerIpcHandlers(getWindow: () => BrowserWindow | null): void
   ipcMain.handle(IPC.SCRIPTS_INSTALL_DEPS, async (_event, id: string) => {
     const script = scriptRegistry.getById(id)
     if (!script) return { ok: false, stdout: '', stderr: '脚本不存在' }
-    return dependencyManager.installScriptDeps(script.workspacePath)
+    return dependencyManager.installScriptDeps(script.workspacePath, script.language)
   })
 
   ipcMain.handle(IPC.SCRIPTS_SET_ENV_CONFIG, (_event, id: string, envId: string, values: Record<string, string>) => {
@@ -376,16 +377,26 @@ export function registerIpcHandlers(getWindow: () => BrowserWindow | null): void
     return getWindowModeState()
   })
 
-  ipcMain.handle(IPC.DEPS_INSTALL_GLOBAL, async (_event, packageName: string, version?: string) => {
-    const result = await dependencyManager.installGlobal(packageName, version)
-    return result
-  })
+  ipcMain.handle(
+    IPC.DEPS_INSTALL_GLOBAL,
+    async (_event, packageName: string, version?: string, language?: import('../../shared/script-language').ScriptLanguage) => {
+      return dependencyManager.installGlobal(packageName, version, language ?? 'javascript')
+    }
+  )
 
-  ipcMain.handle(IPC.DEPS_LIST_GLOBAL, () => dependencyManager.listGlobal())
+  ipcMain.handle(
+    IPC.DEPS_LIST_GLOBAL,
+    (_event, language?: import('../../shared/script-language').ScriptLanguage) => {
+      return dependencyManager.listGlobal(language ?? 'javascript')
+    }
+  )
 
-  ipcMain.handle(IPC.DEPS_REMOVE_GLOBAL, async (_event, packageName: string) => {
-    return dependencyManager.removeGlobal(packageName)
-  })
+  ipcMain.handle(
+    IPC.DEPS_REMOVE_GLOBAL,
+    async (_event, packageName: string, language?: import('../../shared/script-language').ScriptLanguage) => {
+      return dependencyManager.removeGlobal(packageName, language ?? 'javascript')
+    }
+  )
 
   ipcMain.handle(IPC.EXAMPLES_LIST, () => listBundledExamples())
 
@@ -427,6 +438,23 @@ export function registerIpcHandlers(getWindow: () => BrowserWindow | null): void
   })
 
   ipcMain.handle(IPC.SYSTEM_USER_DATA_PATH, () => app.getPath('userData'))
+
+  ipcMain.handle(IPC.SYSTEM_PYTHON_DETECT, () => {
+    return detectPythonStatus(scriptStore.getConfig().python)
+  })
+
+  ipcMain.handle(IPC.SYSTEM_PICK_PYTHON, async () => {
+    const win = getWindow()
+    const result = await dialog.showOpenDialog(win ?? undefined, {
+      properties: ['openFile'],
+      filters:
+        process.platform === 'win32'
+          ? [{ name: 'Python', extensions: ['exe'] }]
+          : [{ name: 'Python', extensions: ['*'] }]
+    })
+    if (result.canceled || !result.filePaths[0]) return null
+    return result.filePaths[0]
+  })
 
   ipcMain.handle(IPC.SYSTEM_PICK_EXTERNAL_EDITOR, async () => {
     const win = getWindow()

@@ -86,6 +86,13 @@
       {
         "from": "docs/script-spec.md",
         "to": "docs/script-spec.md"
+      },
+      {
+        "from": "resources/python",
+        "to": "python",
+        "filter": [
+          "**/*"
+        ]
       }
     ],
     "win": {

@@ -315,6 +315,39 @@ export function getBrowserStatus(): {
   }
 }
 
+/** 供 Python 子进程 browser SDK 使用的可序列化启动配置 */
+export interface PythonBrowserLaunchConfig {
+  headless: boolean
+  engine: BrowserEngine
+  executablePath?: string
+  channel?: string
+  playwrightBrowsersPath: string
+}
+
+export function resolvePythonBrowserLaunchConfig(
+  config: AppConfig,
+  options?: { headless?: boolean }
+): PythonBrowserLaunchConfig {
+  applyPlaywrightBrowsersPath()
+  const headless = options?.headless ?? false
+  const plans = resolveBrowserLaunchPlans(config, options)
+  const plan = plans[0]
+  if (!plan) {
+    return {
+      headless,
+      engine: 'chromium',
+      playwrightBrowsersPath: getPlaywrightBrowsersPath()
+    }
+  }
+  return {
+    headless: plan.headless,
+    engine: plan.engine,
+    executablePath: plan.executablePath,
+    channel: plan.channel,
+    playwrightBrowsersPath: getPlaywrightBrowsersPath()
+  }
+}
+
 export function assertBundledBrowserAvailable(): void {
   const { bundled, path, installed } = getBrowserStatus()
   if (bundled || installed.some((b) => b.id !== 'bundled')) return
