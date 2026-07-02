@@ -180,6 +180,10 @@ export interface AutoforgeApi {
     browserStatus: () => Promise<BrowserStatusInfo>
     openPath: (targetPath: string) => Promise<boolean>
     userDataPath: () => Promise<string>
+    pickExternalEditor: () => Promise<string | null>
+    openInExternalEditor: (
+      workspacePath: string
+    ) => Promise<{ ok: boolean; reason?: string; editorPath?: string }>
   }
   terminal: {
     open: () => Promise<boolean>

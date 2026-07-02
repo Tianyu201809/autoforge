@@ -134,6 +134,10 @@ export interface AppConfig {
   browser?: {
     executablePath?: string
   }
+  /** 外部代码编辑器，用于打开脚本工作区目录 */
+  externalEditor?: {
+    executablePath?: string
+  }
   /** 全局脚本工作区根目录（默认 userData/scripts） */
   scriptsDirectory?: string
   logLevel?: LogLevel

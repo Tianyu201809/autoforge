@@ -15,6 +15,7 @@ const appVersion = window.api.versions.app
 const emit = defineEmits<{ close: [] }>()
 
 const browserPath = ref('')
+const externalEditorPath = ref('')
 const logLevel = ref<'INFO' | 'WARN' | 'ERROR'>('INFO')
 const trayMode = ref(false)
 const floatingMode = ref(false)
@@ -55,6 +56,7 @@ watch([trayMode, floatingMode, globalShortcutEnabled, globalShortcut], () => {
 onMounted(async () => {
   const config = await window.autoforge.config.get()
   browserPath.value = config.browser?.executablePath ?? ''
+  externalEditorPath.value = config.externalEditor?.executablePath ?? ''
   logLevel.value = config.logLevel ?? 'INFO'
   trayMode.value = !!config.window?.trayMode
   floatingMode.value = !!config.window?.floatingMode
@@ -90,6 +92,7 @@ async function save(): Promise<void> {
   try {
     await window.autoforge.config.set({
       browser: { executablePath: browserPath.value || undefined },
+      externalEditor: { executablePath: externalEditorPath.value || undefined },
       logLevel: logLevel.value,
       window: {
         trayMode: trayMode.value,
@@ -204,6 +207,11 @@ function removeEnvVar(key: string): void {
 async function openUserDataDir(): Promise<void> {
   const path = await window.autoforge.system.userDataPath()
   await window.autoforge.system.openPath(path)
+}
+
+async function browseExternalEditor(): Promise<void> {
+  const path = await window.autoforge.system.pickExternalEditor()
+  if (path) externalEditorPath.value = path
 }
 </script>
 
@@ -346,6 +354,28 @@ async function openUserDataDir(): Promise<void> {
               @click="deleteEnv(editingEnv.id)"
             >
               删除
+            </button>
+          </div>
+        </div>
+      </section>
+
+      <section class="space-y-3">
+        <h2 class="text-[13px] font-medium sb-text-secondary">外部编辑器</h2>
+        <p class="text-[11px] sb-text-faint">在脚本详情「编辑」页点击「外部编辑器」时，用所选程序打开脚本工作区目录（如 VS Code、Cursor、WebStorm）。</p>
+        <div>
+          <label class="text-[12px] sb-text-muted">编辑器路径</label>
+          <div class="mt-1 flex gap-2">
+            <input
+              v-model="externalEditorPath"
+              placeholder="留空则在首次使用时选择"
+              class="flex-1 min-w-0 h-9 px-3 rounded-lg sb-input border text-[13px] font-mono outline-none"
+            />
+            <button
+              type="button"
+              class="h-9 px-3 rounded-lg text-[12px] sb-text-muted border sb-border hover:sb-text-secondary hover:sb-bg-hover transition-colors flex-shrink-0"
+              @click="browseExternalEditor"
+            >
+              浏览…
             </button>
           </div>
         </div>

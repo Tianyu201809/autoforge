@@ -95,6 +95,10 @@ export const IPC = {
 
   SYSTEM_USER_DATA_PATH: 'system:user-data-path',
 
+  SYSTEM_PICK_EXTERNAL_EDITOR: 'system:pick-external-editor',
+
+  SYSTEM_OPEN_IN_EXTERNAL_EDITOR: 'system:open-in-external-editor',
+
 
 
   EVENT_LOG: 'event:log',

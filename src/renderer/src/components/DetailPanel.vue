@@ -12,7 +12,8 @@ import {
   Save,
   Square,
   Trash2,
-  X
+  X,
+  ExternalLink
 } from 'lucide-vue-next'
 import { normalizeCronExpression } from '../../../shared/cron-schedule'
 import { SCRIPT_ICON_OPTIONS } from '../../../shared/script-icons'
@@ -29,8 +30,6 @@ import ScriptRunProgressPanel from './ScriptRunProgressPanel.vue'
 import { formatScriptRunProgressSummary } from '../../../shared/script-progress'
 import CodeEditor from './CodeEditor.vue'
 import SchemaValueField from './SchemaValueField.vue'
-import ScriptWorkspaceSidebar from './ScriptWorkspaceSidebar.vue'
-import { useScriptFileEditor } from '../composables/useScriptFileEditor'
 import { MANIFEST_FILENAME } from '../../../shared/script-contract'
 import { extractRunResultOutputDir } from '../../../shared/run-result'
 import { parseParamAttachments } from '../../../shared/param-attachments'
@@ -38,6 +37,7 @@ import { defaultSchemaValue } from '../../../shared/schema-values'
 import { isExplicitEnvConfigValue, resolveEnvFieldValue } from '../../../shared/env-resolution'
 import { promptUnsavedFiles } from '../utils/unsaved-files-prompt'
 import { usePanelSaveFeedback } from '../composables/usePanelSaveFeedback'
+import { useManifestEditor } from '../composables/useManifestEditor'
 
 const { saveFeedback, showSaveFeedback, clearSaveFeedback } = usePanelSaveFeedback()
 
@@ -186,31 +186,21 @@ const iconPickerOpen = ref(false)
 const savingMeta = ref(false)
 const renaming = ref(false)
 const browserHeadless = ref(false)
-const editorDetached = ref(false)
 const editModeActive = ref(false)
+const openingExternalEditor = ref(false)
 
 const scriptIdRef = computed(() => props.script.id)
-const entryPathRef = computed(() => props.script.entry)
 const {
-  files: workspaceFiles,
-  activePath: activeFilePath,
   activeContent,
   editDirty,
-  editLanguage,
   editReadonly,
   loadingFile,
-  loadFileList,
-  selectFile,
-  saveAllDirtyFiles,
-  getDirtyPaths,
-  revertAllDirty,
-  isAnyDirty,
-  getSnapshot,
-  mergeFileFromSync,
-  markSaved,
-  reset: resetFileEditor,
-  isFileDirty
-} = useScriptFileEditor(scriptIdRef, entryPathRef)
+  loadManifest,
+  saveManifest,
+  revertManifest,
+  isDirty: manifestDirty,
+  reset: resetManifestEditor
+} = useManifestEditor(scriptIdRef)
 
 const iconOptions = SCRIPT_ICON_OPTIONS
 
@@ -344,7 +334,7 @@ function syncBrowserHeadless(): void {
 }
 
 async function loadContent(): Promise<void> {
-  await loadFileList()
+  await loadManifest()
 }
 
 async function loadEnvironments(): Promise<void> {
@@ -532,32 +522,10 @@ onMounted(async () => {
   await Promise.all([loadContent(), loadEnvironments()])
   syncDetailDraft()
   window.addEventListener('resize', onWindowResize)
-
-  unsubEditorClosed = window.autoforge.editor.onClosed(() => {
-    editorDetached.value = false
-  })
-  unsubEditorSync = window.autoforge.editor.onSync((payload) => {
-    if (payload.scriptId !== props.script.id) return
-    if (payload.activeFilePath) activeFilePath.value = payload.activeFilePath
-    mergeFileFromSync(payload.filePath, payload.content)
-  })
-  unsubEditorSaved = window.autoforge.editor.onSaved(({ scriptId, filePath }) => {
-    if (scriptId !== props.script.id) return
-    if (filePath) markSaved(filePath)
-    emit('refresh')
-  })
-  const editorOpen = await window.autoforge.editor.isOpen()
-  if (editorOpen) {
-    const remote = await window.autoforge.editor.getSession()
-    editorDetached.value = remote?.scriptId === props.script.id
-  }
 })
 
 onUnmounted(() => {
   window.removeEventListener('resize', onWindowResize)
-  unsubEditorClosed?.()
-  unsubEditorSync?.()
-  unsubEditorSaved?.()
 })
 
 watch(
@@ -566,8 +534,8 @@ watch(
     if (oldId && newId !== oldId) {
       clearSaveFeedback()
     }
-    if (oldId && newId !== oldId && editModeActive.value && isAnyDirty.value) {
-      const choice = promptUnsavedFiles(getDirtyPaths(), '切换脚本', { allowStay: true })
+    if (oldId && newId !== oldId && editModeActive.value && manifestDirty.value) {
+      const choice = promptUnsavedFiles([MANIFEST_FILENAME], '切换脚本', { allowStay: true })
       if (choice === 'cancel') {
         emit('keep-script', oldId)
         return
@@ -575,30 +543,25 @@ watch(
       if (choice === 'save') {
         saving.value = true
         try {
-          const dirtyPaths = getDirtyPaths()
-          const ok = await saveAllDirtyFiles(oldId)
+          const ok = await saveManifest(oldId)
           if (!ok) {
             emit('keep-script', oldId)
             return
           }
-          if (dirtyPaths.includes(MANIFEST_FILENAME)) emit('refresh')
+          emit('refresh')
         } finally {
           saving.value = false
         }
       } else {
-        revertAllDirty()
+        revertManifest()
       }
     }
 
-    if (editorDetached.value) {
-      await window.autoforge.editor.close()
-      editorDetached.value = false
-    }
     editModeActive.value = false
     syncScheduleFromScript()
     viewingSessionId.value = null
     runResultSectionExpanded.value = false
-    resetFileEditor()
+    resetManifestEditor()
     if (props.initialTab) activeTab.value = props.initialTab
     await Promise.all([loadContent(), loadEnvironments()])
     syncDetailDraft()
@@ -648,35 +611,29 @@ watch(
   { deep: true }
 )
 
-async function resolveUnsavedEdit(
-  actionLabel: string,
-  allowStay = true,
-  scriptIdOverride?: string
-): Promise<boolean> {
-  if (!editModeActive.value || !isAnyDirty.value) return true
+async function resolveUnsavedEdit(actionLabel: string, allowStay = true): Promise<boolean> {
+  if (!editModeActive.value || !manifestDirty.value) return true
 
-  const choice = promptUnsavedFiles(getDirtyPaths(), actionLabel, { allowStay })
+  const choice = promptUnsavedFiles([MANIFEST_FILENAME], actionLabel, { allowStay })
   if (choice === 'cancel') return false
 
   if (choice === 'save') {
     saving.value = true
     try {
-      const dirtyPaths = getDirtyPaths()
-      const ok = await saveAllDirtyFiles(scriptIdOverride)
+      const ok = await saveManifest()
       if (!ok) return false
-      if (dirtyPaths.includes(MANIFEST_FILENAME)) emit('refresh')
+      emit('refresh')
       return true
     } finally {
       saving.value = false
     }
   }
 
-  revertAllDirty()
+  revertManifest()
   return true
 }
 
 function enterEditMode(): void {
-  if (editorDetached.value) return
   editModeActive.value = true
 }
 
@@ -689,22 +646,21 @@ async function cancelEditMode(): Promise<void> {
 async function saveEditMode(): Promise<void> {
   saving.value = true
   try {
-    if (isAnyDirty.value) {
-      const dirtyPaths = getDirtyPaths()
-      const ok = await saveAllDirtyFiles()
+    if (manifestDirty.value) {
+      const ok = await saveManifest()
       if (!ok) {
-        showSaveFeedback('error', '保存失败', '部分脚本文件未能写入磁盘')
+        showSaveFeedback('error', '保存失败', '无法写入 autoforge.json')
         return
       }
-      if (dirtyPaths.includes(MANIFEST_FILENAME)) emit('refresh')
-      showSaveFeedback('success', '已保存', '脚本文件已保存')
+      emit('refresh')
+      showSaveFeedback('success', '已保存', 'autoforge.json 已保存')
     }
     editModeActive.value = false
   } catch (err) {
     showSaveFeedback(
       'error',
       '保存失败',
-      err instanceof Error ? err.message : '无法保存脚本文件'
+      err instanceof Error ? err.message : '无法保存 autoforge.json'
     )
   } finally {
     saving.value = false
@@ -721,28 +677,26 @@ async function switchTab(tabId: DetailPanelTab): Promise<void> {
   activeTab.value = tabId
 }
 
-async function handlePopoutEditor(): Promise<void> {
-  const snapshot = getSnapshot()
-  await window.autoforge.editor.open({
-    scriptId: props.script.id,
-    scriptName: props.script.name,
-    entryPath: props.script.entry,
-    manifestPath: MANIFEST_FILENAME,
-    activeFilePath: snapshot.activeFilePath,
-    files: snapshot.files,
-    fileStates: snapshot.fileStates
-  })
-  editorDetached.value = true
+async function openInExternalEditor(): Promise<void> {
+  openingExternalEditor.value = true
+  try {
+    const result = await window.autoforge.system.openInExternalEditor(props.script.workspacePath)
+    if (result.ok) {
+      showSaveFeedback('success', '已打开', result.editorPath ?? '外部编辑器')
+      return
+    }
+    if (result.reason === 'cancelled') return
+    const message =
+      result.reason === 'invalid-path'
+        ? '脚本目录不存在'
+        : result.reason === 'invalid-editor'
+          ? '编辑器路径无效，请在设置中重新选择'
+          : '无法启动外部编辑器'
+    showSaveFeedback('error', '打开失败', message)
+  } finally {
+    openingExternalEditor.value = false
+  }
 }
-
-async function handleDockEditor(): Promise<void> {
-  await window.autoforge.editor.close()
-  editorDetached.value = false
-}
-
-let unsubEditorClosed: (() => void) | undefined
-let unsubEditorSync: (() => void) | undefined
-let unsubEditorSaved: (() => void) | undefined
 
 function plainEnvVars(): Record<string, string> {
   return Object.fromEntries(Object.entries(toRaw(envVars.value)).map(([k, v]) => [k, v ?? '']))
@@ -1284,44 +1238,39 @@ async function handleRename(): Promise<void> {
       />
     </div>
 
-    <!-- 编辑 -->
+    <!-- 编辑 autoforge.json -->
     <div v-else-if="activeTab === 'edit'" class="flex-1 flex flex-col p-3 gap-2 min-h-0">
-      <div class="flex-1 flex min-h-0 gap-2">
-        <ScriptWorkspaceSidebar
-          storage-key="autoforge-detail-workspace-sidebar"
-          :files="workspaceFiles"
-          :active-path="activeFilePath"
-          :is-dirty="isFileDirty"
-          @select="(path) => void selectFile(path)"
-        />
-        <div class="flex-1 flex flex-col min-w-0 min-h-0 gap-2">
-          <div v-if="loadingFile" class="text-[11px] sb-text-faint px-1">加载文件中…</div>
-          <CodeEditor
-            v-if="!editorDetached"
-            v-model="activeContent"
-            :filename="activeFilePath"
-            :language="editLanguage"
-            :dirty="editDirty"
-            :readonly="!editModeActive || editReadonly"
-            :placeholder="editReadonly ? '此文件为二进制格式，无法在编辑器中修改' : '// 在此编辑文件…'"
-            @popout="handlePopoutEditor"
-          />
-          <div
-            v-else
-            class="flex-1 flex flex-col items-center justify-center gap-3 rounded-lg border border-dashed sb-border-subtle sb-bg-surface min-h-[200px]"
-          >
-            <p class="text-[13px] sb-text-muted">编辑器已在独立窗口中</p>
-            <button
-              type="button"
-              class="text-[12px] sb-text-primary hover:text-[var(--sb-accent-solid)] transition-colors"
-              @click="handleDockEditor"
-            >
-              收回主窗口
-            </button>
-          </div>
+      <div class="flex items-start justify-between gap-3 flex-shrink-0">
+        <div class="min-w-0">
+          <p class="text-[12px] sb-text-secondary">编辑脚本清单 <code class="sb-text-muted font-mono">{{ MANIFEST_FILENAME }}</code></p>
+          <p class="text-[11px] sb-text-faint mt-0.5">在此修改 env、params、定时任务等声明；脚本代码请用外部编辑器打开工作区目录。</p>
         </div>
+        <button
+          type="button"
+          class="flex items-center gap-1.5 h-7 px-2.5 rounded-lg text-[11px] sb-text-muted border sb-border hover:sb-text-secondary hover:sb-bg-hover transition-colors disabled:opacity-50 flex-shrink-0"
+          :disabled="openingExternalEditor"
+          title="用本地安装的编辑器打开脚本目录"
+          @click="openInExternalEditor"
+        >
+          <ExternalLink class="w-3.5 h-3.5" :stroke-width="1.5" />
+          {{ openingExternalEditor ? '打开中…' : '外部编辑器' }}
+        </button>
       </div>
-      <div v-if="!editorDetached" class="flex-shrink-0 flex gap-2">
+
+      <div class="flex-1 flex flex-col min-w-0 min-h-0 gap-2">
+        <div v-if="loadingFile" class="text-[11px] sb-text-faint px-1">加载清单中…</div>
+        <CodeEditor
+          v-model="activeContent"
+          :filename="MANIFEST_FILENAME"
+          language="json"
+          :dirty="editDirty"
+          :readonly="!editModeActive || editReadonly"
+          :placeholder="editReadonly ? '此文件为二进制格式，无法在编辑器中修改' : '{ /* autoforge.json */ }'"
+          standalone
+        />
+      </div>
+
+      <div class="flex-shrink-0 flex gap-2">
         <button
           v-if="!editModeActive"
           type="button"
@@ -1347,7 +1296,7 @@ async function handleRename(): Promise<void> {
             @click="saveEditMode"
           >
             <Save class="w-3.5 h-3.5" :stroke-width="1.5" />
-            {{ saving ? '保存中…' : isAnyDirty ? '保存' : '完成' }}
+            {{ saving ? '保存中…' : manifestDirty ? '保存' : '完成' }}
           </button>
         </template>
       </div>

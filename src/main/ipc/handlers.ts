@@ -8,6 +8,10 @@ import { dependencyManager } from '../services/dependency-manager'
 import { importBundledExample, listBundledExamples, readDevGuideMarkdown } from '../services/example-bundles'
 import { getBrowserStatus } from '../services/browser-path'
 import {
+  openInExternalEditor,
+  resolveExternalEditorPath
+} from '../services/external-editor'
+import {
   computeStats,
   enrichScriptItem,
   getCategories,
@@ -423,6 +427,46 @@ export function registerIpcHandlers(getWindow: () => BrowserWindow | null): void
   })
 
   ipcMain.handle(IPC.SYSTEM_USER_DATA_PATH, () => app.getPath('userData'))
+
+  ipcMain.handle(IPC.SYSTEM_PICK_EXTERNAL_EDITOR, async () => {
+    const win = getWindow()
+    const result = await dialog.showOpenDialog(win ?? undefined, {
+      properties: ['openFile'],
+      filters:
+        process.platform === 'win32'
+          ? [{ name: '可执行文件', extensions: ['exe', 'cmd', 'bat', 'com'] }]
+          : [{ name: '应用程序', extensions: ['*'] }]
+    })
+    if (result.canceled || !result.filePaths[0]) return null
+    return result.filePaths[0]
+  })
+
+  ipcMain.handle(IPC.SYSTEM_OPEN_IN_EXTERNAL_EDITOR, async (_event, workspacePath: string) => {
+    if (!workspacePath || !existsSync(workspacePath)) {
+      return { ok: false, reason: 'invalid-path' as const }
+    }
+
+    let editorPath = resolveExternalEditorPath(scriptStore.getConfig())
+    if (!editorPath) {
+      const win = getWindow()
+      const result = await dialog.showOpenDialog(win ?? undefined, {
+        properties: ['openFile'],
+        filters:
+          process.platform === 'win32'
+            ? [{ name: '可执行文件', extensions: ['exe', 'cmd', 'bat', 'com'] }]
+            : [{ name: '应用程序', extensions: ['*'] }]
+      })
+      if (result.canceled || !result.filePaths[0]) {
+        return { ok: false, reason: 'cancelled' as const }
+      }
+      editorPath = result.filePaths[0]
+      scriptStore.setConfig({ externalEditor: { executablePath: editorPath } })
+    }
+
+    const opened = openInExternalEditor(workspacePath, editorPath)
+    if (!opened.ok) return opened
+    return { ok: true, editorPath: opened.editorPath }
+  })
 
   ipcMain.handle(IPC.TERMINAL_OPEN, () => {
     openTerminalWindow()

@@ -212,7 +212,13 @@ const autoforge = {
     memory: (): Promise<SystemMemoryInfo> => ipcRenderer.invoke(IPC.SYSTEM_MEMORY),
     browserStatus: (): Promise<BrowserStatusInfo> => ipcRenderer.invoke(IPC.SYSTEM_BROWSER_STATUS),
     openPath: (targetPath: string): Promise<boolean> => ipcRenderer.invoke(IPC.SYSTEM_OPEN_PATH, targetPath),
-    userDataPath: (): Promise<string> => ipcRenderer.invoke(IPC.SYSTEM_USER_DATA_PATH)
+    userDataPath: (): Promise<string> => ipcRenderer.invoke(IPC.SYSTEM_USER_DATA_PATH),
+    pickExternalEditor: (): Promise<string | null> =>
+      ipcRenderer.invoke(IPC.SYSTEM_PICK_EXTERNAL_EDITOR),
+    openInExternalEditor: (
+      workspacePath: string
+    ): Promise<{ ok: boolean; reason?: string; editorPath?: string }> =>
+      ipcRenderer.invoke(IPC.SYSTEM_OPEN_IN_EXTERNAL_EDITOR, workspacePath)
   },
   terminal: {
     open: (): Promise<boolean> => ipcRenderer.invoke(IPC.TERMINAL_OPEN),
