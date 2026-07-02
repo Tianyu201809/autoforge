@@ -261,7 +261,7 @@ async function detectPython(): Promise<void> {
 async function loadGlobalPythonDeps(): Promise<void> {
   loadingGlobalDeps.value = true
   try {
-    globalPythonDeps.value = await window.api.deps.listGlobal('python')
+    globalPythonDeps.value = await window.autoforge.deps.listGlobal('python')
   } catch (err) {
     pushToast({
       type: 'error',
@@ -278,7 +278,7 @@ async function installGlobalPythonDep(): Promise<void> {
   if (!name) return
   installingGlobalDep.value = true
   try {
-    const result = await window.api.deps.installGlobal(
+    const result = await window.autoforge.deps.installGlobal(
       name,
       globalDepVersion.value.trim() || undefined,
       'python'
@@ -316,7 +316,7 @@ async function removeGlobalPythonDep(name: string): Promise<void> {
   if (!confirmed) return
   installingGlobalDep.value = true
   try {
-    const result = await window.api.deps.removeGlobal(name, 'python')
+    const result = await window.autoforge.deps.removeGlobal(name, 'python')
     if (!result.ok) {
       pushToast({
         type: 'error',
