@@ -39,11 +39,19 @@ async def _await_with_abort(ctx: ScriptContext, coro):
     return await task
 
 
+def _resolve_entry_fn(module):
+    for name in ("run", "main"):
+        fn = getattr(module, name, None)
+        if callable(fn):
+            return fn
+    return None
+
+
 async def _run_user_script(ctx: ScriptContext, entry_path: str):
     module = load_module_from_path(entry_path)
-    run_fn = getattr(module, "run", None)
-    if not callable(run_fn):
-        emit_error("脚本必须定义 run(ctx) 函数")
+    run_fn = _resolve_entry_fn(module)
+    if run_fn is None:
+        emit_error("脚本必须定义 run(ctx) 或 main(ctx) 函数")
         sys.exit(1)
 
     result = run_fn(ctx)

@@ -164,6 +164,22 @@ export interface ScriptSdkShape {
 
 export type ScriptRunFn = (ctx: ScriptRunContext) => Promise<unknown>
 
+/** 脚本入口函数名，按优先级依次解析 */
+export const SCRIPT_ENTRY_FN_NAMES = ['run', 'main'] as const
+
+export const SCRIPT_ENTRY_FN_ERROR =
+  '脚本必须导出 run(ctx)、main(ctx) 或 default 函数'
+
+/** 从脚本模块解析入口函数：run → main → default（仅 JS） */
+export function resolveScriptEntryFn(module: Record<string, unknown>): ScriptRunFn | undefined {
+  for (const name of SCRIPT_ENTRY_FN_NAMES) {
+    const fn = module[name]
+    if (typeof fn === 'function') return fn as ScriptRunFn
+  }
+  if (typeof module.default === 'function') return module.default as ScriptRunFn
+  return undefined
+}
+
 export type {
   ScriptControlMessage,
   ScriptProgressInput,

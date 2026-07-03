@@ -5,7 +5,12 @@ import { pathToFileURL } from 'url'
 import type { BrowserWindow } from 'electron'
 import type { ChildProcess } from 'child_process'
 import { IPC } from '../../shared/ipc-channels'
-import type { ScriptRunFn, ScriptStageInput, ScriptProgressInput } from '../../shared/script-contract'
+import {
+  resolveScriptEntryFn,
+  SCRIPT_ENTRY_FN_ERROR,
+  type ScriptStageInput,
+  type ScriptProgressInput
+} from '../../shared/script-contract'
 import type { LogLine, RunSession, ScriptMeta, ExecutionTrigger } from '../../shared/types/script'
 import {
   applyScriptControl,
@@ -189,11 +194,10 @@ export class ScriptRunnerService {
       this.addScriptModulePaths(script.workspacePath)
 
       const mod = await import(pathToFileURL(entryPath).href)
-      const runFn: ScriptRunFn | undefined =
-        typeof mod.run === 'function' ? mod.run : typeof mod.default === 'function' ? mod.default : undefined
+      const runFn = resolveScriptEntryFn(mod as Record<string, unknown>)
 
       if (!runFn) {
-        throw new Error('脚本必须导出 async function run(ctx) 或 default 函数')
+        throw new Error(SCRIPT_ENTRY_FN_ERROR)
       }
 
       this.setPhase(session, 'running', '脚本运行中…')
