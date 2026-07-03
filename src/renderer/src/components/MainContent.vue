@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { onMounted, onUnmounted, ref } from 'vue'
+import { computed, onMounted, onUnmounted, ref } from 'vue'
 import {
   ArrowDown,
   ArrowUp,
@@ -7,8 +7,8 @@ import {
   Check,
   ChevronLeft,
   ChevronRight,
-  LayoutGrid,
-  List,
+  Columns2,
+  Columns3,
   Plus,
   SlidersHorizontal,
   X
@@ -53,7 +53,18 @@ const emit = defineEmits<{
   'update:listPage': [page: number]
 }>()
 
-const viewMode = ref<'grid' | 'list'>(localStorage.getItem('viewMode') === 'list' ? 'list' : 'grid')
+const GRID_COLUMNS_KEY = 'scriptGridColumns'
+
+type GridColumns = '2' | '3'
+
+function readStoredGridColumns(): GridColumns {
+  const stored = localStorage.getItem(GRID_COLUMNS_KEY)
+  if (stored === '2' || stored === '3') return stored
+  // 兼容旧版 list 视图偏好，统一映射为双列
+  return localStorage.getItem('viewMode') === 'list' ? '2' : '3'
+}
+
+const gridColumns = ref<GridColumns>(readStoredGridColumns())
 const filterOpen = ref(false)
 const sortOpen = ref(false)
 const filterWrapRef = ref<HTMLElement | null>(null)
@@ -63,10 +74,16 @@ const { pushToast } = useToast()
 
 let unbindDropZone: (() => void) | undefined
 
-function setViewMode(mode: 'grid' | 'list'): void {
-  viewMode.value = mode
-  localStorage.setItem('viewMode', mode)
+function setGridColumns(columns: GridColumns): void {
+  gridColumns.value = columns
+  localStorage.setItem(GRID_COLUMNS_KEY, columns)
 }
+
+const scriptGridClass = computed(() =>
+  gridColumns.value === '3'
+    ? 'script-card-grid script-card-grid--cols-3'
+    : 'script-card-grid script-card-grid--cols-2'
+)
 
 const sortLabels: Record<ScriptSortBy, string> = {
   name: '名称',
@@ -136,19 +153,21 @@ onUnmounted(() => {
         <div class="flex items-center sb-bg-surface border sb-border rounded-lg p-0.5">
           <button
             type="button"
+            title="双列布局"
             class="w-7 h-7 flex items-center justify-center rounded-md transition-colors"
-            :class="viewMode === 'grid' ? 'sb-bg-inset sb-text-primary' : 'sb-text-muted hover:sb-text-secondary'"
-            @click="setViewMode('grid')"
+            :class="gridColumns === '2' ? 'sb-bg-inset sb-text-primary' : 'sb-text-muted hover:sb-text-secondary'"
+            @click="setGridColumns('2')"
           >
-            <LayoutGrid class="w-3.5 h-3.5" :stroke-width="1.5" />
+            <Columns2 class="w-3.5 h-3.5" :stroke-width="1.5" />
           </button>
           <button
             type="button"
+            title="三列布局"
             class="w-7 h-7 flex items-center justify-center rounded-md transition-colors"
-            :class="viewMode === 'list' ? 'sb-bg-inset sb-text-primary' : 'sb-text-muted hover:sb-text-secondary'"
-            @click="setViewMode('list')"
+            :class="gridColumns === '3' ? 'sb-bg-inset sb-text-primary' : 'sb-text-muted hover:sb-text-secondary'"
+            @click="setGridColumns('3')"
           >
-            <List class="w-3.5 h-3.5" :stroke-width="1.5" />
+            <Columns3 class="w-3.5 h-3.5" :stroke-width="1.5" />
           </button>
         </div>
 
@@ -285,10 +304,11 @@ onUnmounted(() => {
 
     <div class="flex-1 overflow-y-auto px-5 py-4 pb-4">
       <div v-if="!totalScripts" class="text-center sb-text-muted text-sm py-20">暂无脚本</div>
-      <div v-else class="gap-3" :class="viewMode === 'grid' ? 'grid grid-cols-1 @md:grid-cols-2 @2xl:grid-cols-3' : 'flex flex-col'">
+      <div v-else :class="scriptGridClass">
         <ScriptCard
           v-for="script in scripts"
           :key="script.id"
+          class="min-w-0"
           :script="script"
           :selected="script.id === selectedId"
           :category-definitions="categoryDefinitions"
@@ -308,7 +328,7 @@ onUnmounted(() => {
         <div
           role="button"
           tabindex="0"
-          class="rounded-xl border border-dashed sb-border bg-transparent hover:border-[var(--sb-text-faint)] hover:sb-bg-surface transition-all cursor-pointer flex flex-col items-center justify-center min-h-[160px] gap-2"
+          class="script-card-add min-w-0 rounded-xl border border-dashed sb-border bg-transparent hover:border-[var(--sb-text-faint)] hover:sb-bg-surface transition-all cursor-pointer flex flex-col items-center justify-center min-h-[160px] gap-2"
           @click="emit('import')"
           @keydown.enter="emit('import')"
           @keydown.space.prevent="emit('import')"
