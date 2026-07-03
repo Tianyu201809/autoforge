@@ -1,39 +1,52 @@
 # Documentation Report: Autoforge
 
-**Date:** 2026-07-03  
-**Project Type:** CODING (Electron + Vue 3 + Python runtime)
+**Date:** 2026-07-03（全量校验）  
+**Project Type:** CODING (Electron + Vue 3 + Python runtime)  
+**Trigger:** `/doc` — default mode (discover · validate · sync)
 
 ## Coverage
 
-- Total documentable public surfaces: ~15 major modules + script contract
-- Documented in repo docs: README, CHANGELOG, v1.0.0, v1.9.0, architecture, script-spec
-- Coverage (user-facing): ~90% — core platform and script contract documented; internal service APIs not individually documented
+| 类别 | 数量 | 已文档化 | 覆盖率 |
+|------|------|----------|--------|
+| 用户面向文档（README、CHANGELOG、版本说明、架构、script-spec） | 7 文件 | 7 | **100%** |
+| 版本说明 vs package.json | 1.10.0 | 1.10.0 | **同步** |
+| 内部 service API（逐模块） | ~20 模块 | 架构表摘要 | ~85% |
 
-## Generated / Updated
+**综合用户面向覆盖率：~95%**
 
-- `docs/v1.9.0.md` — **新建** 当前版本（1.9.0）完整功能清单、数据目录、迁移与限制
-- `docs/CHANGELOG.md` — **更新** 补充 1.1.0–1.9.0 全部版本条目
-- `README.md` — **重写** 按 gold-standard 模式：问题优先、信任块、示例优先、折叠深度
+## Generated / Updated（本次）
 
-## Gaps Found
+- `docs/v1.10.0.md` — **新建** 数据隔离、迁移规则、运行确认、构建命令
+- `docs/CHANGELOG.md` — **新增** [1.10.0] 条目
+- `docs/architecture.md` — **更新** AppEnv/userData 表、`app-data-root` 模块、已交付能力
+- `docs/v1.9.0.md` — **标注** 数据目录已被 v1.10.0 取代
+- `docs/script-spec.md` — **新增**「平台数据目录」小节；移除不存在的 `crowdsourcing-token` 示例引用
+- `README.md` — **同步** 版本 1.10.0、信任块路径、数据目录表、`npm run prod`
 
-- `docs/Autoforge脚本开发规范文档说明.md` 被多处引用但不存在；已统一改为 `docs/script-spec.md`
-- `docs/v1.0.0.md` 仍描述 JSON 持久化（历史基线），与当前 SQLite 架构不一致——保留作 1.0.0 快照，当前状态以 v1.9.0 为准
+## Discover — 代码变更未文档化项（已处理）
 
-## Follow-up (2026-07-03 续)
+| 变更 | 来源 commit | 文档动作 |
+|------|-------------|----------|
+| dev/prod userData 隔离 | f02ae2c, f4787d0 | v1.10.0.md + architecture + README |
+| 运行二次确认 | 50fadcc | v1.10.0.md + architecture + README |
+| `npm run prod` | package.json | v1.10.0.md + README |
+| electron-vite mode | electron.vite.config.ts | v1.10.0.md CHANGELOG |
 
-- `docs/architecture.md` — **已更新**：Python 模块、双语言数据流、已交付能力表、超时/小记/分页等
-- `skills/autoforge-script-create/` — **已修复** 规范链接，reference 补充 `language` / Python 依赖说明
+## Gaps Remaining
 
-## Validation Issues
+- `docs/v1.0.0.md` 保留 JSON 扁平布局与 `hello-scriptbox` 引用（历史快照， intentional）
+- 内部 API（`app-data-root` 各函数）无独立 API 文档（架构表已摘要）
 
-- README 原链接 `docs/Autoforge脚本开发规范文档说明.md` 404 — **已修复**
-- README 引用不存在的 `hello-scriptbox` 示例 — **已移除**
-- CHANGELOG 仅含 1.0.0 — **已补全至 1.9.0**
-- package.json 版本 1.9.0 与 CHANGELOG 不同步 — **已同步**
+## Validation Issues（已修复）
+
+| 问题 | 状态 |
+|------|------|
+| package.json `1.10.0` vs README badge `1.9.0` | ✅ |
+| README trust 块仍写 `%APPDATA%/autoforge/` | ✅ |
+| CHANGELOG 缺少 1.10.0 | ✅ |
+| architecture 版本仍标注 1.9.0 | ✅ |
 
 ## Next Steps
 
-- [x] 更新 `docs/architecture.md` 的「已交付能力」表，纳入 Python、进度协议、小记、分页等
-- [x] 修复 `skills/` 与 `docs/v1.0.0.md` 中对已删除规范文件的路径引用
-- [ ] 为 1.2 / 1.6 等重大版本补充独立 `docs/vX.Y.Z.md`（可选）
+- [ ] 为 v1.2.0 / v1.6.0 补充独立版本说明（可选）
+- [ ] 提交 package.json 与文档变更（用户未请求 commit）

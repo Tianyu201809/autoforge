@@ -571,6 +571,17 @@ async def run(ctx):
 | `ctx.sdk.browser` | `await ctx.sdk.browser.launch()`，需 `dependencies` 含 `playwright`；启动参数与 JS 侧一致 |
 | `dependencies` | pip 安装至脚本目录 `.venv`；也可在设置页安装全局 Python 依赖 |
 
+## 平台数据目录
+
+脚本通过 `ctx.sdk.paths.userData` / `user_data` 访问平台根目录（Windows `%APPDATA%/` 下）：
+
+| 启动方式 | 目录 |
+|----------|------|
+| `npm run dev` | `autoforge-development/` |
+| 安装包 / `preview` / `build` | `autoforge-production/` |
+
+脚本包与依赖位于 `{userData}/scripts/{scriptId}/`。v1.10.0 起开发模式与正式安装包数据完全隔离，详见 [v1.10.0 版本说明](./v1.10.0.md)。
+
 ## 上传方式
 
 1. **脚本包目录**：包含 `autoforge.json` 的文件夹
@@ -581,4 +592,3 @@ async def run(ctx):
 - `examples/hello-world/` — JS 最小示例，含 `env` 与 `params` 区分演示
 - `examples/hello-world-py/` — Python 最小示例
 - `examples/playwright-py/` — Python Playwright 浏览器自动化示例
-- `examples/crowdsourcing-token/` — 浏览器自动化 + 环境变量 + 依赖

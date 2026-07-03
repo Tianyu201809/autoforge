@@ -4,6 +4,21 @@
 
 ---
 
+## [1.10.0] — 2026-07-03
+
+### 新增
+
+- **开发 / 生产数据隔离** — `autoforge-development/` 与 `autoforge-production/` 独立 userData；旧版扁平目录自动迁移并修复库内绝对路径
+- **运行二次确认** — 详情面板与卡片快捷运行前弹出确认对话框
+- **`npm run prod`** — `build` + `preview` 快捷命令
+
+### 改进
+
+- `electron-vite` 区分 `development` / `production` mode（`.env.development` / `.env.production`）
+- 新增 `app-data-root` 服务：环境根目录解析、数据种子复制、路径重写与修复
+
+---
+
 ## [1.9.0] — 2026-07-03
 
 ### 新增
@@ -175,7 +190,7 @@ Electron 34 · Vue 3 · TypeScript · Tailwind CSS 4 · Playwright Core · node-
 - 无脚本包版本历史与回滚
 - 无全局并发限制
 
-详见 [v1.0.0 版本说明](./v1.0.0.md) 与 [v1.9.0 版本说明](./v1.9.0.md)。
+详见 [v1.0.0 版本说明](./v1.0.0.md)、[v1.9.0 版本说明](./v1.9.0.md) 与 [v1.10.0 版本说明](./v1.10.0.md)。
 
 ---
 
