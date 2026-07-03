@@ -215,6 +215,14 @@ function viewScriptLog(script: ScriptItem): void {
 }
 
 async function handleStart(scriptId: string): Promise<void> {
+  const script = filteredScripts.value.find((s) => s.id === scriptId)
+  const confirmed = await askConfirm({
+    title: '运行脚本',
+    message: `确定运行「${script?.name ?? '此脚本'}」？`,
+    confirmLabel: '运行'
+  })
+  if (!confirmed) return
+
   selectedScriptId.value = scriptId
   navigateDetailTab('params')
   detailVisible.value = true
