@@ -1,6 +1,8 @@
-import { app, BrowserWindow, nativeImage } from 'electron'
+import { BrowserWindow, nativeImage } from 'electron'
 import { join } from 'path'
+import { isDev } from '../../shared/app-env'
 import { IPC } from '../../shared/ipc-channels'
+import { getBundledIconPath } from './app-runtime'
 import { broadcastToRenderers } from './window-broadcast'
 import { attachWindowMaximizeEvents } from './window-chrome'
 
@@ -21,16 +23,12 @@ export interface EditorSession {
   fileStates: Record<string, EditorFileState>
 }
 
-const isDev = !app.isPackaged
-
 let editorWindow: BrowserWindow | null = null
 let pinned = false
 let session: EditorSession | null = null
 
 function getAppIconPath(): string {
-  return isDev
-    ? join(app.getAppPath(), 'build/icon.ico')
-    : join(process.resourcesPath, 'icon.ico')
+  return getBundledIconPath()
 }
 
 function getEditorUrl(scriptId: string): string {

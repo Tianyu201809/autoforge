@@ -6,9 +6,10 @@
   "main": "./out/main/index.js",
   "license": "MIT",
   "scripts": {
-    "dev": "node scripts/run-utf8.mjs electron-vite dev",
-    "build": "node scripts/run-utf8.mjs electron-vite build",
-    "preview": "node scripts/run-utf8.mjs electron-vite preview",
+    "dev": "node scripts/run-utf8.mjs electron-vite dev --mode development",
+    "build": "node scripts/run-utf8.mjs electron-vite build --mode production",
+    "preview": "node scripts/run-utf8.mjs electron-vite preview --mode production",
+    "prod": "npm run build && npm run preview",
     "generate:detailpanel": "node scripts/write-detailpanel.mjs",
     "install:browsers": "node scripts/install-browsers.mjs",
     "postinstall": "node scripts/install-browsers.mjs",

@@ -1,17 +1,15 @@
-import { app, BrowserWindow, nativeImage } from 'electron'
+import { BrowserWindow, nativeImage } from 'electron'
 import { join } from 'path'
+import { isDev } from '../../shared/app-env'
 import { IPC } from '../../shared/ipc-channels'
+import { getBundledIconPath } from './app-runtime'
 import { attachWindowMaximizeEvents } from './window-chrome'
-
-const isDev = !app.isPackaged
 
 let terminalWindow: BrowserWindow | null = null
 let pinned = false
 
 function getAppIconPath(): string {
-  return isDev
-    ? join(app.getAppPath(), 'build/icon.ico')
-    : join(process.resourcesPath, 'icon.ico')
+  return getBundledIconPath()
 }
 
 function getTerminalUrl(): string {

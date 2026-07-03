@@ -1,5 +1,6 @@
 import { bootstrapUtf8 } from '../shared/encoding'
 import { IPC } from '../shared/ipc-channels'
+import { appEnv, isDev } from '../shared/app-env'
 
 bootstrapUtf8()
 
@@ -22,7 +23,6 @@ import {
 } from './services/main-window-mode'
 import { scriptStore } from './services/script-store'
 
-const isDev = !app.isPackaged
 let mainWindow: BrowserWindow | null = null
 
 function createWindow(): void {
@@ -80,6 +80,7 @@ function createWindow(): void {
 }
 
 app.whenReady().then(async () => {
+  console.info(`[app] env=${appEnv} packaged=${app.isPackaged}`)
   if (process.platform === 'win32') {
     app.setAppUserModelId('com.autoforge.app')
   }

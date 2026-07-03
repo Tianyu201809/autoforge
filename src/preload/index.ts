@@ -1,5 +1,6 @@
 import { contextBridge, ipcRenderer, type IpcRendererEvent } from 'electron'
 import pkg from '../../package.json'
+import { appEnv } from '../shared/app-env'
 import { IPC } from '../shared/ipc-channels'
 import { bindScriptDropImportZone, type DropImportHandlers } from './script-drop'
 import type {
@@ -95,7 +96,8 @@ const api = {
   versions: {
     app: pkg.version,
     node: process.versions.node,
-    electron: process.versions.electron
+    electron: process.versions.electron,
+    env: appEnv
   }
 }
 

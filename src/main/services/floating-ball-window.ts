@@ -1,8 +1,7 @@
 import { app, BrowserWindow, Menu, ipcMain, screen } from 'electron'
 import { join } from 'node:path'
+import { isDev } from '../../shared/app-env'
 import { getAppIconImage } from './app-icon'
-
-const isDev = !app.isPackaged
 
 export const BALL_WIDTH = 72
 export const BALL_HEIGHT = 72

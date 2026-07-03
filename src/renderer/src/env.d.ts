@@ -86,6 +86,7 @@ export interface WindowApi {
     app: string
     node: string
     electron: string
+    env: 'development' | 'production'
   }
 }
 
