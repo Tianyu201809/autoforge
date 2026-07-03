@@ -11,8 +11,9 @@ import {
   X,
   Zap
 } from 'lucide-vue-next'
-import type { ExecutionDaySummary, ExecutionRecord, SessionStatus } from '../../../shared/types/script'
+import type { ExecutionDaySummary, ExecutionRecord, RunSession, ScriptItem, SessionStatus } from '../../../shared/types/script'
 import { matchPinyinQuery } from '../utils/pinyin-match'
+import RunResultModal from './RunResultModal.vue'
 
 const emit = defineEmits<{ close: [] }>()
 
@@ -29,6 +30,10 @@ const days = ref<7 | 30 | 90>(readStoredDays())
 const searchQuery = ref('')
 const summaries = ref<ExecutionDaySummary[]>([])
 const todayCount = ref(0)
+const resultModalOpen = ref(false)
+const resultModalSession = ref<RunSession | null>(null)
+const resultModalScript = ref<ScriptItem | null>(null)
+const openingRecord = ref(false)
 
 let unsubSession: (() => void) | undefined
 
@@ -153,6 +158,74 @@ const statusMeta: Record<
 function triggerLabel(trigger: ExecutionRecord['trigger']): string {
   return trigger === 'scheduled' ? '定时' : '手动'
 }
+
+function recordToRunSession(record: ExecutionRecord): RunSession {
+  let result = record.result
+  if (result === undefined && record.errorMessage) {
+    result = { error: record.errorMessage }
+  }
+  return {
+    id: record.id,
+    scriptId: record.scriptId,
+    status: record.status,
+    envId: record.envId,
+    startedAt: record.startedAt,
+    finishedAt: record.finishedAt,
+    exitCode: record.exitCode,
+    result
+  }
+}
+
+function scriptFallbackFromRecord(record: ExecutionRecord): ScriptItem {
+  return {
+    id: record.scriptId,
+    name: record.scriptName,
+    description: '',
+    workspacePath: '',
+    category: '',
+    categoryLabel: '',
+    categoryColor: '',
+    icon: 'code',
+    iconColor: 'sb-text-muted',
+    iconBg: 'sb-bg-inset',
+    iconBorder: 'sb-border',
+    version: '',
+    starred: false,
+    archived: false,
+    envSchema: [],
+    paramSchema: [],
+    entry: '',
+    language: 'javascript',
+    status: 'idle',
+    meta: ''
+  }
+}
+
+function isRecordClickable(record: ExecutionRecord): boolean {
+  return record.status !== 'running'
+}
+
+async function openRecordResult(record: ExecutionRecord): Promise<void> {
+  if (!isRecordClickable(record) || openingRecord.value) return
+  openingRecord.value = true
+  try {
+    const [live, script] = await Promise.all([
+      window.autoforge.runner.getSession(record.id),
+      window.autoforge.scripts.get(record.scriptId)
+    ])
+    resultModalSession.value = live ?? recordToRunSession(record)
+    resultModalScript.value = script ?? scriptFallbackFromRecord(record)
+    resultModalOpen.value = true
+  } finally {
+    openingRecord.value = false
+  }
+}
+
+function closeResultModal(): void {
+  resultModalOpen.value = false
+  resultModalSession.value = null
+  resultModalScript.value = null
+}
 </script>
 
 <template>
@@ -243,10 +316,18 @@ function triggerLabel(trigger: ExecutionRecord['trigger']): string {
         </div>
 
         <div class="rounded-lg border sb-border overflow-hidden divide-y sb-border-subtle">
-          <div
+          <button
             v-for="record in day.records"
             :key="record.id"
-            class="flex items-start gap-3 px-4 py-3 sb-bg-surface hover:sb-bg-hover transition-colors"
+            type="button"
+            class="w-full text-left flex items-start gap-3 px-4 py-3 sb-bg-surface transition-colors"
+            :class="
+              isRecordClickable(record)
+                ? 'hover:sb-bg-hover cursor-pointer focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-[var(--sb-accent-solid)]'
+                : 'cursor-default opacity-80'
+            "
+            :disabled="!isRecordClickable(record) || openingRecord"
+            @click="openRecordResult(record)"
           >
             <span
               class="mt-1.5 w-2 h-2 rounded-full shrink-0"
@@ -289,9 +370,16 @@ function triggerLabel(trigger: ExecutionRecord['trigger']): string {
                 </span>
               </div>
             </div>
-          </div>
+          </button>
         </div>
       </section>
     </div>
+
+    <RunResultModal
+      :open="resultModalOpen"
+      :script="resultModalScript"
+      :session="resultModalSession"
+      @close="closeResultModal"
+    />
   </main>
 </template>
