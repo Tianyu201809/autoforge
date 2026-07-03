@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, onMounted, onUnmounted, ref, toRaw, watch } from 'vue'
+import { computed, nextTick, onMounted, onUnmounted, ref, toRaw, watch } from 'vue'
 import {
   AlertCircle,
   CheckCircle2,
@@ -65,6 +65,7 @@ const DEFAULT_WIDTH = 384
 
 const panelWidth = ref(DEFAULT_WIDTH)
 const resizing = ref(false)
+const tabsContainerRef = ref<HTMLElement | null>(null)
 const runSplitTopPct = ref(RUN_SPLIT_DEFAULT)
 const runSplitResizing = ref(false)
 const viewingSessionId = ref<string | null>(null)
@@ -85,6 +86,7 @@ function clampWidth(width: number): number {
 
 function onWindowResize(): void {
   panelWidth.value = clampWidth(panelWidth.value)
+  scrollActiveTabIntoView()
 }
 
 function loadPanelWidth(): void {
@@ -105,6 +107,7 @@ function onResizeStart(e: MouseEvent): void {
   const onUp = (): void => {
     resizing.value = false
     localStorage.setItem(PANEL_WIDTH_KEY, String(panelWidth.value))
+    scrollActiveTabIntoView()
     document.removeEventListener('mousemove', onMove)
     document.removeEventListener('mouseup', onUp)
     document.body.style.cursor = ''
@@ -522,7 +525,12 @@ onMounted(async () => {
   syncViewingSessionId()
   await Promise.all([loadContent(), loadEnvironments()])
   syncDetailDraft()
+  scrollActiveTabIntoView()
   window.addEventListener('resize', onWindowResize)
+})
+
+watch(panelWidth, () => {
+  scrollActiveTabIntoView()
 })
 
 onUnmounted(() => {
@@ -676,6 +684,24 @@ async function switchTab(tabId: DetailPanelTab): Promise<void> {
     editModeActive.value = false
   }
   activeTab.value = tabId
+  scrollActiveTabIntoView()
+}
+
+function scrollActiveTabIntoView(): void {
+  void nextTick(() => {
+    const container = tabsContainerRef.value
+    if (!container) return
+    const active = container.querySelector<HTMLElement>('.detail-panel-tab.is-active')
+    active?.scrollIntoView({ inline: 'nearest', block: 'nearest', behavior: 'smooth' })
+  })
+}
+
+function onTabsWheel(e: WheelEvent): void {
+  const container = tabsContainerRef.value
+  if (!container || container.scrollWidth <= container.clientWidth) return
+  if (Math.abs(e.deltaY) <= Math.abs(e.deltaX)) return
+  e.preventDefault()
+  container.scrollLeft += e.deltaY
 }
 
 async function openInExternalEditor(): Promise<void> {
@@ -926,7 +952,11 @@ async function handleRename(): Promise<void> {
       </div>
     </div>
 
-    <div class="detail-panel-tabs">
+    <div
+      ref="tabsContainerRef"
+      class="detail-panel-tabs"
+      @wheel="onTabsWheel"
+    >
       <button
         v-for="tab in tabs"
         :key="tab.id"
