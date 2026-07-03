@@ -22,6 +22,7 @@ import type { ScriptIcon } from '../../../shared/script-contract'
 import type { useScriptRunner } from '../composables/useScriptRunner'
 import { resolveScriptIcon } from '../lib/script-icon-map'
 import { renameScript } from '../composables/useScriptRename'
+import { askConfirm } from '../composables/useConfirmDialog'
 import CronScheduleBuilder from './CronScheduleBuilder.vue'
 import LogConsole from './LogConsole.vue'
 import RunResultViewer from './RunResultViewer.vue'
@@ -790,6 +791,12 @@ async function handleRunToggle(): Promise<void> {
     emit('refresh')
     return
   }
+  const confirmed = await askConfirm({
+    title: '运行脚本',
+    message: `确定运行「${props.script.name}」？`,
+    confirmLabel: '运行'
+  })
+  if (!confirmed) return
   await runWithEnv()
 }
 
