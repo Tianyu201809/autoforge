@@ -60,11 +60,16 @@ function hasValue(entry: ScratchpadEntry): boolean {
   return entry.value.trim().length > 0
 }
 
+function toPlainEntries(items: ScratchpadEntry[]): ScratchpadEntry[] {
+  return items.map(({ id, label, value }) => ({ id, label, value }))
+}
+
 async function persistEntries(next: ScratchpadEntry[]): Promise<boolean> {
   saving.value = true
   try {
-    const config = await window.autoforge.config.set({ scratchpad: next })
-    entries.value = config.scratchpad ?? next
+    const plain = toPlainEntries(next)
+    const config = await window.autoforge.config.set({ scratchpad: plain })
+    entries.value = config.scratchpad ?? plain
     return true
   } finally {
     saving.value = false
