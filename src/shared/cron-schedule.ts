@@ -171,6 +171,15 @@ export function describeCronSchedule(state: CronScheduleState): string {
   }
 }
 
+/** 将 Cron 表达式转为可读执行周期；无法解析时回退为原始表达式 */
+export function describeCronExpression(expression: string | undefined): string {
+  const trimmed = expression?.trim()
+  if (!trimmed) return '未设置执行周期'
+  const parsed = parseCronExpression(trimmed)
+  if (parsed) return describeCronSchedule(parsed)
+  return trimmed
+}
+
 export function normalizeCronExpression(expression: string | undefined): string {
   const trimmed = expression?.trim()
   if (!trimmed) return DEFAULT_CRON_EXPRESSION

@@ -481,10 +481,6 @@ export function enrichScriptItem(
     metaText = ''
   }
 
-  if (meta.schedule?.enabled) {
-    metaText = metaText ? `${metaText} · 已启用定时` : '定时任务已启用'
-  }
-
   return {
     ...meta,
     status,

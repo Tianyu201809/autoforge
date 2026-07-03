@@ -17,9 +17,11 @@ import {
   Star,
   Tags,
   Terminal,
+  Timer,
   Trash2
 } from 'lucide-vue-next'
 import type { CategoryDefinition, ScriptItem } from '../../../shared/types/script'
+import { describeCronExpression } from '../../../shared/cron-schedule'
 import { scriptLanguageBadge } from '../../../shared/script-language'
 import { resolveScriptIcon } from '../lib/script-icon-map'
 import { renameScript } from '../composables/useScriptRename'
@@ -71,6 +73,11 @@ const MENU_GAP = 4
 const ScriptIcon = computed(() => resolveScriptIcon(props.script.icon))
 
 const languageBadge = computed(() => scriptLanguageBadge(props.script.language))
+
+const scheduleSummary = computed(() => {
+  if (!props.script.schedule?.enabled) return null
+  return describeCronExpression(props.script.schedule.expression)
+})
 
 const cardClass = computed(() => {
   if (props.script.status === 'running') {
@@ -346,6 +353,16 @@ onUnmounted(() => {
           :title="script.language === 'python' ? 'Python 脚本' : 'JavaScript 脚本'"
         >{{ languageBadge.label }}</span>
         <span class="text-[10px] sb-text-faint font-mono">{{ script.version }}</span>
+      </div>
+      <div
+        v-if="scheduleSummary"
+        class="mt-2.5 flex items-center gap-1.5 min-w-0"
+        :title="scheduleSummary"
+      >
+        <span class="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-md text-[10px] font-medium leading-tight bg-sky-500/10 border border-sky-500/20 text-sky-500/95 dark:text-sky-400/95 max-w-full">
+          <Timer class="w-3 h-3 shrink-0" :stroke-width="1.75" />
+          <span class="truncate">{{ scheduleSummary }}</span>
+        </span>
       </div>
       <div class="flex items-center justify-between mt-3 pt-3 border-t sb-border-subtle">
         <span class="text-[11px]" :class="script.status === 'error' ? 'text-red-400/70' : 'sb-text-faint'">
