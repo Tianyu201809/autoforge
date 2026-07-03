@@ -297,6 +297,12 @@ const guideHtml = computed(() => renderMarkdown(markdown.value))
 </template>
 
 <style scoped>
+.dev-guide,
+.dev-guide :deep(*) {
+  user-select: text;
+  cursor: text;
+}
+
 .dev-guide :deep(.dev-guide-h1) {
   font-size: 1.25rem;
   font-weight: 600;

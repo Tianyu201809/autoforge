@@ -499,9 +499,21 @@ body {
   background: var(--sb-terminal-bg);
 }
 
+.log-console-selectable,
+.log-console-selectable * {
+  user-select: text;
+  cursor: text;
+}
+
 .terminal-log {
   background: var(--sb-terminal-bg);
   color: var(--sb-terminal-text);
+  user-select: text;
+  cursor: text;
+}
+
+.terminal-log * {
+  user-select: text;
 }
 
 .terminal-log .terminal-log-time {

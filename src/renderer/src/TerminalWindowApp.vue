@@ -116,7 +116,7 @@ function handleCloseAll(): void {
 <template>
   <div class="flex flex-col h-full sb-bg-panel">
     <PopoutTitleBar
-      breadcrumb="终端"
+      breadcrumb="执行日志"
       :subtitle="sessionSubtitle"
       :pinned="pinned"
       @toggle-pin="togglePin"

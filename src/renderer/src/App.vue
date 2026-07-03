@@ -407,7 +407,7 @@ onUnmounted(() => {
               v-else
               class="flex-shrink-0 border-t sb-border-subtle sb-bg-panel flex items-center justify-between px-3 h-9"
             >
-              <span class="text-[12px] sb-text-muted">终端已在独立窗口中运行</span>
+              <span class="text-[12px] sb-text-muted">执行日志已在独立窗口中运行</span>
               <button
                 type="button"
                 class="text-[12px] sb-text-primary hover:text-[var(--sb-accent-solid)] transition-colors"

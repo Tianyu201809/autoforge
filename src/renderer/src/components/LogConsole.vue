@@ -108,8 +108,8 @@ const runningCount = computed(() => props.sessions?.filter((s) => s.status === '
 
 const headerTitle = computed(() => {
   if (!isMulti.value) return props.title
-  if (runningCount.value > 0) return `终端 · ${runningCount.value} 个运行中`
-  return `终端 · ${props.sessions!.length} 个会话`
+  if (runningCount.value > 0) return `执行日志 · ${runningCount.value} 个运行中`
+  return `执行日志 · ${props.sessions!.length} 个会话`
 })
 
 function formatLogTime(iso: string): string {
@@ -439,7 +439,7 @@ onUnmounted(() => {
     <ScriptRunProgressPanel v-if="activeRunProgress" :progress="activeRunProgress" compact />
     <div
       ref="logBodyRef"
-      class="rounded-lg border sb-border-subtle sb-bg-log p-3 font-mono leading-relaxed space-y-1 flex-1 overflow-y-auto min-h-[120px]"
+      class="log-console-selectable rounded-lg border sb-border-subtle sb-bg-log p-3 font-mono leading-relaxed space-y-1 flex-1 overflow-y-auto min-h-[120px]"
       :style="{ fontSize: `${fontSize}px` }"
       @scroll="onScroll"
     >
@@ -465,7 +465,7 @@ onUnmounted(() => {
       <div class="flex items-center min-w-0">
         <button type="button" class="flex items-center gap-1.5 px-2 h-7 rounded text-[12px] font-medium terminal-tab-active" @click="toggleVisible">
           <Terminal class="w-3.5 h-3.5" :stroke-width="1.5" />
-          <span>终端</span>
+          <span>执行日志</span>
           <span v-if="runningCount" class="text-[10px] terminal-status-running tabular-nums">({{ runningCount }})</span>
         </button>
         <button
