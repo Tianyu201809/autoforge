@@ -53,6 +53,31 @@ async function copySkill(): Promise<void> {
   }
 }
 
+const GUIDE_MARKDOWN_FILENAME = 'script-spec.md'
+
+function downloadGuideMarkdown(): void {
+  const content = markdown.value.trim()
+  if (!content) {
+    pushToast({ type: 'error', title: '下载失败', message: '开发规范内容为空' })
+    return
+  }
+
+  const blob = new Blob([content], { type: 'text/markdown;charset=utf-8' })
+  const url = URL.createObjectURL(blob)
+  const link = document.createElement('a')
+  link.href = url
+  link.download = GUIDE_MARKDOWN_FILENAME
+  link.click()
+  URL.revokeObjectURL(url)
+
+  pushToast({
+    type: 'success',
+    title: '已开始下载',
+    message: GUIDE_MARKDOWN_FILENAME,
+    duration: 2200
+  })
+}
+
 async function importExample(id: string): Promise<void> {
   importingId.value = id
   try {
@@ -211,8 +236,20 @@ const guideHtml = computed(() => renderMarkdown(markdown.value))
     <div v-if="loading" class="flex-1 flex items-center justify-center sb-text-muted text-sm">加载中…</div>
 
     <!-- 开发规范 -->
-    <div v-else-if="activeTab === 'guide'" class="flex-1 overflow-y-auto px-6 py-6">
-      <article class="dev-guide max-w-3xl" v-html="guideHtml" />
+    <div v-else-if="activeTab === 'guide'" class="flex-1 flex flex-col min-h-0 overflow-hidden">
+      <div class="flex-shrink-0 flex items-center justify-end px-6 pt-4 pb-2">
+        <button
+          type="button"
+          class="flex items-center gap-1.5 h-8 px-3 rounded-lg border sb-border text-[12px] sb-text-secondary hover:sb-bg-hover transition-colors"
+          @click="downloadGuideMarkdown"
+        >
+          <Download class="w-3.5 h-3.5" :stroke-width="1.5" />
+          下载 Markdown
+        </button>
+      </div>
+      <div class="flex-1 overflow-y-auto px-6 pb-6 min-h-0">
+        <article class="dev-guide max-w-3xl" v-html="guideHtml" />
+      </div>
     </div>
 
     <!-- autoforge-script-create Skill -->
