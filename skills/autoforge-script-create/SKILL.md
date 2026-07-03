@@ -6,7 +6,7 @@ disable-model-invocation: true
 
 # Autoforge 脚本创建（/autoforge-script-create）
 
-在 `packages/` 下新建符合 Autoforge 规范的脚本包。权威规范见 [docs/Autoforge脚本开发规范文档说明.md](../../../docs/Autoforge脚本开发规范文档说明.md)；字段与 schema 速查见 [reference.md](reference.md)。
+在 `packages/` 下新建符合 Autoforge 规范的脚本包。权威规范见 [docs/script-spec.md](../../../docs/script-spec.md)；字段与 schema 速查见 [reference.md](reference.md)。
 
 ## 前置确认
 

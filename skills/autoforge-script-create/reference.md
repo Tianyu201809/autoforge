@@ -1,10 +1,10 @@
 # Autoforge 脚本规范参考
 
-来源：[docs/Autoforge脚本开发规范文档说明.md](../../../docs/Autoforge脚本开发规范文档说明.md)
+来源：[docs/script-spec.md](../../../docs/script-spec.md)
 
 ## 脚本包结构
 
-Autoforge 脚本是**目录包**，必须包含 `autoforge.json` 与入口文件；入口必须导出 `run` 函数。
+Autoforge 脚本是**目录包**，必须包含 `autoforge.json` 与入口文件；入口必须导出 `run(ctx)` 或 `main(ctx)` 函数。
 
 ```
 my-script/
@@ -20,13 +20,14 @@ my-script/
 | `name` | string | ✅ | 显示名称 |
 | `description` | string | | 描述 |
 | `version` | string | | 语义化版本，默认 `1.0.0` |
-| `entry` | string | | 入口文件，默认 `index.mjs` |
+| `language` | string | | `javascript`（默认）或 `python` |
+| `entry` | string | | 入口文件，默认 `index.mjs` 或 `index.py` |
 | `category` | string | | `browser` / `local` / `scrape` / `file` / `system` |
 | `categoryLabel` | string | | 分类显示名 |
 | `icon` | string | | UI 图标 |
 | `env` | EnvVarDefinition[] | | 环境变量 schema |
 | `params` | ParamDefinition[] | | 运行业务参数 schema |
-| `dependencies` | Record<string,string> | | npm 依赖，运行前自动安装 |
+| `dependencies` | Record<string,string> | | JS：npm 包；Python：pip 包（安装至 `.venv`） |
 | `browser` | `{ headless?: boolean }` | | 浏览器启动选项；`headless: true` 无头，默认 `false` |
 
 ### 浏览器无头模式
@@ -212,7 +213,7 @@ interface ScriptRunContext {
 ## 上传方式
 
 1. **脚本包目录**：含 `autoforge.json` 的文件夹
-2. **单文件**：`.js` / `.mjs` / `.cjs`，平台自动包装
+2. **单文件**：`.js` / `.mjs` / `.cjs` / `.py`，平台自动包装
 
 ## 本仓库示例（packages/）
 
