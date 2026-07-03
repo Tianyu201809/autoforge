@@ -361,11 +361,10 @@ onUnmounted(() => {
         @close="closeCategoryManager"
         @refresh="refresh()"
       />
-      <DevGuidePanel v-if="showDevGuide" @close="closeDevGuide" @imported="onExampleImported" />
-      <ExecutionHistoryPanel v-else-if="showExecutionHistory" @close="closeExecutionHistory" />
-      <SettingsPanel v-else-if="showSettings" @close="closeSettings" />
-      <template v-else>
-        <div class="flex flex-1 min-h-0 min-w-0 overflow-x-auto">
+      <DevGuidePanel :open="showDevGuide" @close="closeDevGuide" @imported="onExampleImported" />
+      <ExecutionHistoryPanel :open="showExecutionHistory" @close="closeExecutionHistory" />
+      <SettingsPanel :open="showSettings" @close="closeSettings" />
+      <div class="flex flex-1 min-h-0 min-w-0 overflow-x-auto">
           <div class="flex flex-1 flex-col min-w-0 min-h-0 overflow-hidden">
             <MainContent
               :scripts="pagedScripts"
@@ -438,8 +437,7 @@ onUnmounted(() => {
             @navigate-tab="navigateDetailTab"
           />
         </div>
-      </template>
-    </div>
+      </div>
     <StatusBar :running-count="stats.running" />
     <RunResultModal
       :open="runResultModalOpen"

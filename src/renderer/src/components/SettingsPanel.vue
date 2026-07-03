@@ -1,14 +1,17 @@
 <script setup lang="ts">
-import { onMounted, onUnmounted, ref, toRaw, watch } from 'vue'
-import { CheckCircle2, Plus, Trash2, X, XCircle } from 'lucide-vue-next'
+import { onUnmounted, ref, toRaw, watch } from 'vue'
+import { CheckCircle2, Plus, Settings, Trash2, X, XCircle } from 'lucide-vue-next'
 import type { BrowserStatusInfo, EnvironmentProfile, GlobalDependency, PythonStatusInfo } from '../../../shared/types/script'
 import { DEFAULT_GLOBAL_SHORTCUT } from '../../../shared/accelerator'
 import SkinPicker from './SkinPicker.vue'
 import ShortcutRecorder from './ShortcutRecorder.vue'
+import AppFeatureModal from './AppFeatureModal.vue'
 import { askConfirm } from '../composables/useConfirmDialog'
 import { useToast } from '../composables/useToast'
 
 const { pushToast } = useToast()
+
+const props = defineProps<{ open: boolean }>()
 
 const appVersion = window.api.versions.app
 
@@ -36,6 +39,7 @@ const globalDepVersion = ref('')
 const installingGlobalDep = ref(false)
 const loadingGlobalDeps = ref(false)
 const windowModeReady = ref(false)
+const initialized = ref(false)
 
 const environments = ref<EnvironmentProfile[]>([])
 const editingEnv = ref<EnvironmentProfile | null>(null)
@@ -48,7 +52,7 @@ let offModeChange: (() => void) | undefined
 let syncingFromEvent = false
 
 function syncWindowModeFromState(): void {
-  if (!windowModeReady.value || syncingFromEvent) return
+  if (!props.open || !windowModeReady.value || syncingFromEvent) return
   void window.api.setMode({
     trayMode: trayMode.value,
     floatingMode: floatingMode.value,
@@ -63,7 +67,8 @@ watch([trayMode, floatingMode, globalShortcutEnabled, globalShortcut], () => {
   syncWindowModeFromState()
 })
 
-onMounted(async () => {
+async function initializeSettings(): Promise<void> {
+  if (initialized.value) return
   const config = await window.autoforge.config.get()
   browserPath.value = config.browser?.executablePath ?? ''
   pythonPath.value = config.python?.executablePath ?? ''
@@ -81,21 +86,35 @@ onMounted(async () => {
   environments.value = await window.autoforge.env.list()
   editingEnv.value = environments.value.find((e) => e.isDefault) ?? environments.value[0] ?? null
 
-  offModeChange = window.api.onModeChange((mode) => {
-    syncingFromEvent = true
-    trayMode.value = !!mode.trayMode
-    floatingMode.value = !!mode.floatingMode
-    globalShortcutEnabled.value = mode.globalShortcutEnabled !== false
-    globalShortcut.value = mode.globalShortcut?.trim() || DEFAULT_GLOBAL_SHORTCUT
-    globalShortcutRegistered.value = mode.globalShortcutRegistered
-    syncingFromEvent = false
-  })
-
   const mode = await window.api.getMode()
   globalShortcutRegistered.value = mode.globalShortcutRegistered
 
   windowModeReady.value = true
-})
+  initialized.value = true
+}
+
+watch(
+  () => props.open,
+  async (open) => {
+    if (open) {
+      await initializeSettings()
+      offModeChange?.()
+      offModeChange = window.api.onModeChange((mode) => {
+        syncingFromEvent = true
+        trayMode.value = !!mode.trayMode
+        floatingMode.value = !!mode.floatingMode
+        globalShortcutEnabled.value = mode.globalShortcutEnabled !== false
+        globalShortcut.value = mode.globalShortcut?.trim() || DEFAULT_GLOBAL_SHORTCUT
+        globalShortcutRegistered.value = mode.globalShortcutRegistered
+        syncingFromEvent = false
+      })
+    } else {
+      offModeChange?.()
+      offModeChange = undefined
+    }
+  },
+  { immediate: true }
+)
 
 onUnmounted(() => {
   offModeChange?.()
@@ -340,17 +359,34 @@ async function removeGlobalPythonDep(name: string): Promise<void> {
 </script>
 
 <template>
-  <main class="flex-1 flex flex-col min-w-0 sb-bg-base overflow-y-auto">
-    <div class="flex items-center justify-between px-6 py-4 border-b sb-border-subtle">
+  <AppFeatureModal
+    :open="open"
+    max-width="2xl"
+    aria-labelledby="settings-modal-title"
+    @close="emit('close')"
+  >
+    <div class="flex flex-col h-full min-h-0 overflow-hidden">
+    <div class="relative flex items-center justify-between px-6 py-4 border-b sb-border-subtle flex-shrink-0 settings-modal-header overflow-hidden">
+      <div
+        class="absolute inset-x-0 top-0 h-px pointer-events-none"
+        style="background: linear-gradient(90deg, transparent, color-mix(in srgb, var(--sb-accent-solid) 50%, transparent), transparent)"
+        aria-hidden="true"
+      />
+      <div class="flex items-start gap-3 min-w-0">
+        <div class="w-9 h-9 rounded-lg sb-bg-inset border sb-border-subtle flex items-center justify-center flex-shrink-0">
+          <Settings class="w-4 h-4 text-[var(--sb-accent-solid)]" :stroke-width="1.5" />
+        </div>
       <div>
-        <h1 class="text-xl font-semibold sb-text-primary">设置</h1>
-        <p class="text-[13px] sb-text-muted mt-0.5">外观、运行环境与环境 Profile</p>
+        <h1 id="settings-modal-title" class="text-[15px] font-semibold sb-text-primary tracking-tight">设置</h1>
+        <p class="text-[11px] sb-text-muted mt-0.5">外观、运行环境与环境 Profile</p>
       </div>
-      <button type="button" class="w-8 h-8 flex items-center justify-center rounded-md sb-text-muted hover:sb-text-secondary sb-bg-hover" @click="emit('close')">
+      </div>
+      <button type="button" class="w-8 h-8 flex items-center justify-center rounded-md sb-text-muted hover:sb-text-secondary sb-bg-hover flex-shrink-0" title="关闭" @click="emit('close')">
         <X class="w-4 h-4" :stroke-width="1.5" />
       </button>
     </div>
 
+    <div class="flex-1 overflow-y-auto min-h-0">
     <div class="max-w-2xl px-6 py-6 space-y-8">
       <!-- 产品版本 -->
       <section class="space-y-3">
@@ -668,5 +704,14 @@ async function removeGlobalPythonDep(name: string): Promise<void> {
       </button>
       <p v-if="saved" class="text-[12px] text-emerald-400">已保存</p>
     </div>
-  </main>
+    </div>
+    </div>
+  </AppFeatureModal>
 </template>
+
+<style scoped>
+.settings-modal-header {
+  background: color-mix(in srgb, var(--sb-accent-solid) 8%, var(--sb-bg-panel));
+  box-shadow: inset 3px 0 0 var(--sb-accent-solid);
+}
+</style>

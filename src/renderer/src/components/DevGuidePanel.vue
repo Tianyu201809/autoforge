@@ -1,9 +1,11 @@
 <script setup lang="ts">
-import { computed, onMounted, ref } from 'vue'
+import { computed, ref, watch } from 'vue'
 import { BookOpen, Check, Copy, Download, FileCode2, Sparkles, X } from 'lucide-vue-next'
 import type { BundledExampleInfo, DevGuideSkillCreateInfo } from '../../../shared/types/script'
 import { useToast } from '../composables/useToast'
+import AppFeatureModal from './AppFeatureModal.vue'
 
+const props = defineProps<{ open: boolean }>()
 const emit = defineEmits<{ close: []; imported: [] }>()
 const { pushToast } = useToast()
 
@@ -12,10 +14,13 @@ const markdown = ref('')
 const skillCreate = ref<DevGuideSkillCreateInfo | null>(null)
 const examples = ref<BundledExampleInfo[]>([])
 const importingId = ref<string | null>(null)
-const loading = ref(true)
+const loading = ref(false)
 const skillCopied = ref(false)
+const loaded = ref(false)
 
-onMounted(async () => {
+async function loadContent(): Promise<void> {
+  if (loaded.value) return
+  loading.value = true
   try {
     const [md, skill, list] = await Promise.all([
       window.autoforge.devGuide.get(),
@@ -25,10 +30,19 @@ onMounted(async () => {
     markdown.value = md
     skillCreate.value = skill
     examples.value = list
+    loaded.value = true
   } finally {
     loading.value = false
   }
-})
+}
+
+watch(
+  () => props.open,
+  (open) => {
+    if (open) void loadContent()
+  },
+  { immediate: true }
+)
 
 async function copySkill(): Promise<void> {
   const raw = skillCreate.value?.raw
@@ -191,13 +205,29 @@ function inlineFormat(text: string): string {
 const guideHtml = computed(() => renderMarkdown(markdown.value))
 </script>
 <template>
-  <main class="flex-1 flex flex-col min-w-0 sb-bg-base overflow-hidden">
-    <div class="flex items-center justify-between px-6 py-4 border-b sb-border-subtle flex-shrink-0">
+  <AppFeatureModal
+    :open="open"
+    max-width="5xl"
+    aria-labelledby="dev-guide-modal-title"
+    @close="emit('close')"
+  >
+    <div class="flex flex-col h-full min-h-0 overflow-hidden">
+    <div class="relative flex items-center justify-between px-6 py-4 border-b sb-border-subtle flex-shrink-0 dev-guide-modal-header overflow-hidden">
+      <div
+        class="absolute inset-x-0 top-0 h-px pointer-events-none"
+        style="background: linear-gradient(90deg, transparent, color-mix(in srgb, var(--sb-accent-solid) 50%, transparent), transparent)"
+        aria-hidden="true"
+      />
+      <div class="flex items-start gap-3 min-w-0">
+        <div class="w-9 h-9 rounded-lg sb-bg-inset border sb-border-subtle flex items-center justify-center flex-shrink-0">
+          <BookOpen class="w-4 h-4 text-[var(--sb-accent-solid)]" :stroke-width="1.5" />
+        </div>
       <div>
-        <h1 class="text-xl font-semibold sb-text-primary">脚本开发指南</h1>
-        <p class="text-[13px] sb-text-muted mt-0.5">Autoforge 脚本包规范、API 说明与内置示例</p>
+        <h1 id="dev-guide-modal-title" class="text-[15px] font-semibold sb-text-primary tracking-tight">脚本开发指南</h1>
+        <p class="text-[11px] sb-text-muted mt-0.5">Autoforge 脚本包规范、API 说明与内置示例</p>
       </div>
-      <button type="button" class="w-8 h-8 flex items-center justify-center rounded-md sb-text-muted hover:sb-text-secondary sb-bg-hover" @click="emit('close')">
+      </div>
+      <button type="button" class="w-8 h-8 flex items-center justify-center rounded-md sb-text-muted hover:sb-text-secondary sb-bg-hover flex-shrink-0" title="关闭" @click="emit('close')">
         <X class="w-4 h-4" :stroke-width="1.5" />
       </button>
     </div>
@@ -330,10 +360,16 @@ const guideHtml = computed(() => renderMarkdown(markdown.value))
         </div>
       </div>
     </div>
-  </main>
+    </div>
+  </AppFeatureModal>
 </template>
 
 <style scoped>
+.dev-guide-modal-header {
+  background: color-mix(in srgb, var(--sb-accent-solid) 8%, var(--sb-bg-panel));
+  box-shadow: inset 3px 0 0 var(--sb-accent-solid);
+}
+
 .dev-guide,
 .dev-guide :deep(*) {
   user-select: text;

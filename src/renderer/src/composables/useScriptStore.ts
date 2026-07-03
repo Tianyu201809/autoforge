@@ -178,9 +178,6 @@ const navItems = computed(() =>
     ...item,
     active:
       navFilter.value === item.id &&
-      !showSettings.value &&
-      !showDevGuide.value &&
-      !showExecutionHistory.value &&
       !(activeCategoryKey.value && item.id === 'all'),
     count:
       item.id === 'all'
@@ -195,9 +192,6 @@ const navItems = computed(() =>
 )
 
 const breadcrumb = computed(() => {
-  if (showExecutionHistory.value) return '执行历史'
-  if (showDevGuide.value) return '开发指南'
-  if (showSettings.value) return '设置'
   const current = navItemsBase.find((n) => n.id === navFilter.value)
   return current?.label ?? '全部'
 })

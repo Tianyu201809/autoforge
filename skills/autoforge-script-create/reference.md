@@ -214,13 +214,3 @@ interface ScriptRunContext {
 
 1. **脚本包目录**：含 `autoforge.json` 的文件夹
 2. **单文件**：`.js` / `.mjs` / `.cjs` / `.py`，平台自动包装
-
-## 本仓库示例（packages/）
-
-| 包 | 类型 | 说明 |
-|---|---|---|
-| `packages/crowdsourcing-token/` | JS | 浏览器自动化 + env + dependencies |
-| `packages/ai-news-fetch/` | JS | 数据采集 + env + params + 产物落盘 |
-| `packages/floorplan-export/` | TS | 文件导出 + env + params + 本地测试 |
-| `packages/resume-screening/` | TS | 附件 + LLM + outputDir + HTML 报告 |
-| `packages/model-preview/` | TS | 浏览器预览 + params |

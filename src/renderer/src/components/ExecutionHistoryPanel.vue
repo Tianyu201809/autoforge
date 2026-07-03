@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, onMounted, onUnmounted, ref } from 'vue'
+import { computed, onUnmounted, ref, watch } from 'vue'
 import {
   AlertCircle,
   CheckCircle2,
@@ -13,8 +13,10 @@ import {
 } from 'lucide-vue-next'
 import type { ExecutionDaySummary, ExecutionRecord, RunSession, ScriptItem, SessionStatus } from '../../../shared/types/script'
 import { matchPinyinQuery } from '../utils/pinyin-match'
+import AppFeatureModal from './AppFeatureModal.vue'
 import RunResultModal from './RunResultModal.vue'
 
+const props = defineProps<{ open: boolean }>()
 const emit = defineEmits<{ close: [] }>()
 
 const DAYS_STORAGE_KEY = 'executionHistoryDays'
@@ -57,12 +59,18 @@ function setDays(option: 7 | 30 | 90): void {
   void loadHistory()
 }
 
-onMounted(() => {
-  void loadHistory()
-  unsubSession = window.autoforge.runner.onSession(() => {
+watch(
+  () => props.open,
+  (open) => {
+    if (!open) return
     void loadHistory()
-  })
-})
+    unsubSession?.()
+    unsubSession = window.autoforge.runner.onSession(() => {
+      void loadHistory()
+    })
+  },
+  { immediate: true }
+)
 
 onUnmounted(() => {
   unsubSession?.()
@@ -229,15 +237,32 @@ function closeResultModal(): void {
 </script>
 
 <template>
-  <main class="flex-1 flex flex-col min-w-0 sb-bg-base overflow-hidden">
-    <div class="flex items-center justify-between px-6 py-4 border-b sb-border-subtle flex-shrink-0">
+  <AppFeatureModal
+    :open="open"
+    max-width="4xl"
+    aria-labelledby="execution-history-modal-title"
+    @close="emit('close')"
+  >
+    <div class="flex flex-col h-full min-h-0 overflow-hidden">
+    <div class="relative flex items-center justify-between px-6 py-4 border-b sb-border-subtle flex-shrink-0 execution-history-modal-header overflow-hidden">
+      <div
+        class="absolute inset-x-0 top-0 h-px pointer-events-none"
+        style="background: linear-gradient(90deg, transparent, color-mix(in srgb, var(--sb-accent-solid) 50%, transparent), transparent)"
+        aria-hidden="true"
+      />
+      <div class="flex items-start gap-3 min-w-0">
+        <div class="w-9 h-9 rounded-lg sb-bg-inset border sb-border-subtle flex items-center justify-center flex-shrink-0">
+          <History class="w-4 h-4 text-[var(--sb-accent-solid)]" :stroke-width="1.5" />
+        </div>
       <div>
-        <h1 class="text-xl font-semibold sb-text-primary">执行历史</h1>
-        <p class="text-[13px] sb-text-muted mt-0.5">按天查看脚本运行记录，保留最近 90 天</p>
+        <h1 id="execution-history-modal-title" class="text-[15px] font-semibold sb-text-primary tracking-tight">执行历史</h1>
+        <p class="text-[11px] sb-text-muted mt-0.5">按天查看脚本运行记录，保留最近 90 天</p>
+      </div>
       </div>
       <button
         type="button"
-        class="w-8 h-8 flex items-center justify-center rounded-md sb-text-muted hover:sb-text-secondary sb-bg-hover"
+        class="w-8 h-8 flex items-center justify-center rounded-md sb-text-muted hover:sb-text-secondary sb-bg-hover flex-shrink-0"
+        title="关闭"
         @click="emit('close')"
       >
         <X class="w-4 h-4" :stroke-width="1.5" />
@@ -381,5 +406,13 @@ function closeResultModal(): void {
       :session="resultModalSession"
       @close="closeResultModal"
     />
-  </main>
+    </div>
+  </AppFeatureModal>
 </template>
+
+<style scoped>
+.execution-history-modal-header {
+  background: color-mix(in srgb, var(--sb-accent-solid) 8%, var(--sb-bg-panel));
+  box-shadow: inset 3px 0 0 var(--sb-accent-solid);
+}
+</style>
