@@ -366,6 +366,12 @@
   --sb-terminal-text: var(--sb-editor-text);
   --sb-terminal-text-muted: var(--sb-text-muted);
   --sb-terminal-text-faint: var(--sb-text-faint);
+
+  --sb-scrollbar-size: 8px;
+  --sb-scrollbar-track: transparent;
+  --sb-scrollbar-thumb: color-mix(in srgb, var(--sb-text-faint) 42%, transparent);
+  --sb-scrollbar-thumb-hover: color-mix(in srgb, var(--sb-text-muted) 58%, transparent);
+  --sb-scrollbar-thumb-active: color-mix(in srgb, var(--sb-accent-solid) 32%, var(--sb-text-muted));
 }
 
 [data-theme='light'] {
@@ -377,6 +383,12 @@
   --sb-terminal-text: var(--sb-editor-text);
   --sb-terminal-text-muted: var(--sb-text-muted);
   --sb-terminal-text-faint: var(--sb-text-faint);
+
+  --sb-scrollbar-size: 8px;
+  --sb-scrollbar-track: transparent;
+  --sb-scrollbar-thumb: color-mix(in srgb, var(--sb-text-faint) 36%, transparent);
+  --sb-scrollbar-thumb-hover: color-mix(in srgb, var(--sb-text-muted) 50%, transparent);
+  --sb-scrollbar-thumb-active: color-mix(in srgb, var(--sb-accent-solid) 26%, var(--sb-text-muted));
 }
 
 /* 语义化工具类 */
@@ -470,5 +482,6 @@ html.theme-transition *::after {
     background-color 0.35s ease,
     border-color 0.35s ease,
     color 0.25s ease,
-    box-shadow 0.35s ease !important;
+    box-shadow 0.35s ease,
+    scrollbar-color 0.35s ease !important;
 }

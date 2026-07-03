@@ -39,6 +39,60 @@ body {
   color: var(--sb-text-secondary);
 }
 
+/* 全局滚动条 — 细窄圆角，随主题色自适应 */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: var(--sb-scrollbar-thumb) var(--sb-scrollbar-track);
+}
+
+*::-webkit-scrollbar {
+  width: var(--sb-scrollbar-size);
+  height: var(--sb-scrollbar-size);
+}
+
+*::-webkit-scrollbar-track {
+  background: var(--sb-scrollbar-track);
+}
+
+*::-webkit-scrollbar-thumb {
+  background-color: var(--sb-scrollbar-thumb);
+  border-radius: 9999px;
+  border: 2px solid transparent;
+  background-clip: padding-box;
+  transition: background-color 0.18s ease;
+}
+
+*::-webkit-scrollbar-thumb:hover {
+  background-color: var(--sb-scrollbar-thumb-hover);
+}
+
+*::-webkit-scrollbar-thumb:active {
+  background-color: var(--sb-scrollbar-thumb-active);
+}
+
+*::-webkit-scrollbar-button,
+*::-webkit-scrollbar-button:single-button,
+*::-webkit-scrollbar-button:vertical:start:decrement,
+*::-webkit-scrollbar-button:vertical:end:increment,
+*::-webkit-scrollbar-button:horizontal:start:decrement,
+*::-webkit-scrollbar-button:horizontal:end:increment {
+  display: none;
+  width: 0;
+  height: 0;
+}
+
+*::-webkit-scrollbar-corner {
+  background: transparent;
+}
+
+.sb-scrollbar-hidden {
+  scrollbar-width: none;
+}
+
+.sb-scrollbar-hidden::-webkit-scrollbar {
+  display: none;
+}
+
 @keyframes running-glow {
   0%, 100% {
     box-shadow: 0 0 0 1px rgba(16, 185, 129, 0.35), 0 0 16px rgba(16, 185, 129, 0.08);
