@@ -1,4 +1,4 @@
-import { app } from 'electron'
+import { getAppUserDataPath } from './app-data-root'
 import { spawn } from 'child_process'
 import { existsSync, mkdirSync, readFileSync, readdirSync, writeFileSync } from 'fs'
 import { join } from 'path'
@@ -59,7 +59,7 @@ function writeRequirementsFile(path: string, data: RequirementsFile): void {
 
 export class PythonDependencyManager {
   getGlobalRuntimeDir(): string {
-    return join(app.getPath('userData'), 'runtime-python')
+    return join(getAppUserDataPath(), 'runtime-python')
   }
 
   getGlobalVenvDir(): string {

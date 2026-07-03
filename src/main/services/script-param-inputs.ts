@@ -1,10 +1,10 @@
-import { app } from 'electron'
+import { getAppUserDataPath } from './app-data-root'
 import { copyFileSync, existsSync, mkdirSync, statSync, unlinkSync } from 'fs'
 import { basename, extname, join } from 'path'
 import type { ParamAttachmentItem } from '../../shared/param-attachments'
 
 function getParamInputDir(scriptId: string, paramKey: string): string {
-  return join(app.getPath('userData'), 'script-inputs', scriptId, paramKey)
+  return join(getAppUserDataPath(), 'script-inputs', scriptId, paramKey)
 }
 
 function uniqueFileName(dir: string, originalName: string): string {

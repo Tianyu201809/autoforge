@@ -6,6 +6,7 @@ import { LEGACY_MANIFEST_FILENAME, MANIFEST_FILENAME } from '../../shared/script
 import type { ScriptLanguage } from '../../shared/script-language'
 import type { DependencyInstallResult, GlobalDependency } from '../../shared/types/script'
 import { needsScriptDepsInstall, writeDepsLock } from './script-deps-cache'
+import { getAppUserDataPath } from './app-data-root'
 import { pythonDependencyManager } from './python-dependency-manager'
 import { resolvePythonExecutable } from './python-resolver'
 import { scriptStore } from './script-store'
@@ -89,8 +90,7 @@ export class DependencyManager {
         scriptStore.getConfig().python?.pipIndexUrl
       )
     }
-    const { app } = await import('electron')
-    const runtimeDir = join(app.getPath('userData'), 'runtime')
+    const runtimeDir = join(getAppUserDataPath(), 'runtime')
     if (!existsSync(runtimeDir)) {
       const { mkdirSync } = await import('fs')
       mkdirSync(runtimeDir, { recursive: true })
@@ -110,8 +110,7 @@ export class DependencyManager {
   }
 
   getRuntimeNodeModules(): string {
-    const { app } = require('electron') as { app: { getPath: (name: string) => string } }
-    return join(app.getPath('userData'), 'runtime', 'node_modules')
+    return join(getAppUserDataPath(), 'runtime', 'node_modules')
   }
 
   /** 列出已安装的全局依赖 */
@@ -119,8 +118,7 @@ export class DependencyManager {
     if (language === 'python') {
       return pythonDependencyManager.listGlobal()
     }
-    const { app } = require('electron') as { app: { getPath: (name: string) => string } }
-    const pkgPath = join(app.getPath('userData'), 'runtime', 'package.json')
+    const pkgPath = join(getAppUserDataPath(), 'runtime', 'package.json')
     if (!existsSync(pkgPath)) return []
 
     const pkg = JSON.parse(readFileSync(pkgPath, UTF8)) as {
@@ -145,8 +143,7 @@ export class DependencyManager {
         scriptStore.getConfig().python?.pipIndexUrl
       )
     }
-    const { app } = await import('electron')
-    const runtimeDir = join(app.getPath('userData'), 'runtime')
+    const runtimeDir = join(getAppUserDataPath(), 'runtime')
     const pkgPath = join(runtimeDir, 'package.json')
     if (!existsSync(pkgPath)) {
       return { ok: true, stdout: '无全局依赖', stderr: '' }

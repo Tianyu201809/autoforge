@@ -1,4 +1,4 @@
-import { app } from 'electron'
+import { getAppUserDataPath } from './app-data-root'
 import type { Browser } from 'playwright-core'
 import type { ScriptRunContext, ScriptSdkShape } from '../../shared/script-contract'
 import type { AppConfig } from '../../shared/types/script'
@@ -21,7 +21,7 @@ export function createScriptSdk(
       }
     },
     paths: {
-      userData: app.getPath('userData'),
+      userData: getAppUserDataPath(),
       scriptDir
     }
   }

@@ -7,6 +7,7 @@ bootstrapUtf8()
 import { app, BrowserWindow, ipcMain, shell } from 'electron'
 import { join } from 'path'
 import { closeDatabase, initDatabase } from './db/database'
+import { configureAppUserDataPath, ensureAppDataSeeded, getAppUserDataPath } from './services/app-data-root'
 import { getAppIconImage } from './services/app-icon'
 import { registerIpcHandlers } from './ipc/handlers'
 import {
@@ -22,6 +23,8 @@ import {
   shouldKeepAliveOnAllWindowsClosed
 } from './services/main-window-mode'
 import { scriptStore } from './services/script-store'
+
+configureAppUserDataPath()
 
 let mainWindow: BrowserWindow | null = null
 
@@ -85,7 +88,8 @@ app.whenReady().then(async () => {
     app.setAppUserModelId('com.autoforge.app')
   }
 
-  await initDatabase(app.getPath('userData'))
+  await ensureAppDataSeeded()
+  await initDatabase(getAppUserDataPath())
 
   registerIpcHandlers(() => mainWindow)
 

@@ -3,6 +3,7 @@ import { existsSync, statSync } from 'fs'
 import { IPC } from '../../shared/ipc-channels'
 import { MANIFEST_FILENAME } from '../../shared/script-contract'
 import type { AppConfig, AppWindowConfig, EnvironmentProfile, ExecutionHistoryQuery, ScriptIcon, ScriptMeta } from '../../shared/types/script'
+import { getAppUserDataPath } from '../services/app-data-root'
 import { findCategoryDefinition } from '../services/category-service'
 import { dependencyManager } from '../services/dependency-manager'
 import { importBundledExample, listBundledExamples, readDevGuideMarkdown, readDevGuideSkillCreateInfo } from '../services/example-bundles'
@@ -443,7 +444,7 @@ export function registerIpcHandlers(getWindow: () => BrowserWindow | null): void
     return true
   })
 
-  ipcMain.handle(IPC.SYSTEM_USER_DATA_PATH, () => app.getPath('userData'))
+  ipcMain.handle(IPC.SYSTEM_USER_DATA_PATH, () => getAppUserDataPath())
 
   ipcMain.handle(IPC.SYSTEM_PYTHON_DETECT, () => {
     return detectPythonStatus(scriptStore.getConfig().python)

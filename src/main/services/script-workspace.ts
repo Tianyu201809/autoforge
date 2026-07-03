@@ -1,4 +1,4 @@
-import { app } from 'electron'
+import { getAppUserDataPath } from './app-data-root'
 import {
   copyFileSync,
   cpSync,
@@ -76,7 +76,7 @@ export class ScriptWorkspace {
 
   ensureRoot(): string {
     if (this.scriptsRoot) return this.scriptsRoot
-    const userData = app.getPath('userData')
+    const userData = getAppUserDataPath()
     this.scriptsRoot = join(userData, 'scripts')
     if (!existsSync(this.scriptsRoot)) {
       mkdirSync(this.scriptsRoot, { recursive: true })

@@ -1,7 +1,7 @@
 import { spawn, type ChildProcess } from 'child_process'
 import { existsSync } from 'fs'
 import { join } from 'path'
-import { app } from 'electron'
+import { getAppUserDataPath } from './app-data-root'
 import { buildIsolatedPythonEnv } from './python-isolated-env'
 import { decodeUtf8 } from '../../shared/encoding'
 import { parsePythonProtocolLine } from '../../shared/script-protocol'
@@ -91,7 +91,7 @@ export async function runPythonScript(
     params,
     browser: browserLaunch,
     paths: {
-      userData: app.getPath('userData'),
+      userData: getAppUserDataPath(),
       scriptDir: script.workspacePath
     }
   }
