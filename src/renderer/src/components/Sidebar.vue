@@ -68,8 +68,8 @@ onUnmounted(() => window.removeEventListener('keydown', onKeydown))
 </script>
 
 <template>
-  <aside class="w-56 flex-shrink-0 border-r sb-border sb-bg-panel flex flex-col">
-    <div class="p-3">
+  <aside class="w-56 flex-shrink-0 border-r sb-border sb-bg-panel flex flex-col min-h-0 h-full overflow-hidden">
+    <div class="flex-shrink-0 p-3">
       <div class="relative group">
         <Search
           class="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 sb-text-faint group-focus-within:sb-text-muted transition-colors"
@@ -88,7 +88,7 @@ onUnmounted(() => window.removeEventListener('keydown', onKeydown))
       </div>
     </div>
 
-    <nav class="px-2 space-y-0.5">
+    <nav class="flex-shrink-0 px-2 space-y-0.5">
       <button
         v-for="item in navItems"
         :key="item.id"
@@ -111,8 +111,8 @@ onUnmounted(() => window.removeEventListener('keydown', onKeydown))
       </button>
     </nav>
 
-    <div class="mt-5 px-3">
-      <div class="flex items-center justify-between mb-2 px-0.5">
+    <div class="mt-5 px-3 flex-1 min-h-0 flex flex-col">
+      <div class="flex-shrink-0 flex items-center justify-between mb-2 px-0.5">
         <span class="text-[11px] font-medium sb-text-faint uppercase tracking-wider">分类</span>
         <button
           type="button"
@@ -123,7 +123,7 @@ onUnmounted(() => window.removeEventListener('keydown', onKeydown))
           <Plus class="w-3.5 h-3.5" :stroke-width="1.5" />
         </button>
       </div>
-      <div class="space-y-0.5">
+      <div class="flex-1 min-h-0 overflow-y-auto overscroll-contain space-y-0.5 -mx-1 px-1">
         <button
           v-for="cat in categories"
           :key="cat.key"
@@ -149,7 +149,7 @@ onUnmounted(() => window.removeEventListener('keydown', onKeydown))
       </div>
     </div>
 
-    <div class="mt-auto p-3 border-t sb-border-subtle">
+    <div class="flex-shrink-0 p-3 border-t sb-border-subtle">
       <button
         type="button"
         class="w-full flex items-center justify-center gap-2 h-8 rounded-lg sb-btn-accent text-[13px] font-medium transition-colors"
