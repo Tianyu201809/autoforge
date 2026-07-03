@@ -272,13 +272,13 @@ export interface ScriptListFilter {
 export interface NavItem {
   id: string
   label: string
-  icon: 'layout-grid' | 'play-circle' | 'star' | 'clock' | 'archive'
+  icon: 'layout-grid' | 'play-circle' | 'timer' | 'star' | 'clock' | 'archive'
   count?: number
   badge?: string
   active?: boolean
 }
 
-export type NavFilter = 'all' | 'running' | 'starred' | 'recent' | 'archived'
+export type NavFilter = 'all' | 'running' | 'scheduled' | 'starred' | 'recent' | 'archived'
 
 export interface ScriptContentInfo {
   entryPath: string

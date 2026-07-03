@@ -12,6 +12,7 @@ import {
   Settings,
   Star,
   Store,
+  Timer,
   Upload
 } from 'lucide-vue-next'
 import type { CategoryItem, NavFilter, NavItem } from '../../../shared/types/script'
@@ -40,6 +41,7 @@ const emit = defineEmits<{
 const navIcons = {
   'layout-grid': LayoutGrid,
   'play-circle': PlayCircle,
+  timer: Timer,
   star: Star,
   clock: Clock,
   archive: Archive

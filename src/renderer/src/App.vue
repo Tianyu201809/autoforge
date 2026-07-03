@@ -364,7 +364,6 @@ onUnmounted(() => {
               :total-scripts="filteredScripts.length"
               :list-page="listPage"
               :list-total-pages="listTotalPages"
-              :stats="stats"
               :title="breadcrumb"
               :selected-id="selectedScriptId ?? undefined"
               :list-filter="listFilter"
@@ -391,7 +390,6 @@ onUnmounted(() => {
               @update:sort-by="setSortBy"
               @update:sort-order="setSortOrder"
               @update:list-page="setListPage"
-              @open-history="openExecutionHistory"
             />
             <LogConsole
               v-if="!terminalDetached"

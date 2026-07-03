@@ -31,6 +31,7 @@ function readStoredSortOrder(): ScriptSortOrder {
 const navItemsBase = [
   { id: 'all' as NavFilter, label: '全部', icon: 'layout-grid' as const },
   { id: 'running' as NavFilter, label: '运行中', icon: 'play-circle' as const },
+  { id: 'scheduled' as NavFilter, label: '定时任务', icon: 'timer' as const },
   { id: 'starred' as NavFilter, label: '收藏', icon: 'star' as const },
   { id: 'recent' as NavFilter, label: '最近运行', icon: 'clock' as const },
   { id: 'archived' as NavFilter, label: '已归档', icon: 'archive' as const }
@@ -91,6 +92,9 @@ const filteredScripts = computed(() => {
   switch (navFilter.value) {
     case 'running':
       list = list.filter((s) => s.status === 'running')
+      break
+    case 'scheduled':
+      list = list.filter((s) => !s.archived && s.schedule?.enabled)
       break
     case 'starred':
       list = list.filter((s) => s.starred)
@@ -178,7 +182,14 @@ const navItems = computed(() =>
       !showDevGuide.value &&
       !showExecutionHistory.value &&
       !(activeCategoryKey.value && item.id === 'all'),
-    count: item.id === 'all' ? stats.value.total : item.id === 'starred' ? scripts.value.filter((s) => s.starred).length : undefined,
+    count:
+      item.id === 'all'
+        ? stats.value.total
+        : item.id === 'starred'
+          ? scripts.value.filter((s) => s.starred).length
+          : item.id === 'scheduled'
+            ? stats.value.scheduled
+            : undefined,
     badge: item.id === 'running' ? String(stats.value.running) : undefined
   }))
 )

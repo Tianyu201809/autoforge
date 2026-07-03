@@ -1,23 +1,19 @@
 <script setup lang="ts">
 import { onMounted, onUnmounted, ref } from 'vue'
 import {
-  Activity,
   ArrowDown,
   ArrowUp,
   ArrowUpDown,
   Check,
   ChevronLeft,
   ChevronRight,
-  FileCode2,
   LayoutGrid,
   List,
   Plus,
   SlidersHorizontal,
-  Timer,
-  X,
-  Zap
+  X
 } from 'lucide-vue-next'
-import type { CategoryDefinition, ScriptItem, ScriptListFilter, ScriptSortBy, ScriptSortOrder, ScriptStats } from '../../../shared/types/script'
+import type { CategoryDefinition, ScriptItem, ScriptListFilter, ScriptSortBy, ScriptSortOrder } from '../../../shared/types/script'
 import ScriptCard from './ScriptCard.vue'
 import { useToast } from '../composables/useToast'
 
@@ -26,7 +22,6 @@ const props = defineProps<{
   totalScripts: number
   listPage: number
   listTotalPages: number
-  stats: ScriptStats
   selectedId?: string
   title?: string
   listFilter: ScriptListFilter
@@ -56,7 +51,6 @@ const emit = defineEmits<{
   'update:sortBy': [sort: ScriptSortBy]
   'update:sortOrder': [order: ScriptSortOrder]
   'update:listPage': [page: number]
-  openHistory: []
 }>()
 
 const viewMode = ref<'grid' | 'list'>(localStorage.getItem('viewMode') === 'list' ? 'list' : 'grid')
@@ -73,13 +67,6 @@ function setViewMode(mode: 'grid' | 'list'): void {
   viewMode.value = mode
   localStorage.setItem('viewMode', mode)
 }
-
-const statCards = [
-  { label: '脚本总数', key: 'total' as const, icon: FileCode2, iconClass: 'sb-text-muted', bgClass: 'sb-bg-inset', valueClass: 'sb-text-primary' },
-  { label: '运行中', key: 'running' as const, icon: Activity, iconClass: 'text-emerald-400', bgClass: 'bg-emerald-500/10', valueClass: 'text-emerald-400' },
-  { label: '定时任务', key: 'scheduled' as const, icon: Timer, iconClass: 'text-blue-400', bgClass: 'bg-blue-500/10', valueClass: 'sb-text-primary' },
-  { label: '今日执行', key: 'todayRuns' as const, icon: Zap, iconClass: 'text-amber-400', bgClass: 'bg-amber-500/10', valueClass: 'sb-text-primary' }
-]
 
 const sortLabels: Record<ScriptSortBy, string> = {
   name: '名称',
@@ -294,37 +281,6 @@ onUnmounted(() => {
           </div>
         </div>
       </div>
-    </div>
-
-    <div class="flex-shrink-0 grid grid-cols-2 @lg:grid-cols-4 gap-2 px-5 py-2 border-b sb-border">
-      <template v-for="stat in statCards" :key="stat.label">
-        <button
-          v-if="stat.key === 'todayRuns'"
-          type="button"
-          class="flex items-center gap-2 px-2.5 py-1.5 rounded-md border sb-border sb-bg-surface text-left transition-colors hover:border-[var(--sb-accent-solid)] cursor-pointer min-w-0"
-          @click="emit('openHistory')"
-        >
-          <div class="w-6 h-6 rounded-md flex items-center justify-center shrink-0" :class="stat.bgClass">
-            <component :is="stat.icon" class="w-3.5 h-3.5" :class="stat.iconClass" :stroke-width="1.5" />
-          </div>
-          <div class="min-w-0">
-            <p class="text-[10px] sb-text-muted leading-tight">{{ stat.label }}</p>
-            <p class="text-base font-medium tracking-tight leading-tight" :class="stat.valueClass">{{ stats[stat.key] }}</p>
-          </div>
-        </button>
-        <div
-          v-else
-          class="flex items-center gap-2 px-2.5 py-1.5 rounded-md border sb-border sb-bg-surface min-w-0"
-        >
-          <div class="w-6 h-6 rounded-md flex items-center justify-center shrink-0" :class="stat.bgClass">
-            <component :is="stat.icon" class="w-3.5 h-3.5" :class="stat.iconClass" :stroke-width="1.5" />
-          </div>
-          <div class="min-w-0">
-            <p class="text-[10px] sb-text-muted leading-tight">{{ stat.label }}</p>
-            <p class="text-base font-medium tracking-tight leading-tight" :class="stat.valueClass">{{ stats[stat.key] }}</p>
-          </div>
-        </div>
-      </template>
     </div>
 
     <div class="flex-1 overflow-y-auto px-5 py-4 pb-4">
