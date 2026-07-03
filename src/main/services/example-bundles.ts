@@ -4,7 +4,7 @@ import { join } from 'path'
 import { UTF8 } from '../../shared/encoding'
 import { hasManifest } from './script-workspace'
 import { scriptWorkspace } from './script-workspace'
-import type { ScriptMeta } from '../../shared/types/script'
+import type { DevGuideSkillCreateInfo, ScriptMeta } from '../../shared/types/script'
 
 export interface BundledExample {
   id: string
@@ -59,12 +59,36 @@ export function importBundledExample(exampleId: string): ScriptMeta {
   return scriptWorkspace.importFromDirectory(example.sourcePath)
 }
 
-/** 去掉 Cursor skill 文件顶部的 YAML frontmatter */
-function stripYamlFrontmatter(markdown: string): string {
-  if (!markdown.startsWith('---')) return markdown
+const SKILL_CREATE_REL_PATH = 'skills/autoforge-script-create/SKILL.md'
+
+/** 解析 Cursor skill 文件顶部的 YAML frontmatter */
+function parseYamlFrontmatter(markdown: string): { meta: Record<string, string>; body: string } {
+  if (!markdown.startsWith('---')) {
+    return { meta: {}, body: markdown }
+  }
   const end = markdown.indexOf('---', 3)
-  if (end === -1) return markdown
-  return markdown.slice(end + 3).replace(/^\s*\n/, '')
+  if (end === -1) {
+    return { meta: {}, body: markdown }
+  }
+  const meta: Record<string, string> = {}
+  for (const line of markdown.slice(3, end).trim().split('\n')) {
+    const match = line.match(/^([\w-]+):\s*(.*)$/)
+    if (match) meta[match[1]] = match[2].trim()
+  }
+  return { meta, body: markdown.slice(end + 3).replace(/^\s*\n/, '') }
+}
+
+function readSkillCreateFile(): string | null {
+  const candidates = app.isPackaged
+    ? [join(process.resourcesPath, 'skills', 'autoforge-script-create', 'SKILL.md')]
+    : [join(app.getAppPath(), 'skills', 'autoforge-script-create', 'SKILL.md')]
+
+  for (const path of candidates) {
+    if (existsSync(path)) {
+      return readFileSync(path, UTF8)
+    }
+  }
+  return null
 }
 
 /** 读取开发规范 markdown（docs/script-spec.md） */
@@ -81,16 +105,24 @@ export function readDevGuideMarkdown(): string {
   return '# 脚本开发规范\n\n未找到 script-spec.md'
 }
 
-/** 读取脚本创建流程（skills/autoforge-script-create/SKILL.md） */
-export function readDevGuideSkillCreateMarkdown(): string {
-  const candidates = app.isPackaged
-    ? [join(process.resourcesPath, 'skills', 'autoforge-script-create', 'SKILL.md')]
-    : [join(app.getAppPath(), 'skills', 'autoforge-script-create', 'SKILL.md')]
-
-  for (const path of candidates) {
-    if (existsSync(path)) {
-      return stripYamlFrontmatter(readFileSync(path, UTF8))
+/** 读取 autoforge-script-create Skill（skills/autoforge-script-create/SKILL.md） */
+export function readDevGuideSkillCreateInfo(): DevGuideSkillCreateInfo {
+  const raw = readSkillCreateFile()
+  if (!raw) {
+    return {
+      markdown: '# 脚本创建 Skill\n\n未找到 autoforge-script-create/SKILL.md',
+      raw: '',
+      name: 'autoforge-script-create',
+      description: '',
+      path: SKILL_CREATE_REL_PATH
     }
   }
-  return '# 脚本创建流程\n\n未找到 autoforge-script-create/SKILL.md'
+  const { meta, body } = parseYamlFrontmatter(raw)
+  return {
+    markdown: body,
+    raw,
+    name: meta.name ?? 'autoforge-script-create',
+    description: meta.description ?? '',
+    path: SKILL_CREATE_REL_PATH
+  }
 }

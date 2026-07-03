@@ -15,6 +15,7 @@ import type {
   EnvironmentProfile,
   GlobalDependency,
   BundledExampleInfo,
+  DevGuideSkillCreateInfo,
   LogLine,
   RunSession,
   ScriptContentInfo,
@@ -214,7 +215,8 @@ const autoforge = {
   },
   devGuide: {
     get: (): Promise<string> => ipcRenderer.invoke(IPC.DEV_GUIDE_GET),
-    getSkillCreate: (): Promise<string> => ipcRenderer.invoke(IPC.DEV_GUIDE_SKILL_CREATE_GET)
+    getSkillCreate: (): Promise<DevGuideSkillCreateInfo> =>
+      ipcRenderer.invoke(IPC.DEV_GUIDE_SKILL_CREATE_GET)
   },
   system: {
     memory: (): Promise<SystemMemoryInfo> => ipcRenderer.invoke(IPC.SYSTEM_MEMORY),

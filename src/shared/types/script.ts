@@ -306,3 +306,14 @@ export interface BundledExampleInfo {
   category: string
   categoryLabel: string
 }
+
+/** 开发指南 — autoforge-script-create Skill 元数据与正文 */
+export interface DevGuideSkillCreateInfo {
+  /** 展示用正文（已去掉 YAML frontmatter） */
+  markdown: string
+  /** 完整 SKILL.md 原文，供复制到 Cursor */
+  raw: string
+  name: string
+  description: string
+  path: string
+}

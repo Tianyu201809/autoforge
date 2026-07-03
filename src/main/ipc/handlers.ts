@@ -5,7 +5,7 @@ import { MANIFEST_FILENAME } from '../../shared/script-contract'
 import type { AppConfig, AppWindowConfig, EnvironmentProfile, ExecutionHistoryQuery, ScriptIcon, ScriptMeta } from '../../shared/types/script'
 import { findCategoryDefinition } from '../services/category-service'
 import { dependencyManager } from '../services/dependency-manager'
-import { importBundledExample, listBundledExamples, readDevGuideMarkdown, readDevGuideSkillCreateMarkdown } from '../services/example-bundles'
+import { importBundledExample, listBundledExamples, readDevGuideMarkdown, readDevGuideSkillCreateInfo } from '../services/example-bundles'
 import { getBrowserStatus } from '../services/browser-path'
 import { detectPythonStatus } from '../services/python-resolver'
 import {
@@ -409,7 +409,7 @@ export function registerIpcHandlers(getWindow: () => BrowserWindow | null): void
 
   ipcMain.handle(IPC.DEV_GUIDE_GET, () => readDevGuideMarkdown())
 
-  ipcMain.handle(IPC.DEV_GUIDE_SKILL_CREATE_GET, () => readDevGuideSkillCreateMarkdown())
+  ipcMain.handle(IPC.DEV_GUIDE_SKILL_CREATE_GET, () => readDevGuideSkillCreateInfo())
 
   ipcMain.handle(IPC.SYSTEM_MEMORY, () => {
     const mem = process.memoryUsage()

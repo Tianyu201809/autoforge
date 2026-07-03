@@ -1,31 +1,57 @@
 <script setup lang="ts">
 import { computed, onMounted, ref } from 'vue'
-import { BookOpen, Download, FileCode2, Route, X } from 'lucide-vue-next'
-import type { BundledExampleInfo } from '../../../shared/types/script'
+import { BookOpen, Check, Copy, Download, FileCode2, Sparkles, X } from 'lucide-vue-next'
+import type { BundledExampleInfo, DevGuideSkillCreateInfo } from '../../../shared/types/script'
+import { useToast } from '../composables/useToast'
 
 const emit = defineEmits<{ close: []; imported: [] }>()
+const { pushToast } = useToast()
 
 const activeTab = ref<'guide' | 'skillCreate' | 'examples'>('guide')
 const markdown = ref('')
-const skillCreateMarkdown = ref('')
+const skillCreate = ref<DevGuideSkillCreateInfo | null>(null)
 const examples = ref<BundledExampleInfo[]>([])
 const importingId = ref<string | null>(null)
 const loading = ref(true)
+const skillCopied = ref(false)
 
 onMounted(async () => {
   try {
-    const [md, skillMd, list] = await Promise.all([
+    const [md, skill, list] = await Promise.all([
       window.autoforge.devGuide.get(),
       window.autoforge.devGuide.getSkillCreate(),
       window.autoforge.examples.list()
     ])
     markdown.value = md
-    skillCreateMarkdown.value = skillMd
+    skillCreate.value = skill
     examples.value = list
   } finally {
     loading.value = false
   }
 })
+
+async function copySkill(): Promise<void> {
+  const raw = skillCreate.value?.raw
+  if (!raw) {
+    pushToast({ type: 'error', title: '复制失败', message: 'Skill 内容为空' })
+    return
+  }
+  try {
+    await navigator.clipboard.writeText(raw)
+    skillCopied.value = true
+    pushToast({
+      type: 'success',
+      title: '已复制 Skill',
+      message: '可在 Cursor 中粘贴或保存为 SKILL.md',
+      duration: 2200
+    })
+    window.setTimeout(() => {
+      skillCopied.value = false
+    }, 2000)
+  } catch {
+    pushToast({ type: 'error', title: '复制失败', message: '无法写入剪贴板' })
+  }
+}
 
 async function importExample(id: string): Promise<void> {
   importingId.value = id
@@ -138,7 +164,6 @@ function inlineFormat(text: string): string {
 }
 
 const guideHtml = computed(() => renderMarkdown(markdown.value))
-const skillCreateHtml = computed(() => renderMarkdown(skillCreateMarkdown.value))
 </script>
 <template>
   <main class="flex-1 flex flex-col min-w-0 sb-bg-base overflow-hidden">
@@ -168,8 +193,8 @@ const skillCreateHtml = computed(() => renderMarkdown(skillCreateMarkdown.value)
         :class="activeTab === 'skillCreate' ? 'font-medium sb-text-primary border-b-2 border-[var(--sb-text-primary)] -mb-px' : 'sb-text-muted hover:sb-text-secondary'"
         @click="activeTab = 'skillCreate'"
       >
-        <Route class="w-3.5 h-3.5" :stroke-width="1.5" />
-        脚本创建流程
+        <Sparkles class="w-3.5 h-3.5" :stroke-width="1.5" />
+        Skill
       </button>
       <button
         type="button"
@@ -190,9 +215,46 @@ const skillCreateHtml = computed(() => renderMarkdown(skillCreateMarkdown.value)
       <article class="dev-guide max-w-3xl" v-html="guideHtml" />
     </div>
 
-    <!-- 脚本创建流程（autoforge-script-create skill） -->
+    <!-- autoforge-script-create Skill -->
     <div v-else-if="activeTab === 'skillCreate'" class="flex-1 overflow-y-auto px-6 py-6">
-      <article class="dev-guide max-w-3xl" v-html="skillCreateHtml" />
+      <div
+        v-if="skillCreate"
+        class="dev-guide-skill-banner max-w-3xl rounded-xl border sb-border sb-bg-surface p-4"
+      >
+        <div class="flex items-start gap-3">
+          <div class="w-9 h-9 rounded-lg sb-bg-inset flex items-center justify-center flex-shrink-0">
+            <Sparkles class="w-4 h-4 text-[var(--sb-accent-solid)]" :stroke-width="1.5" />
+          </div>
+          <div class="min-w-0 flex-1">
+            <div class="flex items-center gap-2 flex-wrap">
+              <span class="text-[10px] font-semibold uppercase tracking-wider text-[var(--sb-accent-solid)]">
+                Cursor Agent Skill
+              </span>
+              <code class="text-[11px] sb-text-muted font-mono">{{ skillCreate.name }}</code>
+            </div>
+            <p v-if="skillCreate.description" class="text-[12px] sb-text-muted mt-1.5 leading-relaxed">
+              {{ skillCreate.description }}
+            </p>
+            <p class="text-[11px] sb-text-faint mt-2 font-mono">{{ skillCreate.path }}</p>
+            <p class="text-[11px] sb-text-muted mt-2 leading-relaxed">
+              在 Cursor 中通过
+              <code class="dev-guide-inline-code">@{{ skillCreate.path }}</code>
+              引用，或在对话中输入
+              <code class="dev-guide-inline-code">/autoforge-script-create</code>
+              触发脚本创建流程。
+            </p>
+          </div>
+          <button
+            type="button"
+            class="flex items-center gap-1.5 h-8 px-3 rounded-lg border sb-border text-[12px] sb-text-secondary hover:sb-bg-hover transition-colors flex-shrink-0"
+            @click="copySkill"
+          >
+            <Check v-if="skillCopied" class="w-3.5 h-3.5 text-emerald-400" :stroke-width="1.5" />
+            <Copy v-else class="w-3.5 h-3.5" :stroke-width="1.5" />
+            {{ skillCopied ? '已复制' : '复制 Skill' }}
+          </button>
+        </div>
+      </div>
     </div>
 
     <!-- 示例脚本 -->
@@ -320,5 +382,14 @@ const skillCreateHtml = computed(() => renderMarkdown(skillCreateMarkdown.value)
 }
 .dev-guide :deep(.dev-guide-spacer) {
   height: 0.25rem;
+}
+
+.dev-guide-skill-banner .dev-guide-inline-code {
+  font-family: ui-monospace, monospace;
+  font-size: 0.6875rem;
+  background: var(--sb-bg-inset);
+  padding: 0.1rem 0.35rem;
+  border-radius: 0.25rem;
+  color: var(--sb-text-secondary);
 }
 </style>
