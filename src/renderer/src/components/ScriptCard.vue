@@ -387,7 +387,7 @@ onUnmounted(() => {
               <div
                 v-if="menuOpen"
                 ref="menuDropdownRef"
-                class="fixed z-[200] min-w-[168px] max-h-[calc(100vh-16px)] overflow-y-auto py-1 rounded-lg border sb-border sb-bg-elevated shadow-lg"
+                class="fixed z-[200] min-w-[168px] max-h-[calc(100vh-16px)] overflow-y-auto py-1 rounded-lg border sb-border sb-bg-panel shadow-xl"
                 :style="{ top: `${menuPos.top}px`, left: `${menuPos.left}px` }"
                 @click.stop
               >
@@ -470,7 +470,7 @@ onUnmounted(() => {
               <div
                 v-if="menuOpen && categoryPickerOpen && categoryDefinitions?.length"
                 ref="categoryPickerRef"
-                class="fixed z-[201] w-[168px] max-h-[calc(100vh-16px)] overflow-y-auto py-1 rounded-lg border sb-border sb-bg-elevated shadow-lg"
+                class="fixed z-[201] w-[168px] max-h-[calc(100vh-16px)] overflow-y-auto py-1 rounded-lg border sb-border sb-bg-panel shadow-xl"
                 :style="{ top: `${categoryPickerPos.top}px`, left: `${categoryPickerPos.left}px` }"
                 @click.stop
               >
