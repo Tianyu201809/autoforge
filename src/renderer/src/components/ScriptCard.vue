@@ -7,6 +7,7 @@ import {
   ChevronRight,
   FolderOpen,
   Loader2,
+  Clock,
   MoreHorizontal,
   Pencil,
   PencilLine,
@@ -78,6 +79,19 @@ const scheduleSummary = computed(() => {
   if (!props.script.schedule?.enabled) return null
   return describeCronExpression(props.script.schedule.expression)
 })
+
+const footerMetaFull = computed(() => {
+  if (props.script.status === 'error') return props.script.errorMeta ?? ''
+  return props.script.meta || '尚未运行'
+})
+
+const footerMetaCompact = computed(() => {
+  const meta = footerMetaFull.value
+  if (meta.startsWith('最近运行 ')) return meta.slice(5)
+  return meta
+})
+
+const footerShowsRunTime = computed(() => footerMetaFull.value.startsWith('最近运行 '))
 
 const cardClass = computed(() => {
   if (props.script.status === 'running') {
@@ -305,7 +319,7 @@ onUnmounted(() => {
 
 <template>
   <div
-    class="group relative rounded-xl border transition-all cursor-pointer"
+    class="group relative rounded-xl border transition-all cursor-pointer flex flex-col h-full min-w-0"
     :class="[cardClass, selected && 'script-card-selected', script.status === 'running' && 'script-card-running']"
     @click="emit('select')"
     @contextmenu="onContextMenu"
@@ -335,7 +349,7 @@ onUnmounted(() => {
       <span class="text-[10px] font-medium text-red-400">异常</span>
     </div>
 
-    <div class="p-4">
+    <div class="p-4 flex flex-col flex-1 min-w-0 min-h-0">
       <div class="flex items-start gap-3">
         <div class="w-10 h-10 rounded-lg border flex items-center justify-center flex-shrink-0" :class="[script.iconBg, script.iconBorder]">
           <component :is="ScriptIcon" class="w-5 h-5" :class="script.iconColor" :stroke-width="1.5" />
@@ -345,14 +359,18 @@ onUnmounted(() => {
           <p class="text-[12px] sb-text-muted mt-0.5 line-clamp-2">{{ script.description }}</p>
         </div>
       </div>
-      <div class="flex items-center gap-2 mt-3">
-        <span class="text-[10px] px-1.5 py-0.5 rounded border" :class="script.categoryColor">{{ script.categoryLabel }}</span>
+      <div class="flex items-center gap-2 mt-3 min-w-0 flex-nowrap overflow-hidden">
         <span
-          class="text-[10px] px-1.5 py-0.5 rounded border font-mono font-semibold tracking-wide"
+          class="text-[10px] px-1.5 py-0.5 rounded border whitespace-nowrap truncate min-w-0 shrink"
+          :class="script.categoryColor"
+          :title="script.categoryLabel"
+        >{{ script.categoryLabel }}</span>
+        <span
+          class="text-[10px] px-1.5 py-0.5 rounded border font-mono font-semibold tracking-wide shrink-0 whitespace-nowrap"
           :class="languageBadge.className"
           :title="script.language === 'python' ? 'Python 脚本' : 'JavaScript 脚本'"
         >{{ languageBadge.label }}</span>
-        <span class="text-[10px] sb-text-faint font-mono">{{ script.version }}</span>
+        <span class="text-[10px] sb-text-faint font-mono shrink-0 whitespace-nowrap">{{ script.version }}</span>
       </div>
       <div
         v-if="scheduleSummary"
@@ -364,11 +382,20 @@ onUnmounted(() => {
           <span class="truncate">{{ scheduleSummary }}</span>
         </span>
       </div>
-      <div class="flex items-center justify-between mt-3 pt-3 border-t sb-border-subtle">
-        <span class="text-[11px]" :class="script.status === 'error' ? 'text-red-400/70' : 'sb-text-faint'">
-          {{ script.errorMeta || script.meta }}
+      <div class="script-card-footer">
+        <span
+          class="script-card-footer__meta"
+          :class="script.status === 'error' ? 'text-red-400/70' : 'sb-text-faint'"
+          :title="footerMetaFull"
+        >
+          <Clock
+            v-if="footerShowsRunTime && script.status !== 'error'"
+            class="script-card-footer__meta-icon"
+            :stroke-width="1.5"
+          />
+          <span class="truncate">{{ footerMetaCompact }}</span>
         </span>
-        <div class="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+        <div class="script-card-footer__actions">
           <template v-if="script.status === 'running'">
             <button type="button" class="w-7 h-7 flex items-center justify-center rounded-md sb-text-muted hover:sb-text-primary sb-bg-hover transition-colors" @click.stop="emit('stop')">
               <Square class="w-3 h-3" :stroke-width="1.5" />

@@ -10,7 +10,6 @@ import {
   Maximize2,
   Minimize2,
   Minus,
-  PanelBottom,
   Plus,
   Terminal,
   X
@@ -20,7 +19,7 @@ import type { ScriptRunProgress } from '../../../shared/script-progress'
 import { formatScriptRunProgressSummary, isControlLogMessage } from '../../../shared/script-progress'
 import ScriptRunProgressPanel from './ScriptRunProgressPanel.vue'
 
-export type LogConsoleDisplayMode = 'hidden' | 'mini' | 'normal'
+export type LogConsoleDisplayMode = 'hidden' | 'normal'
 
 export interface LogConsoleSession {
   sessionId: string
@@ -84,8 +83,8 @@ const mainChromeHeight = ref(MIN_MAIN_HEIGHT)
 
 let layoutObserver: ResizeObserver | undefined
 
-const isVisible = computed(() => props.standalone || displayMode.value !== 'hidden')
-const isMini = computed(() => !props.standalone && displayMode.value === 'mini')
+const isVisible = computed(() => props.standalone || displayMode.value === 'normal')
+const isExpanded = computed(() => !props.standalone && displayMode.value === 'normal')
 const isMulti = computed(() => !props.embedded && (props.sessions?.length ?? 0) > 0)
 
 const displayLogs = computed(() => props.logs ?? [])
@@ -152,14 +151,10 @@ function zoomOut(): void {
 }
 
 function toggleVisible(): void {
-  displayMode.value = displayMode.value === 'hidden' ? 'mini' : 'hidden'
+  displayMode.value = displayMode.value === 'hidden' ? 'normal' : 'hidden'
 }
 
-function setMini(): void {
-  displayMode.value = 'mini'
-}
-
-function setNormal(): void {
+function expand(): void {
   displayMode.value = 'normal'
 }
 
@@ -244,7 +239,7 @@ function onSidebarResizeStart(e: MouseEvent): void {
 function getMaxPanelHeight(): number {
   const available =
     parentHeight.value || panelRef.value?.parentElement?.clientHeight || Math.floor(window.innerHeight * 0.55)
-  const chrome = PANEL_HEADER_HEIGHT + (isVisible.value && !isMini.value ? RESIZE_HANDLE_HEIGHT : 0)
+  const chrome = PANEL_HEADER_HEIGHT + (isExpanded.value ? RESIZE_HANDLE_HEIGHT : 0)
   return Math.max(MIN_PANEL_HEIGHT, available - mainChromeHeight.value - chrome)
 }
 
@@ -269,7 +264,7 @@ function resetPanelHeight(): void {
 }
 
 function onPanelResizeStart(e: MouseEvent): void {
-  if (props.standalone || isMini.value || !isVisible.value) return
+  if (props.standalone || !isExpanded.value) return
   e.preventDefault()
   resizing.value = true
   const startY = e.clientY
@@ -302,19 +297,15 @@ const effectiveBodyHeight = computed(() => clampPanelHeight(panelHeight.value))
 
 const panelSectionStyle = computed(() => {
   if (props.standalone) return {}
-  if (!isVisible.value) {
+  if (!isExpanded.value) {
     return { height: `${PANEL_HEADER_HEIGHT}px` }
-  }
-  if (isMini.value) {
-    return { height: `${PANEL_HEADER_HEIGHT + 112}px` }
   }
   const body = effectiveBodyHeight.value
   return { height: `${body + PANEL_HEADER_HEIGHT + RESIZE_HANDLE_HEIGHT}px` }
 })
 
 const panelBodyStyle = computed(() => {
-  if (props.standalone) return {}
-  if (isMini.value) return { height: '7rem' }
+  if (props.standalone || !isExpanded.value) return {}
   return { flex: '1 1 0', minHeight: '0' }
 })
 
@@ -473,35 +464,21 @@ onUnmounted(() => {
           class="flex items-center gap-1 px-2 h-7 rounded text-[12px] sb-text-muted hover:sb-text-secondary transition-colors ml-1"
           @click="toggleVisible"
         >
-          <component :is="isVisible ? ChevronDown : ChevronUp" class="w-3.5 h-3.5" :stroke-width="1.5" />
+          <component :is="isExpanded ? ChevronDown : ChevronUp" class="w-3.5 h-3.5" :stroke-width="1.5" />
         </button>
-        <span v-if="isVisible && activeSession" class="terminal-header-subtitle ml-2 text-[11px] truncate hidden md:inline">
+        <span v-if="isExpanded && activeSession" class="terminal-header-subtitle ml-2 text-[11px] truncate hidden md:inline">
           {{ activeProgressSummary || activeSession.scriptName }}
         </span>
       </div>
       <div class="flex items-center gap-1 flex-shrink-0">
-        <template v-if="isVisible">
-          <button
-            v-if="!isMini"
-            type="button"
-            class="w-7 h-7 flex items-center justify-center rounded sb-text-muted hover:sb-text-primary sb-bg-hover"
-            title="迷你模式"
-            @click="setMini"
-          >
-            <PanelBottom class="w-3.5 h-3.5" :stroke-width="1.5" />
+        <template v-if="isExpanded">
+          <button type="button" class="w-7 h-7 flex items-center justify-center rounded sb-text-muted hover:sb-text-primary sb-bg-hover" title="缩小" @click="zoomOut">
+            <Minus class="w-3.5 h-3.5" :stroke-width="1.5" />
           </button>
-          <button v-else type="button" class="w-7 h-7 flex items-center justify-center rounded sb-text-muted hover:sb-text-primary sb-bg-hover" title="展开" @click="setNormal">
-            <Maximize2 class="w-3.5 h-3.5" :stroke-width="1.5" />
+          <span class="text-[10px] sb-text-faint w-7 text-center tabular-nums">{{ fontSize }}px</span>
+          <button type="button" class="w-7 h-7 flex items-center justify-center rounded sb-text-muted hover:sb-text-primary sb-bg-hover" title="放大" @click="zoomIn">
+            <Plus class="w-3.5 h-3.5" :stroke-width="1.5" />
           </button>
-          <template v-if="!isMini">
-            <button type="button" class="w-7 h-7 flex items-center justify-center rounded sb-text-muted hover:sb-text-primary sb-bg-hover" title="缩小" @click="zoomOut">
-              <Minus class="w-3.5 h-3.5" :stroke-width="1.5" />
-            </button>
-            <span class="text-[10px] sb-text-faint w-7 text-center tabular-nums">{{ fontSize }}px</span>
-            <button type="button" class="w-7 h-7 flex items-center justify-center rounded sb-text-muted hover:sb-text-primary sb-bg-hover" title="放大" @click="zoomIn">
-              <Plus class="w-3.5 h-3.5" :stroke-width="1.5" />
-            </button>
-          </template>
           <button type="button" class="w-7 h-7 flex items-center justify-center rounded sb-text-muted hover:sb-text-primary sb-bg-hover" title="清除当前终端" @click="clearLogs()">
             <Eraser class="w-3.5 h-3.5" :stroke-width="1.5" />
           </button>
@@ -521,14 +498,14 @@ onUnmounted(() => {
             <Minimize2 class="w-3.5 h-3.5" :stroke-width="1.5" />
           </button>
         </template>
-        <button v-else type="button" class="w-7 h-7 flex items-center justify-center rounded sb-text-muted hover:sb-text-primary sb-bg-hover" title="展开" @click="setMini">
+        <button v-else type="button" class="w-7 h-7 flex items-center justify-center rounded sb-text-muted hover:sb-text-primary sb-bg-hover" title="展开" @click="expand">
           <Maximize2 class="w-3.5 h-3.5" :stroke-width="1.5" />
         </button>
       </div>
     </header>
 
     <div
-      v-if="!standalone && isVisible && !isMini"
+      v-if="!standalone && isExpanded"
       class="terminal-resize-handle relative z-[2] flex-shrink-0"
       :class="resizing && 'is-active'"
       title="拖拽调节高度，双击恢复默认"
@@ -538,7 +515,7 @@ onUnmounted(() => {
 
     <!-- 主体：日志区 + 右侧终端列表 -->
     <div
-      v-show="isVisible"
+      v-show="isExpanded || standalone"
       ref="terminalBodyRef"
       class="terminal-body flex min-h-0 flex-1 overflow-hidden border-t border-transparent"
       :class="standalone ? 'border-t-0' : ''"
@@ -546,7 +523,7 @@ onUnmounted(() => {
     >
       <!-- 日志输出 -->
       <div class="flex flex-col flex-1 min-w-0 min-h-0">
-        <ScriptRunProgressPanel v-if="activeRunProgress && !isMini" :progress="activeRunProgress" />
+        <ScriptRunProgressPanel v-if="activeRunProgress" :progress="activeRunProgress" />
         <div
           ref="logBodyRef"
           class="terminal-log flex-1 min-w-0 min-h-0 font-mono leading-relaxed overflow-y-auto px-4 py-2"
@@ -565,7 +542,7 @@ onUnmounted(() => {
       </div>
 
       <!-- 右侧终端列表（VS Code 风格） -->
-      <div v-if="isMulti && !isMini" class="flex flex-shrink-0 min-h-0 self-stretch">
+      <div v-if="isMulti" class="flex flex-shrink-0 min-h-0 self-stretch">
         <div
           class="terminal-sidebar-resize-handle"
           :class="resizingSidebar && 'is-active'"
@@ -619,42 +596,6 @@ onUnmounted(() => {
         </div>
         </div>
         </aside>
-      </div>
-
-      <!-- 迷你模式：横向 tab -->
-      <div v-else-if="isMulti && isMini" class="flex flex-shrink-0 min-h-0 self-stretch" :style="{ width: `${sidebarWidth + SIDEBAR_RESIZE_HANDLE_WIDTH}px` }">
-        <div
-          class="terminal-sidebar-resize-handle"
-          :class="resizingSidebar && 'is-active'"
-          title="拖拽调节宽度，双击恢复默认"
-          @mousedown="onSidebarResizeStart"
-          @dblclick="resetSidebarWidth"
-        />
-        <div class="terminal-sidebar flex-1 min-w-0 overflow-x-auto border-l">
-        <div class="flex h-full items-stretch">
-          <button
-            v-for="session in sessions"
-            :key="session.sessionId"
-            type="button"
-            class="flex items-center gap-1 px-2.5 h-full text-[10px] border-l-2 flex-shrink-0 transition-colors"
-            :class="session.sessionId === activeSessionId
-              ? 'border-[var(--sb-accent-solid)] sb-bg-inset sb-text-primary'
-              : 'border-transparent sb-text-muted hover:sb-bg-hover'"
-            @click="selectSession(session.sessionId)"
-          >
-            <Loader2 v-if="session.status === 'running'" class="w-2.5 h-2.5 terminal-status-running animate-spin" :stroke-width="1.5" />
-            <span class="truncate max-w-[72px]">{{ session.scriptName }}</span>
-          </button>
-          <button
-            type="button"
-            class="flex items-center justify-center px-2 h-full border-l border-[var(--sb-border-subtle)] sb-text-muted hover:text-red-400 hover:sb-bg-hover flex-shrink-0 transition-colors"
-            title="关闭全部终端"
-            @click="closeAllSessions"
-          >
-            <ListX class="w-3 h-3" :stroke-width="1.5" />
-          </button>
-        </div>
-        </div>
       </div>
     </div>
   </section>

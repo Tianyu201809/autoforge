@@ -150,24 +150,26 @@ onUnmounted(() => {
         <p class="text-[13px] sb-text-muted mt-0.5">管理本机自动化脚本，常驻运行与调度</p>
       </div>
       <div class="flex items-center gap-2 flex-wrap shrink-0">
-        <div class="flex items-center sb-bg-surface border sb-border rounded-lg p-0.5">
+        <div class="layout-density-toggle" role="group" aria-label="卡片布局">
           <button
             type="button"
             title="双列布局"
-            class="w-7 h-7 flex items-center justify-center rounded-md transition-colors"
-            :class="gridColumns === '2' ? 'sb-bg-inset sb-text-primary' : 'sb-text-muted hover:sb-text-secondary'"
+            class="layout-density-toggle__btn"
+            :class="{ 'is-active': gridColumns === '2' }"
+            :aria-pressed="gridColumns === '2'"
             @click="setGridColumns('2')"
           >
-            <Columns2 class="w-3.5 h-3.5" :stroke-width="1.5" />
+            <Columns2 class="w-3.5 h-3.5" :stroke-width="gridColumns === '2' ? 2 : 1.5" />
           </button>
           <button
             type="button"
             title="三列布局"
-            class="w-7 h-7 flex items-center justify-center rounded-md transition-colors"
-            :class="gridColumns === '3' ? 'sb-bg-inset sb-text-primary' : 'sb-text-muted hover:sb-text-secondary'"
+            class="layout-density-toggle__btn"
+            :class="{ 'is-active': gridColumns === '3' }"
+            :aria-pressed="gridColumns === '3'"
             @click="setGridColumns('3')"
           >
-            <Columns3 class="w-3.5 h-3.5" :stroke-width="1.5" />
+            <Columns3 class="w-3.5 h-3.5" :stroke-width="gridColumns === '3' ? 2 : 1.5" />
           </button>
         </div>
 
