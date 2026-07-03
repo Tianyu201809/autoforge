@@ -25,6 +25,9 @@ import { startInsertFocusTracking } from './utils/insert-focused-field'
 
 const {
   filteredScripts,
+  pagedScripts,
+  listPage,
+  listTotalPages,
   stats,
   navItems,
   categories,
@@ -34,6 +37,7 @@ const {
   listFilter,
   hasActiveListFilter,
   sortBy,
+  sortOrder,
   showSettings,
   showDevGuide,
   showExecutionHistory,
@@ -48,6 +52,8 @@ const {
   setListFilter,
   resetListFilter,
   setSortBy,
+  setSortOrder,
+  setListPage,
   openCategoryManager,
   closeCategoryManager,
   openSettings,
@@ -354,7 +360,10 @@ onUnmounted(() => {
         <div class="flex flex-1 min-h-0 min-w-0 overflow-x-auto">
           <div class="flex flex-1 flex-col min-w-0 min-h-0 overflow-hidden">
             <MainContent
-              :scripts="filteredScripts"
+              :scripts="pagedScripts"
+              :total-scripts="filteredScripts.length"
+              :list-page="listPage"
+              :list-total-pages="listTotalPages"
               :stats="stats"
               :title="breadcrumb"
               :selected-id="selectedScriptId ?? undefined"
@@ -362,6 +371,7 @@ onUnmounted(() => {
               :has-active-list-filter="hasActiveListFilter"
               :category-definitions="categoryDefinitions"
               :sort-by="sortBy"
+              :sort-order="sortOrder"
               @select="selectScript($event)"
               @import="importScript"
               @imported="refresh()"
@@ -379,6 +389,8 @@ onUnmounted(() => {
               @update:list-filter="setListFilter"
               @reset-list-filter="resetListFilter"
               @update:sort-by="setSortBy"
+              @update:sort-order="setSortOrder"
+              @update:list-page="setListPage"
               @open-history="openExecutionHistory"
             />
             <LogConsole

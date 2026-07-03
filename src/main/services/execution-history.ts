@@ -1,5 +1,6 @@
 import type {
   ExecutionDaySummary,
+  ExecutionHistoryPage,
   ExecutionHistoryQuery,
   ExecutionRecord,
   ExecutionTrigger,
@@ -82,9 +83,10 @@ export class ExecutionHistoryService {
     const days = options.days ?? 30
     const cutoff = new Date(Date.now() - days * 24 * 60 * 60 * 1000).toISOString()
 
-    const list = repos.execution.queryRecords({
+    let list = repos.execution.queryRecords({
       cutoffIso: cutoff,
-      scriptId: options.scriptId
+      scriptId: options.scriptId,
+      scriptName: options.scriptName?.trim() || undefined
     }).filter((r) => !options.date || localDateKey(r.startedAt) === options.date)
 
     const grouped = new Map<string, ExecutionRecord[]>()
@@ -109,6 +111,30 @@ export class ExecutionHistoryService {
           records: sorted
         }
       })
+  }
+
+  queryPage(options: ExecutionHistoryQuery = {}): ExecutionHistoryPage {
+    const repos = this.ensureInitialized()
+    const days = options.days ?? 30
+    const cutoff = new Date(Date.now() - days * 24 * 60 * 60 * 1000).toISOString()
+    const offset = options.offset ?? 0
+    const limit = options.limit ?? 20
+
+    const { records, total } = repos.execution.queryRecordsPage({
+      cutoffIso: cutoff,
+      scriptId: options.scriptId,
+      scriptName: options.scriptName?.trim() || undefined,
+      status: options.status,
+      trigger: options.trigger,
+      offset,
+      limit
+    })
+
+    return {
+      records,
+      total,
+      hasMore: offset + records.length < total
+    }
   }
 
   listForScript(scriptId: string, limit = 50): ExecutionRecord[] {

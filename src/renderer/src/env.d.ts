@@ -14,6 +14,7 @@ import type {
   CategoryDefinition,
   DependencyInstallResult,
   ExecutionDaySummary,
+  ExecutionHistoryPage,
   ExecutionHistoryQuery,
   ExecutionRecord,
   EnvironmentProfile,
@@ -157,6 +158,7 @@ export interface AutoforgeApi {
   }
   history: {
     query: (options?: ExecutionHistoryQuery) => Promise<ExecutionDaySummary[]>
+    queryPage: (options?: ExecutionHistoryQuery) => Promise<ExecutionHistoryPage>
     forScript: (scriptId: string, limit?: number) => Promise<ExecutionRecord[]>
     todayCount: () => Promise<number>
   }

@@ -1,4 +1,4 @@
-import { computed, onMounted, ref } from 'vue'
+import { computed, onMounted, ref, watch } from 'vue'
 import { matchPinyinQuery } from '../utils/pinyin-match'
 import { useToast } from './useToast'
 import type {
@@ -8,8 +8,25 @@ import type {
   ScriptItem,
   ScriptListFilter,
   ScriptSortBy,
+  ScriptSortOrder,
   ScriptStats
 } from '../../../shared/types/script'
+
+const SORT_BY_STORAGE_KEY = 'scriptSortBy'
+const SORT_ORDER_STORAGE_KEY = 'scriptSortOrder'
+const LIST_PAGE_SIZE = 12
+
+function readStoredSortBy(): ScriptSortBy {
+  const stored = localStorage.getItem(SORT_BY_STORAGE_KEY)
+  if (stored === 'name' || stored === 'recentRun' || stored === 'importedAt') return stored
+  return 'importedAt'
+}
+
+function readStoredSortOrder(): ScriptSortOrder {
+  const stored = localStorage.getItem(SORT_ORDER_STORAGE_KEY)
+  if (stored === 'asc' || stored === 'desc') return stored
+  return 'desc'
+}
 
 const navItemsBase = [
   { id: 'all' as NavFilter, label: '全部', icon: 'layout-grid' as const },
@@ -33,7 +50,9 @@ const listFilter = ref<ScriptListFilter>({
   starredOnly: false,
   scheduledOnly: false
 })
-const sortBy = ref<ScriptSortBy>('name')
+const sortBy = ref<ScriptSortBy>(readStoredSortBy())
+const sortOrder = ref<ScriptSortOrder>(readStoredSortOrder())
+const listPage = ref(1)
 const showSettings = ref(false)
 const showDevGuide = ref(false)
 const showExecutionHistory = ref(false)
@@ -115,18 +134,34 @@ const filteredScripts = computed(() => {
   }
 
   if (navFilter.value !== 'recent') {
+    const dir = sortOrder.value === 'asc' ? 1 : -1
     list = [...list].sort((a, b) => {
       if (sortBy.value === 'recentRun') {
-        return (b.recentRunAt ?? '').localeCompare(a.recentRunAt ?? '')
+        return dir * (a.recentRunAt ?? '').localeCompare(b.recentRunAt ?? '')
       }
       if (sortBy.value === 'importedAt') {
-        return (b.importedAt ?? '').localeCompare(a.importedAt ?? '')
+        return dir * (a.importedAt ?? '').localeCompare(b.importedAt ?? '')
       }
-      return a.name.localeCompare(b.name, 'zh-CN')
+      return dir * a.name.localeCompare(b.name, 'zh-CN')
     })
   }
 
   return list
+})
+
+const listTotalPages = computed(() => Math.max(1, Math.ceil(filteredScripts.value.length / LIST_PAGE_SIZE)))
+
+const pagedScripts = computed(() => {
+  const start = (listPage.value - 1) * LIST_PAGE_SIZE
+  return filteredScripts.value.slice(start, start + LIST_PAGE_SIZE)
+})
+
+watch([navFilter, searchQuery, listFilter, sortBy, sortOrder, categoryFilter], () => {
+  listPage.value = 1
+})
+
+watch(listTotalPages, (max) => {
+  if (listPage.value > max) listPage.value = max
 })
 
 const hasActiveListFilter = computed(() => {
@@ -230,6 +265,16 @@ function resetListFilter(): void {
 
 function setSortBy(sort: ScriptSortBy): void {
   sortBy.value = sort
+  localStorage.setItem(SORT_BY_STORAGE_KEY, sort)
+}
+
+function setSortOrder(order: ScriptSortOrder): void {
+  sortOrder.value = order
+  localStorage.setItem(SORT_ORDER_STORAGE_KEY, order)
+}
+
+function setListPage(page: number): void {
+  listPage.value = Math.min(Math.max(1, page), listTotalPages.value)
 }
 
 function openCategoryManager(): void {
@@ -278,6 +323,10 @@ export function useScriptStore() {
   return {
     scripts,
     filteredScripts,
+    pagedScripts,
+    listPage,
+    listTotalPages,
+    listPageSize: LIST_PAGE_SIZE,
     stats,
     categories,
     categoryDefinitions,
@@ -289,6 +338,7 @@ export function useScriptStore() {
     listFilter,
     hasActiveListFilter,
     sortBy,
+    sortOrder,
     breadcrumb,
     loading,
     showSettings,
@@ -306,6 +356,8 @@ export function useScriptStore() {
     setListFilter,
     resetListFilter,
     setSortBy,
+    setSortOrder,
+    setListPage,
     openCategoryManager,
     closeCategoryManager,
     openSettings,

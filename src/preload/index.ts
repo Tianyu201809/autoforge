@@ -10,6 +10,7 @@ import type {
   CategoryDefinition,
   DependencyInstallResult,
   ExecutionDaySummary,
+  ExecutionHistoryPage,
   ExecutionHistoryQuery,
   ExecutionRecord,
   EnvironmentProfile,
@@ -189,6 +190,8 @@ const autoforge = {
   history: {
     query: (options?: ExecutionHistoryQuery): Promise<ExecutionDaySummary[]> =>
       ipcRenderer.invoke(IPC.HISTORY_QUERY, options),
+    queryPage: (options?: ExecutionHistoryQuery): Promise<ExecutionHistoryPage> =>
+      ipcRenderer.invoke(IPC.HISTORY_QUERY_PAGE, options),
     forScript: (scriptId: string, limit?: number): Promise<ExecutionRecord[]> =>
       ipcRenderer.invoke(IPC.HISTORY_FOR_SCRIPT, scriptId, limit),
     todayCount: (): Promise<number> => ipcRenderer.invoke(IPC.HISTORY_TODAY_COUNT)

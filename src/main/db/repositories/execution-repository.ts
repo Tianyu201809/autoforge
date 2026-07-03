@@ -1,5 +1,5 @@
 import type { SqliteDatabase } from '../database'
-import type { ExecutionRecord, SessionStatus } from '../../../shared/types/script'
+import type { ExecutionRecord, ExecutionTrigger, SessionStatus } from '../../../shared/types/script'
 import { executionRecordToRow, rowToExecutionRecord } from '../row-mappers'
 
 const MAX_RECORDS = 5000
@@ -127,19 +127,68 @@ export class ExecutionRepository {
     }).length
   }
 
-  queryRecords(options: { cutoffIso: string; scriptId?: string }): ExecutionRecord[] {
-    let sql = `${SELECT_ALL} WHERE started_at >= ?`
+  queryRecords(options: { cutoffIso: string; scriptId?: string; scriptName?: string }): ExecutionRecord[] {
+    const { whereSql, params } = this.buildWhereClause(options)
+    const rows = this.db
+      .prepare(`${SELECT_ALL} WHERE ${whereSql} ORDER BY started_at DESC`)
+      .all(...params)
+    return rows.map((row) => rowToExecutionRecord(row as Parameters<typeof rowToExecutionRecord>[0]))
+  }
+
+  queryRecordsPage(options: {
+    cutoffIso: string
+    scriptId?: string
+    scriptName?: string
+    status?: SessionStatus | 'all'
+    trigger?: ExecutionTrigger | 'all'
+    offset?: number
+    limit?: number
+  }): { records: ExecutionRecord[]; total: number } {
+    const { whereSql, params } = this.buildWhereClause(options)
+    const countRow = this.db
+      .prepare(`SELECT COUNT(*) AS count FROM execution_records WHERE ${whereSql}`)
+      .get(...params) as { count: number }
+
+    const offset = options.offset ?? 0
+    const limit = options.limit ?? 20
+    const rows = this.db
+      .prepare(`${SELECT_ALL} WHERE ${whereSql} ORDER BY started_at DESC LIMIT ? OFFSET ?`)
+      .all(...params, limit, offset)
+
+    return {
+      total: countRow.count,
+      records: rows.map((row) => rowToExecutionRecord(row as Parameters<typeof rowToExecutionRecord>[0]))
+    }
+  }
+
+  private buildWhereClause(options: {
+    cutoffIso: string
+    scriptId?: string
+    scriptName?: string
+    status?: SessionStatus | 'all'
+    trigger?: ExecutionTrigger | 'all'
+  }): { whereSql: string; params: string[] } {
+    const clauses = ['started_at >= ?']
     const params: string[] = [options.cutoffIso]
 
     if (options.scriptId) {
-      sql += ' AND script_id = ?'
+      clauses.push('script_id = ?')
       params.push(options.scriptId)
     }
+    if (options.scriptName) {
+      clauses.push('script_name LIKE ?')
+      params.push(`%${options.scriptName}%`)
+    }
+    if (options.status && options.status !== 'all') {
+      clauses.push('status = ?')
+      params.push(options.status)
+    }
+    if (options.trigger && options.trigger !== 'all') {
+      clauses.push('trigger = ?')
+      params.push(options.trigger)
+    }
 
-    sql += ' ORDER BY started_at DESC'
-
-    const rows = this.db.prepare(sql).all(...params)
-    return rows.map((row) => rowToExecutionRecord(row as Parameters<typeof rowToExecutionRecord>[0]))
+    return { whereSql: clauses.join(' AND '), params }
   }
 
   listForScript(scriptId: string, limit: number): ExecutionRecord[] {

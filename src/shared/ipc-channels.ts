@@ -66,6 +66,7 @@ export const IPC = {
   RUNNER_GET_SESSION: 'runner:get-session',
 
   HISTORY_QUERY: 'history:query',
+  HISTORY_QUERY_PAGE: 'history:query-page',
   HISTORY_FOR_SCRIPT: 'history:for-script',
   HISTORY_TODAY_COUNT: 'history:today-count',
 

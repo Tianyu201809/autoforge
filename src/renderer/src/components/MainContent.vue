@@ -2,8 +2,12 @@
 import { onMounted, onUnmounted, ref } from 'vue'
 import {
   Activity,
+  ArrowDown,
+  ArrowUp,
   ArrowUpDown,
   Check,
+  ChevronLeft,
+  ChevronRight,
   FileCode2,
   LayoutGrid,
   List,
@@ -13,12 +17,15 @@ import {
   X,
   Zap
 } from 'lucide-vue-next'
-import type { CategoryDefinition, ScriptItem, ScriptListFilter, ScriptSortBy, ScriptStats } from '../../../shared/types/script'
+import type { CategoryDefinition, ScriptItem, ScriptListFilter, ScriptSortBy, ScriptSortOrder, ScriptStats } from '../../../shared/types/script'
 import ScriptCard from './ScriptCard.vue'
 import { useToast } from '../composables/useToast'
 
 const props = defineProps<{
   scripts: ScriptItem[]
+  totalScripts: number
+  listPage: number
+  listTotalPages: number
   stats: ScriptStats
   selectedId?: string
   title?: string
@@ -26,6 +33,7 @@ const props = defineProps<{
   hasActiveListFilter: boolean
   categoryDefinitions: CategoryDefinition[]
   sortBy: ScriptSortBy
+  sortOrder: ScriptSortOrder
 }>()
 
 const emit = defineEmits<{
@@ -46,6 +54,8 @@ const emit = defineEmits<{
   'update:listFilter': [filter: ScriptListFilter]
   resetListFilter: []
   'update:sortBy': [sort: ScriptSortBy]
+  'update:sortOrder': [order: ScriptSortOrder]
+  'update:listPage': [page: number]
   openHistory: []
 }>()
 
@@ -75,6 +85,19 @@ const sortLabels: Record<ScriptSortBy, string> = {
   name: '名称',
   recentRun: '最近运行',
   importedAt: '上传时间'
+}
+
+const sortOrderLabels: Record<ScriptSortOrder, string> = {
+  asc: '升序',
+  desc: '降序'
+}
+
+function selectSort(key: ScriptSortBy): void {
+  emit('update:sortBy', key)
+}
+
+function selectSortOrder(order: ScriptSortOrder): void {
+  emit('update:sortOrder', order)
 }
 
 function patchFilter(patch: Partial<ScriptListFilter>): void {
@@ -237,20 +260,36 @@ onUnmounted(() => {
           >
             <ArrowUpDown class="w-3.5 h-3.5" :stroke-width="1.5" />
             {{ sortLabels[sortBy] }}
+            <component :is="sortOrder === 'asc' ? ArrowUp : ArrowDown" class="w-3 h-3 sb-text-faint" :stroke-width="1.5" />
           </button>
           <div
             v-if="sortOpen"
-            class="absolute right-0 top-full mt-1.5 w-36 rounded-lg border sb-border sb-bg-panel shadow-xl z-30 py-1"
+            class="absolute right-0 top-full mt-1.5 w-40 rounded-lg border sb-border sb-bg-panel shadow-xl z-30 py-1"
           >
             <button
               v-for="(label, key) in sortLabels"
               :key="key"
               type="button"
               class="w-full flex items-center justify-between px-3 py-2 text-[12px] sb-text-secondary hover:sb-bg-inset transition-colors"
-              @click="emit('update:sortBy', key as ScriptSortBy); sortOpen = false"
+              @click="selectSort(key as ScriptSortBy)"
             >
               {{ label }}
               <Check v-if="sortBy === key" class="w-3.5 h-3.5 sb-text-primary" :stroke-width="2" />
+            </button>
+            <div class="my-1 border-t sb-border-subtle" />
+            <button
+              v-for="(label, key) in sortOrderLabels"
+              :key="`order-${key}`"
+              type="button"
+              class="w-full flex items-center justify-between px-3 py-2 text-[12px] sb-text-secondary hover:sb-bg-inset transition-colors"
+              @click="selectSortOrder(key as ScriptSortOrder)"
+            >
+              <span class="inline-flex items-center gap-1.5">
+                <ArrowUp v-if="key === 'asc'" class="w-3 h-3" :stroke-width="1.5" />
+                <ArrowDown v-else class="w-3 h-3" :stroke-width="1.5" />
+                {{ label }}
+              </span>
+              <Check v-if="sortOrder === key" class="w-3.5 h-3.5 sb-text-primary" :stroke-width="2" />
             </button>
           </div>
         </div>
@@ -288,8 +327,8 @@ onUnmounted(() => {
       </template>
     </div>
 
-    <div class="flex-1 overflow-y-auto px-5 py-4 pb-8">
-      <div v-if="!scripts.length" class="text-center sb-text-muted text-sm py-20">暂无脚本</div>
+    <div class="flex-1 overflow-y-auto px-5 py-4 pb-4">
+      <div v-if="!totalScripts" class="text-center sb-text-muted text-sm py-20">暂无脚本</div>
       <div v-else class="gap-3" :class="viewMode === 'grid' ? 'grid grid-cols-1 @md:grid-cols-2 @2xl:grid-cols-3' : 'flex flex-col'">
         <ScriptCard
           v-for="script in scripts"
@@ -323,6 +362,35 @@ onUnmounted(() => {
           </div>
           <p class="text-[13px] sb-text-muted">拖拽脚本文件夹即可上传</p>
         </div>
+      </div>
+    </div>
+
+    <div
+      v-if="totalScripts > 0 && listTotalPages > 1"
+      class="flex-shrink-0 flex items-center justify-between px-5 py-2 border-t sb-border-subtle"
+    >
+      <span class="text-[12px] sb-text-muted tabular-nums">
+        共 {{ totalScripts }} 个，第 {{ listPage }} / {{ listTotalPages }} 页
+      </span>
+      <div class="flex items-center gap-1.5">
+        <button
+          type="button"
+          class="flex items-center gap-0.5 h-7 px-2.5 rounded-md text-[12px] sb-text-muted border sb-border hover:sb-text-secondary hover:sb-bg-hover transition-colors disabled:opacity-40"
+          :disabled="listPage <= 1"
+          @click="emit('update:listPage', listPage - 1)"
+        >
+          <ChevronLeft class="w-3.5 h-3.5" :stroke-width="1.5" />
+          上一页
+        </button>
+        <button
+          type="button"
+          class="flex items-center gap-0.5 h-7 px-2.5 rounded-md text-[12px] sb-text-muted border sb-border hover:sb-text-secondary hover:sb-bg-hover transition-colors disabled:opacity-40"
+          :disabled="listPage >= listTotalPages"
+          @click="emit('update:listPage', listPage + 1)"
+        >
+          下一页
+          <ChevronRight class="w-3.5 h-3.5" :stroke-width="1.5" />
+        </button>
       </div>
     </div>
   </main>

@@ -3,20 +3,29 @@ import { computed, onMounted, onUnmounted, ref } from 'vue'
 import {
   AlertCircle,
   CheckCircle2,
-  Clock,
   History,
   Loader2,
+  Search,
   Square,
   Timer,
   X,
   Zap
 } from 'lucide-vue-next'
 import type { ExecutionDaySummary, ExecutionRecord, SessionStatus } from '../../../shared/types/script'
+import { matchPinyinQuery } from '../utils/pinyin-match'
 
 const emit = defineEmits<{ close: [] }>()
 
+const DAYS_STORAGE_KEY = 'executionHistoryDays'
+
+function readStoredDays(): 7 | 30 | 90 {
+  const stored = Number(localStorage.getItem(DAYS_STORAGE_KEY))
+  if (stored === 7 || stored === 30 || stored === 90) return stored
+  return 30
+}
+
 const loading = ref(true)
-const days = ref(30)
+const days = ref<7 | 30 | 90>(readStoredDays())
 const searchQuery = ref('')
 const summaries = ref<ExecutionDaySummary[]>([])
 const todayCount = ref(0)
@@ -37,6 +46,12 @@ async function loadHistory(): Promise<void> {
   }
 }
 
+function setDays(option: 7 | 30 | 90): void {
+  days.value = option
+  localStorage.setItem(DAYS_STORAGE_KEY, String(option))
+  void loadHistory()
+}
+
 onMounted(() => {
   void loadHistory()
   unsubSession = window.autoforge.runner.onSession(() => {
@@ -49,19 +64,30 @@ onUnmounted(() => {
 })
 
 const filteredSummaries = computed(() => {
-  const q = searchQuery.value.trim().toLowerCase()
+  const q = searchQuery.value.trim()
   if (!q) return summaries.value
+
   return summaries.value
-    .map((day) => ({
-      ...day,
-      records: day.records.filter((r) => r.scriptName.toLowerCase().includes(q))
-    }))
+    .map((day) => {
+      const records = day.records.filter((r) => matchPinyinQuery(r.scriptName, q))
+      return {
+        date: day.date,
+        total: records.length,
+        success: records.filter((r) => r.status === 'success').length,
+        error: records.filter((r) => r.status === 'error').length,
+        stopped: records.filter((r) => r.status === 'stopped').length,
+        running: records.filter((r) => r.status === 'running').length,
+        records
+      }
+    })
     .filter((day) => day.records.length > 0)
 })
 
 const totalInRange = computed(() =>
   filteredSummaries.value.reduce((sum, day) => sum + day.records.length, 0)
 )
+
+const hasSearchQuery = computed(() => searchQuery.value.trim().length > 0)
 
 function formatDateLabel(dateKey: string): string {
   const today = new Date()
@@ -169,14 +195,17 @@ function triggerLabel(trigger: ExecutionRecord['trigger']): string {
               ? 'sb-bg-inset sb-text-primary font-medium'
               : 'sb-text-muted hover:sb-text-secondary sb-bg-hover'
           "
-          @click="days = option; loadHistory()"
+          @click="setDays(option)"
         >
           {{ option }} 天
         </button>
       </div>
 
-      <div class="relative w-full @sm:w-56">
-        <Clock class="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 sb-text-faint" :stroke-width="1.5" />
+      <div class="relative w-full sm:w-56">
+        <Search
+          class="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 sb-text-faint pointer-events-none"
+          :stroke-width="1.5"
+        />
         <input
           v-model="searchQuery"
           type="text"
@@ -188,10 +217,15 @@ function triggerLabel(trigger: ExecutionRecord['trigger']): string {
 
     <div v-if="loading" class="flex-1 flex items-center justify-center sb-text-muted text-sm">加载中…</div>
 
-    <div v-else-if="!filteredSummaries.length" class="flex-1 flex flex-col items-center justify-center gap-2 sb-text-muted">
+    <div
+      v-else-if="!filteredSummaries.length"
+      class="flex-1 flex flex-col items-center justify-center gap-2 sb-text-muted"
+    >
       <History class="w-10 h-10 sb-text-faint" :stroke-width="1" />
-      <p class="text-sm">暂无执行记录</p>
-      <p class="text-[12px] sb-text-faint">运行脚本后将在此留下每日执行痕迹</p>
+      <p class="text-sm">{{ hasSearchQuery ? '未找到匹配的脚本记录' : '暂无执行记录' }}</p>
+      <p class="text-[12px] sb-text-faint">
+        {{ hasSearchQuery ? '请尝试其他关键词或拼音首字母' : '运行脚本后将在此留下每日执行痕迹' }}
+      </p>
     </div>
 
     <div v-else class="flex-1 overflow-y-auto px-6 py-4 space-y-6">

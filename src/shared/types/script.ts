@@ -222,8 +222,19 @@ export interface ExecutionDaySummary {
 
 export interface ExecutionHistoryQuery {
   scriptId?: string
+  scriptName?: string
   date?: string
   days?: number
+  offset?: number
+  limit?: number
+  status?: SessionStatus | 'all'
+  trigger?: ExecutionTrigger | 'all'
+}
+
+export interface ExecutionHistoryPage {
+  records: ExecutionRecord[]
+  total: number
+  hasMore: boolean
 }
 
 export interface CategoryDefinition {
@@ -249,6 +260,7 @@ export interface CategoryItem {
 
 export type ScriptStatusFilter = 'all' | 'running' | 'idle' | 'error'
 export type ScriptSortBy = 'name' | 'recentRun' | 'importedAt'
+export type ScriptSortOrder = 'asc' | 'desc'
 
 export interface ScriptListFilter {
   status: ScriptStatusFilter

@@ -23,6 +23,11 @@ import type { CategoryDefinition, ScriptItem } from '../../../shared/types/scrip
 import { scriptLanguageBadge } from '../../../shared/script-language'
 import { resolveScriptIcon } from '../lib/script-icon-map'
 import { renameScript } from '../composables/useScriptRename'
+import {
+  closeActiveScriptCardMenu,
+  registerScriptCardMenuClose,
+  unregisterScriptCardMenuClose
+} from '../composables/useScriptCardMenu'
 import { useToast } from '../composables/useToast'
 
 const { pushToast } = useToast()
@@ -167,6 +172,10 @@ function openMenuAt(x: number, y: number): void {
   menuContextPoint.value = { x, y }
   categoryPickerOpen.value = false
   categoryTriggerRef.value = null
+  if (!menuOpen.value) {
+    closeActiveScriptCardMenu()
+    registerScriptCardMenuClose(closeMenu)
+  }
   menuOpen.value = true
   void repositionMainMenu()
 }
@@ -179,6 +188,8 @@ function toggleMenu(): void {
   menuContextPoint.value = null
   categoryPickerOpen.value = false
   categoryTriggerRef.value = null
+  closeActiveScriptCardMenu()
+  registerScriptCardMenuClose(closeMenu)
   menuOpen.value = true
   void repositionMainMenu()
 }
@@ -195,6 +206,7 @@ function closeMenu(): void {
   categoryPickerOpen.value = false
   menuContextPoint.value = null
   categoryTriggerRef.value = null
+  unregisterScriptCardMenuClose(closeMenu)
 }
 
 function toggleCategoryPicker(event: MouseEvent): void {
@@ -277,6 +289,7 @@ onMounted(() => {
   window.addEventListener('scroll', onWindowChange, true)
 })
 onUnmounted(() => {
+  closeMenu()
   document.removeEventListener('click', onDocClick)
   window.removeEventListener('resize', onWindowChange)
   window.removeEventListener('scroll', onWindowChange, true)

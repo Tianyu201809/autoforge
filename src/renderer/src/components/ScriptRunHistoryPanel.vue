@@ -3,8 +3,6 @@ import { computed, onMounted, onUnmounted, ref, watch } from 'vue'
 import {
   AlertCircle,
   CheckCircle2,
-  ChevronLeft,
-  ChevronRight,
   History,
   Loader2,
   Square,
@@ -18,37 +16,79 @@ const props = defineProps<{
   script: ScriptItem
 }>()
 
-const PAGE_SIZE = 15
+const PAGE_SIZE = 20
+const DAYS_STORAGE_KEY = 'scriptRunHistoryDays'
+
+function readStoredDays(): 7 | 30 | 90 {
+  const stored = Number(localStorage.getItem(DAYS_STORAGE_KEY))
+  if (stored === 7 || stored === 30 || stored === 90) return stored
+  return 30
+}
 
 const loading = ref(true)
-const days = ref(30)
+const loadingMore = ref(false)
+const days = ref<7 | 30 | 90>(readStoredDays())
 const statusFilter = ref<SessionStatus | 'all'>('all')
 const triggerFilter = ref<ExecutionTrigger | 'all'>('all')
-const page = ref(1)
 const records = ref<ExecutionRecord[]>([])
+const total = ref(0)
+const hasMore = ref(false)
+const listRef = ref<HTMLElement | null>(null)
 const resultModalOpen = ref(false)
 const resultModalSession = ref<RunSession | null>(null)
 const openingRecord = ref(false)
 
 let unsubSession: (() => void) | undefined
 
-async function loadHistory(): Promise<void> {
-  loading.value = true
+async function loadHistory(reset = true): Promise<void> {
+  if (reset) {
+    loading.value = true
+    records.value = []
+  } else {
+    loadingMore.value = true
+  }
+
   try {
-    const summaries = await window.autoforge.history.query({
+    const page = await window.autoforge.history.queryPage({
       scriptId: props.scriptId,
-      days: days.value
+      days: days.value,
+      status: statusFilter.value,
+      trigger: triggerFilter.value,
+      offset: reset ? 0 : records.value.length,
+      limit: PAGE_SIZE
     })
-    records.value = summaries.flatMap((day) => day.records)
+
+    if (reset) {
+      records.value = page.records
+    } else {
+      records.value = [...records.value, ...page.records]
+    }
+    total.value = page.total
+    hasMore.value = page.hasMore
   } finally {
     loading.value = false
+    loadingMore.value = false
+  }
+}
+
+function setDays(option: 7 | 30 | 90): void {
+  days.value = option
+  localStorage.setItem(DAYS_STORAGE_KEY, String(option))
+  void loadHistory(true)
+}
+
+function onListScroll(): void {
+  const el = listRef.value
+  if (!el || loading.value || loadingMore.value || !hasMore.value) return
+  if (el.scrollTop + el.clientHeight >= el.scrollHeight - 80) {
+    void loadHistory(false)
   }
 }
 
 onMounted(() => {
-  void loadHistory()
+  void loadHistory(true)
   unsubSession = window.autoforge.runner.onSession(() => {
-    void loadHistory()
+    void loadHistory(true)
   })
 })
 
@@ -59,35 +99,12 @@ onUnmounted(() => {
 watch(
   () => props.scriptId,
   () => {
-    page.value = 1
-    void loadHistory()
+    void loadHistory(true)
   }
 )
 
-watch([days, statusFilter, triggerFilter], () => {
-  page.value = 1
-})
-
-const filteredRecords = computed(() => {
-  let list = records.value
-  if (statusFilter.value !== 'all') {
-    list = list.filter((r) => r.status === statusFilter.value)
-  }
-  if (triggerFilter.value !== 'all') {
-    list = list.filter((r) => r.trigger === triggerFilter.value)
-  }
-  return list
-})
-
-const totalPages = computed(() => Math.max(1, Math.ceil(filteredRecords.value.length / PAGE_SIZE)))
-
-const pagedRecords = computed(() => {
-  const start = (page.value - 1) * PAGE_SIZE
-  return filteredRecords.value.slice(start, start + PAGE_SIZE)
-})
-
-watch(totalPages, (max) => {
-  if (page.value > max) page.value = max
+watch([statusFilter, triggerFilter], () => {
+  void loadHistory(true)
 })
 
 const statusMeta: Record<
@@ -184,6 +201,8 @@ function closeResultModal(): void {
   resultModalOpen.value = false
   resultModalSession.value = null
 }
+
+const loadedSummary = computed(() => `已加载 ${records.value.length} / ${total.value} 条`)
 </script>
 
 <template>
@@ -201,12 +220,12 @@ function closeResultModal(): void {
               ? 'sb-bg-inset sb-text-primary font-medium'
               : 'sb-text-muted hover:sb-text-secondary sb-bg-hover'
           "
-          @click="days = option; loadHistory()"
+          @click="setDays(option)"
         >
           {{ option }} 天
         </button>
         <span class="ml-auto text-[11px] sb-text-muted tabular-nums">
-          共 {{ filteredRecords.length }} 条
+          共 {{ total }} 条
         </span>
       </div>
 
@@ -251,7 +270,7 @@ function closeResultModal(): void {
     <div v-if="loading" class="flex-1 flex items-center justify-center sb-text-muted text-sm">加载中…</div>
 
     <div
-      v-else-if="!filteredRecords.length"
+      v-else-if="!records.length"
       class="flex-1 flex flex-col items-center justify-center gap-2 sb-text-muted px-4"
     >
       <History class="w-8 h-8 sb-text-faint" :stroke-width="1" />
@@ -259,10 +278,15 @@ function closeResultModal(): void {
       <p class="text-[12px] sb-text-faint text-center">运行脚本后将在此记录执行历史</p>
     </div>
 
-    <div v-else class="flex-1 overflow-y-auto min-h-0">
+    <div
+      v-else
+      ref="listRef"
+      class="flex-1 overflow-y-auto min-h-0"
+      @scroll="onListScroll"
+    >
       <div class="divide-y sb-border-subtle">
         <button
-          v-for="record in pagedRecords"
+          v-for="record in records"
           :key="record.id"
           type="button"
           class="w-full text-left flex items-start gap-3 px-4 py-3 sb-bg-surface transition-colors"
@@ -311,6 +335,26 @@ function closeResultModal(): void {
           </div>
         </button>
       </div>
+
+      <div
+        v-if="loadingMore"
+        class="flex items-center justify-center gap-2 py-3 text-[12px] sb-text-muted"
+      >
+        <Loader2 class="w-3.5 h-3.5 animate-spin" :stroke-width="1.5" />
+        加载更多…
+      </div>
+      <div
+        v-else-if="hasMore"
+        class="py-3 text-center text-[11px] sb-text-faint"
+      >
+        向下滚动加载更多
+      </div>
+      <div
+        v-else-if="records.length > PAGE_SIZE"
+        class="py-3 text-center text-[11px] sb-text-muted"
+      >
+        {{ loadedSummary }}
+      </div>
     </div>
 
     <RunResultModal
@@ -319,30 +363,5 @@ function closeResultModal(): void {
       :session="resultModalSession"
       @close="closeResultModal"
     />
-
-    <div
-      v-if="!loading && filteredRecords.length > PAGE_SIZE"
-      class="flex-shrink-0 flex items-center justify-between px-4 py-2 border-t sb-border-subtle"
-    >
-      <button
-        type="button"
-        class="flex items-center gap-0.5 h-7 px-2 rounded-md text-[11px] sb-text-muted border sb-border hover:sb-text-secondary hover:sb-bg-hover transition-colors disabled:opacity-40"
-        :disabled="page <= 1"
-        @click="page--"
-      >
-        <ChevronLeft class="w-3.5 h-3.5" :stroke-width="1.5" />
-        上一页
-      </button>
-      <span class="text-[11px] sb-text-muted tabular-nums">{{ page }} / {{ totalPages }}</span>
-      <button
-        type="button"
-        class="flex items-center gap-0.5 h-7 px-2 rounded-md text-[11px] sb-text-muted border sb-border hover:sb-text-secondary hover:sb-bg-hover transition-colors disabled:opacity-40"
-        :disabled="page >= totalPages"
-        @click="page++"
-      >
-        下一页
-        <ChevronRight class="w-3.5 h-3.5" :stroke-width="1.5" />
-      </button>
-    </div>
   </div>
 </template>

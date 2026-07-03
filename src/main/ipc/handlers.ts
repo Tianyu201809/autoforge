@@ -340,6 +340,10 @@ export function registerIpcHandlers(getWindow: () => BrowserWindow | null): void
     return executionHistory.query(query)
   })
 
+  ipcMain.handle(IPC.HISTORY_QUERY_PAGE, (_event, query?: ExecutionHistoryQuery) => {
+    return executionHistory.queryPage(query)
+  })
+
   ipcMain.handle(IPC.HISTORY_FOR_SCRIPT, (_event, scriptId: string, limit?: number) => {
     return executionHistory.listForScript(scriptId, limit)
   })
