@@ -391,7 +391,30 @@ function syncDetailDraft(): void {
   selectedEnvId.value = resolvedDefaultEnvId()
   syncBrowserHeadless()
   syncParamVars()
+  syncEnvVars()
 }
+
+function syncSchemaVarsFromScript(): void {
+  if (!selectedEnvId.value) {
+    selectedEnvId.value = props.script.defaultEnvId ?? ''
+  }
+  syncParamVars()
+  syncEnvVars()
+}
+
+syncSchemaVarsFromScript()
+
+watch(
+  () => props.script.paramSchema,
+  () => syncParamVars(),
+  { deep: true }
+)
+
+watch(
+  () => props.script.envSchema,
+  () => syncEnvVars(),
+  { deep: true }
+)
 
 const detailDirty = computed(() => {
   if (detailCategory.value !== props.script.category) return true

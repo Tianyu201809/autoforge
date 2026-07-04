@@ -19,7 +19,7 @@ export interface SchemaFieldDef {
 
 const props = withDefaults(
   defineProps<{
-    modelValue: string
+    modelValue?: string
     def: SchemaFieldDef
     scriptId?: string
     /** 附件缓存目录 scope，默认使用 def.key */
@@ -29,6 +29,7 @@ const props = withDefaults(
     attachmentHint?: string
   }>(),
   {
+    modelValue: '',
     showClear: false,
     showKey: true,
     attachmentHint: '支持多选；文件会复制到本地缓存，脚本通过 JSON 解析获取路径'
