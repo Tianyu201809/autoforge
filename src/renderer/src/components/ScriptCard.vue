@@ -227,19 +227,32 @@ function closeMenu(): void {
   categoryPickerOpen.value = false
   menuContextPoint.value = null
   categoryTriggerRef.value = null
+  cancelCategoryPickerClose()
   unregisterScriptCardMenuClose(closeMenu)
 }
 
-function toggleCategoryPicker(event: MouseEvent): void {
-  const el = event.currentTarget as HTMLElement
-  if (categoryPickerOpen.value && categoryTriggerRef.value === el) {
+let categoryPickerCloseTimer: ReturnType<typeof setTimeout> | null = null
+
+function cancelCategoryPickerClose(): void {
+  if (categoryPickerCloseTimer) {
+    clearTimeout(categoryPickerCloseTimer)
+    categoryPickerCloseTimer = null
+  }
+}
+
+function scheduleCategoryPickerClose(): void {
+  cancelCategoryPickerClose()
+  categoryPickerCloseTimer = setTimeout(() => {
     categoryPickerOpen.value = false
     categoryTriggerRef.value = null
-    return
-  }
-  categoryTriggerRef.value = el
+    categoryPickerCloseTimer = null
+  }, 120)
+}
+
+function openCategoryPicker(event: MouseEvent): void {
+  cancelCategoryPickerClose()
+  categoryTriggerRef.value = event.currentTarget as HTMLElement
   categoryPickerOpen.value = true
-  void repositionCategoryPicker()
 }
 
 function onWindowChange(): void {
@@ -495,7 +508,8 @@ onUnmounted(() => {
                   type="button"
                   class="w-full flex items-center gap-2 px-3 py-1.5 text-[12px] transition-colors text-left"
                   :class="categoryPickerOpen ? 'sb-text-primary sb-bg-inset' : 'sb-text-muted hover:sb-text-primary hover:sb-bg-hover'"
-                  @click.stop="toggleCategoryPicker"
+                  @mouseenter="openCategoryPicker"
+                  @mouseleave="scheduleCategoryPickerClose"
                 >
                   <Tags class="w-3.5 h-3.5 flex-shrink-0" :stroke-width="1.5" />
                   <span class="flex-1">调整分类</span>
@@ -516,6 +530,8 @@ onUnmounted(() => {
                 ref="categoryPickerRef"
                 class="fixed z-[201] w-[168px] max-h-[calc(100vh-16px)] overflow-y-auto py-1 rounded-lg border sb-border sb-bg-panel shadow-xl"
                 :style="{ top: `${categoryPickerPos.top}px`, left: `${categoryPickerPos.left}px` }"
+                @mouseenter="cancelCategoryPickerClose"
+                @mouseleave="scheduleCategoryPickerClose"
                 @click.stop
               >
                 <p class="px-3 py-1.5 text-[10px] font-medium sb-text-faint uppercase tracking-wider">选择分类</p>
