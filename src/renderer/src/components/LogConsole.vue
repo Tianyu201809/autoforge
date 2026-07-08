@@ -544,6 +544,7 @@ onUnmounted(() => {
       <div v-if="isMulti" class="flex flex-shrink-0 min-h-0 self-stretch">
         <div
           class="terminal-sidebar-resize-handle"
+          :class="resizingSidebar && 'is-active'"
           title="拖拽调节宽度，双击恢复默认"
           @mousedown="onSidebarResizeStart"
           @dblclick="resetSidebarWidth"

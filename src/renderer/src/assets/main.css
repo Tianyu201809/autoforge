@@ -555,11 +555,56 @@ body {
   touch-action: none;
 }
 
+/* 可拖拽竖向分隔线 */
+.resize-handle-col,
 .terminal-sidebar-resize-handle {
   flex-shrink: 0;
   width: 4px;
   cursor: col-resize;
   touch-action: none;
+  position: relative;
+}
+
+.resize-handle-col::before,
+.terminal-sidebar-resize-handle::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: 50%;
+  width: 1px;
+  transform: translateX(-50%);
+  background: var(--sb-border-subtle);
+  transition: background-color 0.15s ease, width 0.15s ease;
+  pointer-events: none;
+}
+
+.resize-handle-col:hover::before,
+.resize-handle-col.is-active::before,
+.terminal-sidebar-resize-handle:hover::before,
+.terminal-sidebar-resize-handle.is-active::before {
+  width: 2px;
+  background: var(--sb-accent-solid);
+}
+
+.resize-handle-col--edge-right {
+  position: absolute;
+  right: 0;
+  top: 0;
+  bottom: 0;
+  width: 6px;
+  transform: translateX(50%);
+  z-index: 10;
+}
+
+.resize-handle-col--edge-left {
+  position: absolute;
+  left: 0;
+  top: 0;
+  bottom: 0;
+  width: 6px;
+  transform: translateX(-50%);
+  z-index: 10;
 }
 
 .terminal-body {

@@ -872,7 +872,8 @@ async function handleRename(): Promise<void> {
     :style="{ width: `${panelWidth}px` }"
   >
     <div
-      class="absolute left-0 top-0 bottom-0 w-1.5 -translate-x-1/2 cursor-col-resize z-10"
+      class="resize-handle-col resize-handle-col--edge-left"
+      :class="resizing && 'is-active'"
       title="拖拽调节宽度，双击恢复默认"
       @mousedown="onResizeStart"
       @dblclick="onResizeReset"
