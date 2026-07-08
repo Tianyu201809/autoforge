@@ -454,19 +454,19 @@ onUnmounted(() => {
     <!-- 顶栏：紧贴主内容区下方，拉高时不被遮挡 -->
     <header v-if="!standalone" class="terminal-header relative z-[2] flex items-center justify-between px-2 h-9 flex-shrink-0 gap-2">
       <div class="flex items-center min-w-0">
-        <button type="button" class="flex items-center gap-1.5 px-2 h-7 rounded text-[12px] font-medium terminal-tab-active" @click="toggleVisible">
+        <button type="button" class="flex flex-shrink-0 items-center gap-1.5 px-2 h-7 rounded text-[12px] font-medium whitespace-nowrap terminal-tab-active" @click="toggleVisible">
           <Terminal class="w-3.5 h-3.5" :stroke-width="1.5" />
           <span>执行日志</span>
           <span v-if="runningCount" class="text-[10px] terminal-status-running tabular-nums">({{ runningCount }})</span>
         </button>
         <button
           type="button"
-          class="flex items-center gap-1 px-2 h-7 rounded text-[12px] sb-text-muted hover:sb-text-secondary transition-colors ml-1"
+          class="flex flex-shrink-0 items-center gap-1 px-2 h-7 rounded text-[12px] sb-text-muted hover:sb-text-secondary transition-colors ml-1"
           @click="toggleVisible"
         >
           <component :is="isExpanded ? ChevronDown : ChevronUp" class="w-3.5 h-3.5" :stroke-width="1.5" />
         </button>
-        <span v-if="isExpanded && activeSession" class="terminal-header-subtitle ml-2 text-[11px] truncate hidden md:inline">
+        <span v-if="isExpanded && activeSession" class="terminal-header-subtitle ml-2 min-w-0 text-[11px] truncate hidden md:inline">
           {{ activeProgressSummary || activeSession.scriptName }}
         </span>
       </div>
