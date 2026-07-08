@@ -506,8 +506,7 @@ onUnmounted(() => {
 
     <div
       v-if="!standalone && isExpanded"
-      class="terminal-resize-handle relative z-[2] flex-shrink-0"
-      :class="resizing && 'is-active'"
+      class="terminal-resize-handle relative z-[2]"
       title="拖拽调节高度，双击恢复默认"
       @mousedown="onPanelResizeStart"
       @dblclick="resetPanelHeight"
@@ -545,7 +544,6 @@ onUnmounted(() => {
       <div v-if="isMulti" class="flex flex-shrink-0 min-h-0 self-stretch">
         <div
           class="terminal-sidebar-resize-handle"
-          :class="resizingSidebar && 'is-active'"
           title="拖拽调节宽度，双击恢复默认"
           @mousedown="onSidebarResizeStart"
           @dblclick="resetSidebarWidth"

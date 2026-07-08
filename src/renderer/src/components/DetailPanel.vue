@@ -39,6 +39,7 @@ import { isExplicitEnvConfigValue, resolveEnvFieldValue } from '../../../shared/
 import { promptUnsavedFiles } from '../utils/unsaved-files-prompt'
 import { usePanelSaveFeedback } from '../composables/usePanelSaveFeedback'
 import { useManifestEditor } from '../composables/useManifestEditor'
+import { getStoredMainSidebarWidth } from '../constants/layout'
 
 const { saveFeedback, showSaveFeedback, clearSaveFeedback } = usePanelSaveFeedback()
 
@@ -57,7 +58,6 @@ const RUN_SPLIT_KEY = 'autoforge-run-split-top-pct'
 const RUN_SPLIT_MIN = 25
 const RUN_SPLIT_MAX = 75
 const RUN_SPLIT_DEFAULT = 45
-const SIDEBAR_WIDTH = 224
 const MAIN_MIN_WIDTH = 480
 const MIN_WIDTH = 320
 const MAX_WIDTH = 720
@@ -75,7 +75,7 @@ function getMaxPanelWidth(): number {
   return Math.min(
     MAX_WIDTH,
     Math.floor(window.innerWidth * 0.55),
-    window.innerWidth - SIDEBAR_WIDTH - MAIN_MIN_WIDTH
+    window.innerWidth - getStoredMainSidebarWidth() - MAIN_MIN_WIDTH
   )
 }
 
@@ -872,16 +872,11 @@ async function handleRename(): Promise<void> {
     :style="{ width: `${panelWidth}px` }"
   >
     <div
-      class="absolute left-0 top-0 bottom-0 w-2 -translate-x-1/2 cursor-col-resize z-10 group"
+      class="absolute left-0 top-0 bottom-0 w-1.5 -translate-x-1/2 cursor-col-resize z-10"
       title="拖拽调节宽度，双击恢复默认"
       @mousedown="onResizeStart"
       @dblclick="onResizeReset"
-    >
-      <div
-        class="absolute inset-y-0 left-1/2 w-px -translate-x-1/2 transition-colors"
-        :class="resizing ? 'bg-[var(--sb-accent-solid)]' : 'sb-border-subtle group-hover:bg-[var(--sb-accent-solid)]'"
-      />
-    </div>
+    />
     <div
       class="relative flex items-start px-4 py-3 border-b sb-border-subtle detail-panel-header gap-3"
       :class="iconPickerOpen && 'z-30'"
@@ -1183,15 +1178,10 @@ async function handleRename(): Promise<void> {
 
       <div
         v-show="runResultSectionExpanded"
-        class="flex-shrink-0 h-1.5 cursor-row-resize group relative border-y sb-border-subtle"
+        class="flex-shrink-0 h-1 cursor-row-resize"
         title="拖拽调节上下区域高度"
         @mousedown="onRunSplitStart"
-      >
-        <div
-          class="absolute inset-x-0 top-1/2 h-px -translate-y-1/2 transition-colors"
-          :class="runSplitResizing ? 'bg-[var(--sb-accent-solid)]' : 'sb-border-subtle group-hover:bg-[var(--sb-accent-solid)]'"
-        />
-      </div>
+      />
 
       <div
         class="flex flex-col overflow-hidden sb-bg-panel border-t sb-border-subtle"

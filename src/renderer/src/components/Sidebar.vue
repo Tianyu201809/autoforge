@@ -1,5 +1,10 @@
 <script setup lang="ts">
-import { onMounted, onUnmounted } from 'vue'
+import { onMounted, onUnmounted, ref } from 'vue'
+import {
+  clampMainSidebarWidth,
+  MAIN_SIDEBAR_DEFAULT_WIDTH,
+  MAIN_SIDEBAR_WIDTH_KEY
+} from '../constants/layout'
 import {
   Archive,
   BookOpen,
@@ -63,12 +68,73 @@ function openScriptMarket(): void {
   })
 }
 
-onMounted(() => window.addEventListener('keydown', onKeydown))
-onUnmounted(() => window.removeEventListener('keydown', onKeydown))
+const sidebarWidth = ref(MAIN_SIDEBAR_DEFAULT_WIDTH)
+const resizing = ref(false)
+
+function loadSidebarWidth(): void {
+  const stored = Number(localStorage.getItem(MAIN_SIDEBAR_WIDTH_KEY))
+  sidebarWidth.value = clampMainSidebarWidth(
+    Number.isFinite(stored) && stored > 0 ? stored : MAIN_SIDEBAR_DEFAULT_WIDTH
+  )
+}
+
+function onWindowResize(): void {
+  sidebarWidth.value = clampMainSidebarWidth(sidebarWidth.value)
+}
+
+function onResizeStart(e: MouseEvent): void {
+  e.preventDefault()
+  resizing.value = true
+  const startX = e.clientX
+  const startWidth = sidebarWidth.value
+
+  const onMove = (ev: MouseEvent): void => {
+    sidebarWidth.value = clampMainSidebarWidth(startWidth + (ev.clientX - startX))
+  }
+
+  const onUp = (): void => {
+    resizing.value = false
+    localStorage.setItem(MAIN_SIDEBAR_WIDTH_KEY, String(sidebarWidth.value))
+    document.removeEventListener('mousemove', onMove)
+    document.removeEventListener('mouseup', onUp)
+    document.body.style.cursor = ''
+    document.body.style.userSelect = ''
+  }
+
+  document.body.style.cursor = 'col-resize'
+  document.body.style.userSelect = 'none'
+  document.addEventListener('mousemove', onMove)
+  document.addEventListener('mouseup', onUp)
+}
+
+function onResizeReset(): void {
+  sidebarWidth.value = MAIN_SIDEBAR_DEFAULT_WIDTH
+  localStorage.setItem(MAIN_SIDEBAR_WIDTH_KEY, String(MAIN_SIDEBAR_DEFAULT_WIDTH))
+}
+
+onMounted(() => {
+  loadSidebarWidth()
+  window.addEventListener('keydown', onKeydown)
+  window.addEventListener('resize', onWindowResize)
+})
+onUnmounted(() => {
+  window.removeEventListener('keydown', onKeydown)
+  window.removeEventListener('resize', onWindowResize)
+})
 </script>
 
 <template>
-  <aside class="w-56 flex-shrink-0 border-r sb-border sb-bg-panel flex flex-col min-h-0 h-full overflow-hidden">
+  <aside
+    class="relative flex-shrink-0 border-r sb-border sb-bg-panel flex flex-col min-h-0 h-full overflow-hidden"
+    :class="resizing && 'select-none'"
+    :style="{ width: `${sidebarWidth}px` }"
+  >
+    <div
+      class="absolute right-0 top-0 bottom-0 w-1.5 translate-x-1/2 cursor-col-resize z-10"
+      title="拖拽调节宽度，双击恢复默认"
+      @mousedown="onResizeStart"
+      @dblclick="onResizeReset"
+    />
     <div class="flex-shrink-0 p-3">
       <div class="relative group">
         <Search
