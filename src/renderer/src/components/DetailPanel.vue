@@ -264,8 +264,6 @@ function resolveLatestSessionId(): string | undefined {
 }
 
 function syncViewingSessionId(): void {
-  const currentId = viewingSessionId.value
-  if (currentId && props.runner.sessions.value.some((s) => s.id === currentId)) return
   viewingSessionId.value = resolveLatestSessionId() ?? null
 }
 
@@ -1241,7 +1239,9 @@ async function handleRename(): Promise<void> {
 
           <RunResultViewer
             v-else-if="runResult"
+            :key="viewingSessionId ?? ''"
             :result="runResult"
+            :finished-at="runResultFinishedAt"
             :output-dir="runResultOutputDir"
             fill-height
             @open-output-dir="openOutputDir"
