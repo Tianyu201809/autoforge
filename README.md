@@ -73,8 +73,22 @@ export async function run(ctx) {
 ### 环境要求
 
 - Node.js 18+
-- Windows x64（当前主要目标平台）
+- Windows / macOS / Linux（预构建安装包支持多平台）
 - Python 3.9+（仅运行 Python 脚本时需要）
+
+### 预构建安装包（推荐）
+
+从 [GitHub Releases](https://github.com/Tianyu201809/autoforge/releases) 下载对应平台的安装包：
+
+| 平台 | 格式 |
+|------|------|
+| Windows | NSIS `.exe` |
+| macOS | `.dmg` |
+| Linux | `.AppImage` |
+
+发布流程：更新 `package.json` 中的 `version` 后推送 `v*` 标签至 GitHub，CI 将自动构建并上传至 Releases。
+
+> **macOS 未代码签名提示：** 当前 macOS 安装包未经 Apple 代码签名。首次打开时若被 Gatekeeper 拦截，请右键点击应用选择「打开」，或在 **系统设置 → 隐私与安全性** 中允许运行。
 
 ### 开发模式
 
@@ -85,10 +99,12 @@ npm install          # postinstall 自动下载 Playwright 浏览器
 npm run dev
 ```
 
-### 打包安装程序
+### 本地打包
 
 ```bash
-npm run dist:win     # 输出至 release/
+npm run dist:win     # Windows NSIS → release/
+npm run dist:mac     # macOS DMG（需在 macOS 上）
+npm run dist:linux   # Linux AppImage（需在 Linux 上）
 ```
 
 <details>
@@ -101,6 +117,8 @@ npm run dist:win     # 输出至 release/
 | `npm run prod` | build + preview 快捷组合 |
 | `npm run install:browsers` | 手动安装 Playwright 浏览器 |
 | `npm run generate:icons` | 从 SVG 生成应用图标 |
+| `npm run dist:mac` | 打包 macOS DMG → `release/` |
+| `npm run dist:linux` | 打包 Linux AppImage → `release/` |
 
 </details>
 
