@@ -16,6 +16,8 @@
     "generate:icons": "node scripts/generate-icons.mjs",
     "dist": "npm run generate:icons && npm run install:browsers && npm run build && electron-builder",
     "dist:win": "npm run generate:icons && npm run install:browsers && npm run build && electron-builder --win",
+    "dist:mac": "npm run generate:icons && npm run install:browsers && npm run build && electron-builder --mac",
+    "dist:linux": "npm run generate:icons && npm run install:browsers && npm run build && electron-builder --linux",
     "lint": "eslint .",
     "lint:fix": "eslint . --fix"
   },
@@ -122,6 +124,25 @@
       "installerIcon": "build/icon.ico",
       "uninstallerIcon": "build/icon.ico",
       "installerHeaderIcon": "build/icon.ico"
+    },
+    "mac": {
+      "target": [
+        {
+          "target": "dmg",
+          "arch": ["x64", "arm64"]
+        }
+      ],
+      "category": "public.app-category.developer-tools",
+      "identity": null
+    },
+    "linux": {
+      "target": [
+        {
+          "target": "AppImage",
+          "arch": ["x64", "arm64"]
+        }
+      ],
+      "category": "Utility"
     }
   }
 }
