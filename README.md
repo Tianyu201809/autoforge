@@ -126,7 +126,7 @@ npm run dist:linux   # Linux AppImage（需在 Linux 上）
 
 ## Getting Started
 
-1. **启动应用** — `npm run dev` 或安装 `release/` 下的 NSIS 安装包
+1. **启动应用** — `npm run dev`，或从 [GitHub Releases](https://github.com/Tianyu201809/autoforge/releases) 下载对应平台的安装包（Windows NSIS、macOS DMG、Linux AppImage）；本地打包产物在 `release/`
 2. **导入示例** — 开发指南 → 导入 `hello-world`
 3. **填写参数** — 详情 Tab 填写运行参数，配置 Tab 设置环境变量
 4. **运行** — 点击「运行」，确认后在终端面板查看日志

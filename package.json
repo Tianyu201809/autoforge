@@ -53,6 +53,7 @@
   "build": {
     "appId": "com.autoforge.app",
     "productName": "Autoforge",
+    "artifactName": "${productName}-${version}-${os}-${arch}.${ext}",
     "afterPack": "scripts/after-pack.mjs",
     "directories": {
       "output": "release",
@@ -115,6 +116,7 @@
       ]
     },
     "nsis": {
+      "buildUniversalInstaller": false,
       "oneClick": false,
       "allowToChangeInstallationDirectory": true,
       "allowElevation": true,
