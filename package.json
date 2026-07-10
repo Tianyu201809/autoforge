@@ -116,7 +116,6 @@
       ]
     },
     "nsis": {
-      "buildUniversalInstaller": false,
       "oneClick": false,
       "allowToChangeInstallationDirectory": true,
       "allowElevation": true,
