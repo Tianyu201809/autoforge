@@ -115,6 +115,14 @@ jobs:
           find dist-upload -type f -name '*-win.exe' \
             ! -name '*-win-x64.exe' ! -name '*-win-arm64.exe' -delete
 
+      - name: Zip installers for release
+        run: |
+          find dist-upload -type f \( -name '*.exe' -o -name '*.dmg' -o -name '*.AppImage' \) | while read -r f; do
+            zip -j "${f}.zip" "$f"
+            rm "$f"
+          done
+          find dist-upload -type f | sort
+
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
         with:
@@ -124,11 +132,7 @@ jobs:
           prerelease: ${{ contains(github.ref_name, '-') }}
           generate_release_notes: true
           files: |
-            dist-upload/**/*.exe
-            dist-upload/**/*.dmg
-            dist-upload/**/*.AppImage
-            dist-upload/**/*.yml
-            dist-upload/**/*.yaml
+            dist-upload/**/*.zip
           fail_on_unmatched_files: false
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

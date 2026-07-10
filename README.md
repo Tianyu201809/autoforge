@@ -78,13 +78,15 @@ export async function run(ctx) {
 
 ### 预构建安装包（推荐）
 
-从 [GitHub Releases](https://github.com/Tianyu201809/autoforge/releases) 下载对应平台的安装包：
+从 [GitHub Releases](https://github.com/Tianyu201809/autoforge/releases) 下载对应平台的 `.zip` 压缩包，解压后安装：
 
-| 平台 | 格式 |
-|------|------|
-| Windows | NSIS `.exe` |
-| macOS | `.dmg` |
+| 平台 | 压缩包内容 |
+|------|------------|
+| Windows | NSIS 安装程序 `.exe` |
+| macOS | 磁盘映像 `.dmg` |
 | Linux | `.AppImage` |
+
+> **Windows 下载提示：** Release 以 `.zip` 形式发布，避免浏览器直接拦截 `.exe` 下载。下载后解压，再运行其中的安装程序。
 
 发布流程：更新 `package.json` 中的 `version` 后推送 `v*` 标签至 GitHub，CI 将自动构建并上传至 Releases。
 
@@ -126,7 +128,7 @@ npm run dist:linux   # Linux AppImage（需在 Linux 上）
 
 ## Getting Started
 
-1. **启动应用** — `npm run dev`，或从 [GitHub Releases](https://github.com/Tianyu201809/autoforge/releases) 下载对应平台的安装包（Windows NSIS、macOS DMG、Linux AppImage）；本地打包产物在 `release/`
+1. **启动应用** — `npm run dev`，或从 [GitHub Releases](https://github.com/Tianyu201809/autoforge/releases) 下载对应平台的 `.zip` 压缩包，解压后安装；本地打包产物在 `release/`
 2. **导入示例** — 开发指南 → 导入 `hello-world`
 3. **填写参数** — 详情 Tab 填写运行参数，配置 Tab 设置环境变量
 4. **运行** — 点击「运行」，确认后在终端面板查看日志
