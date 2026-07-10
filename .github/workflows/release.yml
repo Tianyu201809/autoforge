@@ -74,6 +74,14 @@ jobs:
       - name: Package with electron-builder
         run: npx electron-builder ${{ matrix.eb_args }} --publish never
 
+      - name: Remove universal Windows installer
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          Get-ChildItem release -Filter *.exe -ErrorAction SilentlyContinue |
+            Where-Object { $_.Name -match '-win\.exe$' -and $_.Name -notmatch '-win-(x64|arm64)\.exe$' } |
+            Remove-Item -Force
+
       - name: Upload artifacts
         uses: actions/upload-artifact@v4
         with:
@@ -101,6 +109,11 @@ jobs:
 
       - name: List release files
         run: find dist-upload -type f | sort
+
+      - name: Remove universal Windows installer
+        run: |
+          find dist-upload -type f -name '*-win.exe' \
+            ! -name '*-win-x64.exe' ! -name '*-win-arm64.exe' -delete
 
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
