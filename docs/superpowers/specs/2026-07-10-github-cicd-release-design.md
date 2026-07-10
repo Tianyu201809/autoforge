@@ -50,8 +50,8 @@ git push tag vX.Y.Z
         │
         ├─ build (matrix, 6 jobs, parallel)
         │     checkout → Node 20 → npm ci --ignore-scripts
-        │     → generate:icons → install:browsers → electron-vite build
-        │     → electron-builder --<os> --<arch>
+        │     → electron install.js → generate:icons → install:browsers
+        │     → electron-vite build → electron-builder --<os> --<arch>
         │     → upload-artifact (release 目录产物)
         │
         └─ publish (needs: all builds)
@@ -87,12 +87,13 @@ git push tag vX.Y.Z
 
 1. `actions/checkout@v4`
 2. `actions/setup-node@v4`（Node 20，`cache: npm`）
-3. `npm ci --ignore-scripts`（跳过本地 `postinstall` 装浏览器，避免与下一步重复下载）
-4. `npm run generate:icons`
-5. `npm run install:browsers`（仅此一次，按当前 runner OS/架构写入 `resources/browsers`）
-6. `npm run build`（electron-vite production）
-7. `npx electron-builder <platform-flags>`（`CSC_IDENTITY_AUTO_DISCOVERY=false` 关闭签名探测）
-8. `actions/upload-artifact@v4`，name 按 job id 区分，path 指向 `release/` 下本平台产物
+3. `npm ci --ignore-scripts`（跳过 `postinstall` 装浏览器，避免与步骤 5 重复下载；同时也会跳过 electron 的二进制下载）
+4. `node node_modules/electron/install.js`（补回 Electron 二进制，供 electron-builder 打包）
+5. `npm run generate:icons`
+6. `npm run install:browsers`（仅此一次，按当前 runner OS/架构写入 `resources/browsers`）
+7. `npm run build`（electron-vite production）
+8. `npx electron-builder <platform-flags>`（`CSC_IDENTITY_AUTO_DISCOVERY=false` 关闭签名探测）
+9. `actions/upload-artifact@v4`，name 按 job id 区分，path 指向 `release/` 下本平台产物
 
 Linux AppImage 构建若需要系统依赖（如 `libfuse2`），仅在 Linux job 中按 electron-builder 当前文档安装最小依赖。
 
