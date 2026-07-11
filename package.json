@@ -22,6 +22,7 @@
     "lint:fix": "eslint . --fix"
   },
   "dependencies": {
+    "adm-zip": "^0.6.0",
     "lucide-vue-next": "^0.469.0",
     "node-cron": "^3.0.3",
     "pinyin-pro": "^3.28.1",
@@ -32,6 +33,7 @@
   "devDependencies": {
     "@eslint/js": "^10.0.1",
     "@tailwindcss/vite": "^4.1.4",
+    "@types/adm-zip": "^0.5.8",
     "@types/node": "^22.13.10",
     "@types/node-cron": "^3.0.11",
     "@vitejs/plugin-vue": "^5.2.1",
@@ -130,7 +132,10 @@
       "target": [
         {
           "target": "dmg",
-          "arch": ["x64", "arm64"]
+          "arch": [
+            "x64",
+            "arm64"
+          ]
         }
       ],
       "category": "public.app-category.developer-tools",
@@ -140,7 +145,10 @@
       "target": [
         {
           "target": "AppImage",
-          "arch": ["x64", "arm64"]
+          "arch": [
+            "x64",
+            "arm64"
+          ]
         }
       ],
       "category": "Utility"
