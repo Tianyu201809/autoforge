@@ -33,6 +33,20 @@ export async function run(ctx) {
 }
 ```
 
+## 以 zip 分发（Hub / 远程安装）
+
+Autoforge Hub「添加到本地」等场景使用 **zip** 传递脚本包。解压后须能定位到含 `autoforge.json` 的包根：
+
+| 布局 | 是否支持 |
+|------|----------|
+| zip 根目录直接含 `autoforge.json` + 入口文件 | ✅ |
+| zip 内仅一层目录，该目录含 `autoforge.json` | ✅ |
+| 多顶层目录、或缺少 `autoforge.json` | ❌ |
+
+不要把 `node_modules/`、`.venv/` 打进分发 zip；依赖由本机按清单安装。
+
+本机桥契约（端口、`/install` body）见 [Hub 安装 · 桌面端规格](./superpowers/specs/2026-07-11-hub-local-install-design.md)。
+
 ## autoforge.json 字段
 
 | 字段 | 类型 | 必填 | 说明 |

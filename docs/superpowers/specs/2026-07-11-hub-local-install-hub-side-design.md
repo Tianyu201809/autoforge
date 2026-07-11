@@ -1,7 +1,7 @@
 # Hub「添加到本地 Autoforge」— Hub 端设计规格
 
 **日期**：2026-07-11  
-**状态**：已批准  
+**状态**：已批准（供 Hub 仓库实现；桌面端契约已随 Autoforge v1.15.0 落地）  
 **读者**：Autoforge Hub 仓库实现者  
 **关联**：桌面端规格在 Autoforge 仓库  
 `docs/superpowers/specs/2026-07-11-hub-local-install-design.md`
