@@ -21,9 +21,11 @@ import PromptDialogHost from './components/PromptDialogHost.vue'
 import ScratchpadPanel from './components/ScratchpadPanel.vue'
 import { askConfirm } from './composables/useConfirmDialog'
 import { useScratchpad } from './composables/useScratchpad'
+import { useToast } from './composables/useToast'
 import { startInsertFocusTracking } from './utils/insert-focused-field'
 
 const {
+  scripts,
   filteredScripts,
   pagedScripts,
   listPage,
@@ -63,6 +65,8 @@ const {
   closeExecutionHistory,
   closeSettings
 } = useScriptStore()
+
+const { pushToast } = useToast()
 
 const runner = useScriptRunner(
   () => {
@@ -303,6 +307,7 @@ async function handleDockTerminal(): Promise<void> {
 }
 
 let unsubTerminalClosed: (() => void) | undefined
+let unsubHubInstalled: (() => void) | undefined
 let stopFocusTracking: (() => void) | undefined
 let offWindowMode: (() => void) | undefined
 
@@ -324,6 +329,19 @@ onMounted(() => {
   void window.autoforge.terminal.isOpen().then((open) => {
     terminalDetached.value = open
   })
+
+  unsubHubInstalled = window.autoforge.onHubScriptInstalled(async ({ scriptId, name }) => {
+    await refresh()
+    const script = scripts.value.find((s) => s.id === scriptId)
+    if (script) {
+      selectScript(script, 'detail')
+    } else {
+      selectedScriptId.value = scriptId
+      navigateDetailTab('detail')
+      detailVisible.value = true
+    }
+    pushToast({ type: 'success', title: '已从 Hub 添加', message: name || '脚本已导入' })
+  })
 })
 
 function onDocumentVisibilityChange(): void {
@@ -332,6 +350,7 @@ function onDocumentVisibilityChange(): void {
 
 onUnmounted(() => {
   unsubTerminalClosed?.()
+  unsubHubInstalled?.()
   stopFocusTracking?.()
   offWindowMode?.()
   document.removeEventListener('visibilitychange', onDocumentVisibilityChange)
