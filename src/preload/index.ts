@@ -102,6 +102,11 @@ const api = {
 }
 
 const autoforge = {
+  onHubScriptInstalled: (callback: (payload: { scriptId: string; name: string }) => void): (() => void) => {
+    const handler = (_e: IpcRendererEvent, payload: { scriptId: string; name: string }) => callback(payload)
+    ipcRenderer.on(IPC.EVENT_HUB_SCRIPT_INSTALLED, handler)
+    return () => ipcRenderer.removeListener(IPC.EVENT_HUB_SCRIPT_INSTALLED, handler)
+  },
   scripts: {
     list: (): Promise<ScriptListResponse> => ipcRenderer.invoke(IPC.SCRIPTS_LIST),
     get: (id: string): Promise<ScriptItem | null> => ipcRenderer.invoke(IPC.SCRIPTS_GET, id),

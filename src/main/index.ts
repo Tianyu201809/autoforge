@@ -20,8 +20,11 @@ import {
   applyWindowMode,
   attachMainWindowModeHandlers,
   initMainWindowMode,
-  shouldKeepAliveOnAllWindowsClosed
+  shouldKeepAliveOnAllWindowsClosed,
+  showMainWindow
 } from './services/main-window-mode'
+import { startHubBridgeServer, stopHubBridgeServer } from './services/hub-bridge-server'
+import { broadcastToRenderers } from './services/window-broadcast'
 import { scriptStore } from './services/script-store'
 
 configureAppUserDataPath()
@@ -135,12 +138,20 @@ app.whenReady().then(async () => {
 
   createWindow()
 
+  startHubBridgeServer({
+    onInstalled: (payload) => {
+      showMainWindow()
+      broadcastToRenderers(IPC.EVENT_HUB_SCRIPT_INSTALLED, payload)
+    }
+  })
+
   app.on('activate', () => {
     if (BrowserWindow.getAllWindows().length === 0) createWindow()
   })
 })
 
 app.on('before-quit', () => {
+  stopHubBridgeServer()
   closeDatabase()
 })
 

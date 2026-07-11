@@ -140,7 +140,9 @@ export const IPC = {
   WINDOW_IS_PINNED: 'window:is-pinned',
   WINDOW_GET_MODE: 'window:get-mode',
   WINDOW_SET_MODE: 'window:set-mode',
-  EVENT_WINDOW_MODE: 'event:window-mode'
+  EVENT_WINDOW_MODE: 'event:window-mode',
+
+  EVENT_HUB_SCRIPT_INSTALLED: 'event:hub-script-installed'
 
 } as const
 

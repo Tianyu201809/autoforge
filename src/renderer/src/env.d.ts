@@ -99,6 +99,7 @@ export interface FloatingBallApi {
 }
 
 export interface AutoforgeApi {
+  onHubScriptInstalled: (callback: (payload: { scriptId: string; name: string }) => void) => () => void
   scripts: {
     list: () => Promise<ScriptListResponse>
     get: (id: string) => Promise<ScriptItem | null>
