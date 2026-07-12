@@ -457,8 +457,12 @@ export function registerIpcHandlers(getWindow: () => BrowserWindow | null): void
       return false
     }
     if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') return false
-    await shell.openExternal(parsed.toString())
-    return true
+    try {
+      await shell.openExternal(parsed.toString())
+      return true
+    } catch {
+      return false
+    }
   })
 
   ipcMain.handle(IPC.SYSTEM_USER_DATA_PATH, () => getAppUserDataPath())

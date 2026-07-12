@@ -12,6 +12,11 @@ export function useScriptReadme(scriptId: Ref<string>) {
   const loading = ref(false)
   const empty = ref(true)
   const html = ref('')
+  let loadGeneration = 0
+
+  function isCurrentLoad(capturedScriptId: string, capturedGeneration: number): boolean {
+    return scriptId.value === capturedScriptId && loadGeneration === capturedGeneration
+  }
 
   function reset(): void {
     loading.value = false
@@ -20,11 +25,14 @@ export function useScriptReadme(scriptId: Ref<string>) {
   }
 
   async function load(): Promise<void> {
+    const capturedScriptId = scriptId.value
+    const capturedGeneration = ++loadGeneration
     loading.value = true
     empty.value = true
     html.value = ''
     try {
-      const file = await window.autoforge.scripts.readFile(scriptId.value, SCRIPT_README_FILENAME)
+      const file = await window.autoforge.scripts.readFile(capturedScriptId, SCRIPT_README_FILENAME)
+      if (!isCurrentLoad(capturedScriptId, capturedGeneration)) return
       if (!file || file.binary || !file.content?.trim()) {
         return
       }
@@ -36,7 +44,8 @@ export function useScriptReadme(scriptId: Ref<string>) {
       await Promise.all(
         relSrcs.map(async (rel) => {
           try {
-            const asset = await window.autoforge.scripts.readFile(scriptId.value, rel)
+            const asset = await window.autoforge.scripts.readFile(capturedScriptId, rel)
+            if (!isCurrentLoad(capturedScriptId, capturedGeneration)) return
             if (asset?.encoding === 'base64' && asset.mimeType && asset.content) {
               dataUrls[rel] = `data:${asset.mimeType};base64,${asset.content}`
             }
@@ -45,6 +54,7 @@ export function useScriptReadme(scriptId: Ref<string>) {
           }
         })
       )
+      if (!isCurrentLoad(capturedScriptId, capturedGeneration)) return
 
       if (Object.keys(dataUrls).length) {
         rendered = applyImageDataUrls(rendered, dataUrls)
@@ -53,10 +63,13 @@ export function useScriptReadme(scriptId: Ref<string>) {
       html.value = rendered
       empty.value = !rendered.trim()
     } catch {
+      if (!isCurrentLoad(capturedScriptId, capturedGeneration)) return
       empty.value = true
       html.value = ''
     } finally {
-      loading.value = false
+      if (isCurrentLoad(capturedScriptId, capturedGeneration)) {
+        loading.value = false
+      }
     }
   }
 

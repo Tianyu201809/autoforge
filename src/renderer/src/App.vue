@@ -96,7 +96,8 @@ const runResultModalSession = computed(() => {
 
 const selectedScriptId = ref<string | null>(null)
 const detailVisible = ref(true)
-const detailInitialTab = ref<'detail' | 'params' | 'edit' | 'log' | 'config' | 'history'>('detail')
+type DetailPanelTab = 'detail' | 'params' | 'edit' | 'log' | 'config' | 'history' | 'docs'
+const detailInitialTab = ref<DetailPanelTab>('detail')
 const detailTabRequest = ref(0)
 const logConsoleMode = ref<LogConsoleDisplayMode>('hidden')
 const logConsoleActiveSessionId = ref<string | undefined>()
@@ -178,7 +179,7 @@ watch(
   }
 )
 
-function navigateDetailTab(tab: 'detail' | 'params' | 'edit' | 'log' | 'config' | 'history'): void {
+function navigateDetailTab(tab: DetailPanelTab): void {
   detailInitialTab.value = tab
   detailTabRequest.value += 1
 }
