@@ -9,6 +9,7 @@ Autoforge 脚本是一个**目录包**，必须包含 `autoforge.json` 清单和
 ```
 my-script/
 ├── autoforge.json
+├── README.md          ← 可选，脚本使用说明
 └── index.mjs
 ```
 
@@ -32,6 +33,35 @@ export async function run(ctx) {
   return { ok: true }
 }
 ```
+
+## README 说明文档
+
+脚本包根目录可放置可选的 **`README.md`**（大小写须精确匹配），用于书写较完整的使用说明、步骤与截图。
+
+| 项 | 约定 |
+|----|------|
+| 文件 | 包根 `README.md`（可选） |
+| 平台入口 | 脚本详情 → **说明** Tab（始终显示；无文件时提示「暂无说明文档」） |
+| 与 `description` | **不替代** `autoforge.json` 的 `description`（短描述仍用于卡片/列表） |
+| 语法 | Markdown；平台以完整渲染器展示 |
+| 图片 | 相对路径相对**包根**（如 `./docs/shot.png`），须随包分发；缺失不阻断正文 |
+| 外链 | `http(s)` 链接可点击，使用系统浏览器打开 |
+| zip / Hub | 若有 README，须与 `autoforge.json` 位于同一包根一并打入 zip |
+
+示例：
+
+````markdown
+# 我的脚本
+
+## 使用前准备
+
+1. 在「配置」中填写 `API_URL`
+2. 在「运行参数」中填入订单号
+
+![界面示意](./docs/ui.png)
+````
+
+> 说明：`readme.md` / 子目录 README / 在清单中声明路径 — 本期均不支持。
 
 ## 以 zip 分发（Hub / 远程安装）
 
