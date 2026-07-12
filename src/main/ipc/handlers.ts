@@ -448,6 +448,19 @@ export function registerIpcHandlers(getWindow: () => BrowserWindow | null): void
     return true
   })
 
+  ipcMain.handle(IPC.SYSTEM_OPEN_EXTERNAL, async (_event, url: string) => {
+    if (typeof url !== 'string' || !url.trim()) return false
+    let parsed: URL
+    try {
+      parsed = new URL(url)
+    } catch {
+      return false
+    }
+    if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') return false
+    await shell.openExternal(parsed.toString())
+    return true
+  })
+
   ipcMain.handle(IPC.SYSTEM_USER_DATA_PATH, () => getAppUserDataPath())
 
   ipcMain.handle(IPC.SYSTEM_PYTHON_DETECT, () => {

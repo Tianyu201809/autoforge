@@ -194,6 +194,7 @@ export interface AutoforgeApi {
     pythonDetect: () => Promise<PythonStatusInfo>
     pickPython: () => Promise<string | null>
     openPath: (targetPath: string) => Promise<boolean>
+    openExternal: (url: string) => Promise<boolean>
     userDataPath: () => Promise<string>
     pickExternalEditor: () => Promise<string | null>
     openInExternalEditor: (

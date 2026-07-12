@@ -95,6 +95,8 @@ export const IPC = {
 
   SYSTEM_OPEN_PATH: 'system:open-path',
 
+  SYSTEM_OPEN_EXTERNAL: 'system:open-external',
+
   SYSTEM_USER_DATA_PATH: 'system:user-data-path',
 
   SYSTEM_PICK_EXTERNAL_EDITOR: 'system:pick-external-editor',

@@ -234,6 +234,8 @@ const autoforge = {
     pythonDetect: (): Promise<PythonStatusInfo> => ipcRenderer.invoke(IPC.SYSTEM_PYTHON_DETECT),
     pickPython: (): Promise<string | null> => ipcRenderer.invoke(IPC.SYSTEM_PICK_PYTHON),
     openPath: (targetPath: string): Promise<boolean> => ipcRenderer.invoke(IPC.SYSTEM_OPEN_PATH, targetPath),
+    openExternal: (url: string): Promise<boolean> =>
+      ipcRenderer.invoke(IPC.SYSTEM_OPEN_EXTERNAL, url),
     userDataPath: (): Promise<string> => ipcRenderer.invoke(IPC.SYSTEM_USER_DATA_PATH),
     pickExternalEditor: (): Promise<string | null> =>
       ipcRenderer.invoke(IPC.SYSTEM_PICK_EXTERNAL_EDITOR),
