@@ -39,11 +39,13 @@ import { isExplicitEnvConfigValue, resolveEnvFieldValue } from '../../../shared/
 import { promptUnsavedFiles } from '../utils/unsaved-files-prompt'
 import { usePanelSaveFeedback } from '../composables/usePanelSaveFeedback'
 import { useManifestEditor } from '../composables/useManifestEditor'
+import { SCRIPT_README_EMPTY_MESSAGE, useScriptReadme } from '../composables/useScriptReadme'
 import { getStoredMainSidebarWidth } from '../constants/layout'
+import { isSafeHttpUrl } from '../lib/script-readme-markdown'
 
 const { saveFeedback, showSaveFeedback, clearSaveFeedback } = usePanelSaveFeedback()
 
-type DetailPanelTab = 'detail' | 'params' | 'edit' | 'log' | 'config' | 'history'
+type DetailPanelTab = 'detail' | 'params' | 'edit' | 'log' | 'config' | 'history' | 'docs'
 
 const props = defineProps<{
   script: ScriptItem
@@ -205,6 +207,13 @@ const {
   isDirty: manifestDirty,
   reset: resetManifestEditor
 } = useManifestEditor(scriptIdRef)
+const {
+  loading: docsLoading,
+  empty: docsEmpty,
+  html: docsHtml,
+  load: loadDocs,
+  reset: resetDocs
+} = useScriptReadme(scriptIdRef)
 
 const iconOptions = SCRIPT_ICON_OPTIONS
 
@@ -214,7 +223,8 @@ const tabs = [
   { id: 'history' as const, label: '运行历史' },
   { id: 'edit' as const, label: '编辑' },
   { id: 'log' as const, label: '日志' },
-  { id: 'config' as const, label: '配置' }
+  { id: 'config' as const, label: '配置' },
+  { id: 'docs' as const, label: '说明' }
 ]
 
 const session = computed(() => {
@@ -592,10 +602,14 @@ watch(
     viewingSessionId.value = null
     runResultSectionExpanded.value = false
     resetManifestEditor()
+    resetDocs()
     if (props.initialTab) activeTab.value = props.initialTab
     await Promise.all([loadContent(), loadEnvironments()])
     syncDetailDraft()
     syncViewingSessionId()
+    if (activeTab.value === 'docs') {
+      void loadDocs()
+    }
   }
 )
 
@@ -609,6 +623,9 @@ watch(
   () => props.tabRequest,
   () => {
     if (props.initialTab) activeTab.value = props.initialTab
+    if (activeTab.value === 'docs') {
+      void loadDocs()
+    }
   },
   { immediate: true }
 )
@@ -705,6 +722,9 @@ async function switchTab(tabId: DetailPanelTab): Promise<void> {
     editModeActive.value = false
   }
   activeTab.value = tabId
+  if (tabId === 'docs') {
+    void loadDocs()
+  }
   scrollActiveTabIntoView()
 }
 
@@ -744,6 +764,18 @@ async function openInExternalEditor(): Promise<void> {
   } finally {
     openingExternalEditor.value = false
   }
+}
+
+async function onDocsClick(event: MouseEvent): Promise<void> {
+  const target = event.target
+  if (!(target instanceof Element)) return
+  const anchor = target.closest('a')
+  if (!anchor) return
+  const href = anchor.getAttribute('href')
+  if (!href || href.startsWith('#')) return
+  event.preventDefault()
+  if (!isSafeHttpUrl(href)) return
+  await window.autoforge.system.openExternal(href)
 }
 
 function plainEnvVars(): Record<string, string> {
@@ -1403,5 +1435,83 @@ async function handleRename(): Promise<void> {
         保存配置
       </button>
     </div>
+
+    <!-- 说明 -->
+    <div v-else-if="activeTab === 'docs'" class="flex-1 min-h-0 overflow-y-auto p-4">
+      <div v-if="docsLoading" class="text-[13px] sb-text-muted">加载中…</div>
+      <div v-else-if="docsEmpty" class="text-[13px] sb-text-muted py-8 text-center">
+        {{ SCRIPT_README_EMPTY_MESSAGE }}
+      </div>
+      <div
+        v-else
+        class="script-readme-body text-[13px] sb-text-secondary leading-relaxed"
+        @click="onDocsClick"
+        v-html="docsHtml"
+      />
+    </div>
   </aside>
 </template>
+
+<style scoped>
+.script-readme-body :deep(h1) {
+  font-size: 1.25rem;
+  font-weight: 600;
+  margin: 0 0 0.75rem;
+}
+
+.script-readme-body :deep(h2) {
+  font-size: 1.1rem;
+  font-weight: 600;
+  margin: 1.25rem 0 0.5rem;
+}
+
+.script-readme-body :deep(h3) {
+  font-size: 1rem;
+  font-weight: 600;
+  margin: 1rem 0 0.4rem;
+}
+
+.script-readme-body :deep(p),
+.script-readme-body :deep(ul),
+.script-readme-body :deep(ol) {
+  margin: 0 0 0.75rem;
+}
+
+.script-readme-body :deep(pre) {
+  overflow-x: auto;
+  padding: 0.75rem;
+  border-radius: 0.5rem;
+  background: var(--sb-bg-inset, rgba(0, 0, 0, 0.04));
+  margin: 0 0 0.75rem;
+}
+
+.script-readme-body :deep(code) {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 0.85em;
+}
+
+.script-readme-body :deep(img) {
+  max-width: 100%;
+  height: auto;
+  border-radius: 0.375rem;
+}
+
+.script-readme-body :deep(a) {
+  color: var(--sb-accent-solid, #2563eb);
+  text-decoration: underline;
+}
+
+.script-readme-body :deep(table) {
+  width: 100%;
+  border-collapse: collapse;
+  margin: 0 0 0.75rem;
+  font-size: 12px;
+}
+
+.script-readme-body :deep(th),
+.script-readme-body :deep(td) {
+  border: 1px solid var(--sb-border, #e5e7eb);
+  padding: 0.35rem 0.5rem;
+  text-align: left;
+}
+</style>
