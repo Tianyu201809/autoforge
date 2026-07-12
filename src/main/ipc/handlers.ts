@@ -176,7 +176,11 @@ export function registerIpcHandlers(getWindow: () => BrowserWindow | null): void
   ipcMain.handle(IPC.SCRIPTS_READ_FILE, (_event, id: string, relativePath: string) => {
     const script = scriptRegistry.getById(id)
     if (!script) return null
-    return scriptWorkspace.readWorkspaceFile(script, relativePath)
+    try {
+      return scriptWorkspace.readWorkspaceFile(script, relativePath)
+    } catch {
+      return null
+    }
   })
 
   ipcMain.handle(IPC.SCRIPTS_WRITE_FILE, (_event, id: string, relativePath: string, content: string) => {

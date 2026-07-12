@@ -297,6 +297,10 @@ export interface ScriptFileContent {
   path: string
   content: string
   binary: boolean
+  /** 文本为 utf8（可省略）；图片资源为 base64 */
+  encoding?: 'utf8' | 'base64'
+  /** 图片等资源的 MIME，如 image/png */
+  mimeType?: string
 }
 
 export interface DependencyInstallResult {

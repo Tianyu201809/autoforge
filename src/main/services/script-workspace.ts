@@ -56,6 +56,22 @@ function isLikelyBinary(buffer: Buffer): boolean {
   return nonPrintable > sample.length * 0.3
 }
 
+const IMAGE_MIME_BY_EXT: Record<string, string> = {
+  '.png': 'image/png',
+  '.jpg': 'image/jpeg',
+  '.jpeg': 'image/jpeg',
+  '.gif': 'image/gif',
+  '.webp': 'image/webp',
+  '.svg': 'image/svg+xml'
+}
+
+function imageMimeForPath(relativePath: string): string | null {
+  const lower = relativePath.toLowerCase()
+  const dot = lower.lastIndexOf('.')
+  if (dot < 0) return null
+  return IMAGE_MIME_BY_EXT[lower.slice(dot)] ?? null
+}
+
 function resolveManifestPath(scriptDir: string): string {
   const primary = join(scriptDir, MANIFEST_FILENAME)
   if (existsSync(primary)) return primary
@@ -298,11 +314,23 @@ export class ScriptWorkspace {
       throw new Error(`文件不存在: ${relativePath}`)
     }
     const buffer = readFileSync(fullPath)
+    const posixPath = toPosixPath(relativePath)
+    const imageMime = imageMimeForPath(posixPath)
+    if (imageMime) {
+      return {
+        path: posixPath,
+        content: buffer.toString('base64'),
+        binary: true,
+        encoding: 'base64',
+        mimeType: imageMime
+      }
+    }
     const binary = isLikelyBinary(buffer)
     return {
-      path: toPosixPath(relativePath),
+      path: posixPath,
       content: binary ? '' : buffer.toString(UTF8),
-      binary
+      binary,
+      encoding: binary ? undefined : 'utf8'
     }
   }
 
