@@ -853,7 +853,6 @@ body {
 }
 
 .script-card-footer {
-  position: relative;
   display: flex;
   align-items: center;
   min-height: 28px;
@@ -870,7 +869,7 @@ body {
   flex: 1;
   font-size: 11px;
   line-height: 1.3;
-  padding-right: 0.25rem;
+  padding-right: 6.25rem;
 }
 
 .script-card-footer__meta-icon {
@@ -882,8 +881,9 @@ body {
 
 .script-card-footer__actions {
   position: absolute;
-  right: 0;
-  bottom: 0;
+  right: 1rem;
+  bottom: 0.625rem;
+  z-index: 5;
   display: flex;
   align-items: center;
   gap: 0.15rem;

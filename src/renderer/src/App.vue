@@ -99,6 +99,7 @@ const detailVisible = ref(true)
 type DetailPanelTab = 'detail' | 'params' | 'edit' | 'log' | 'config' | 'history' | 'docs'
 const detailInitialTab = ref<DetailPanelTab>('detail')
 const detailTabRequest = ref(0)
+const environmentRevision = ref(0)
 const logConsoleMode = ref<LogConsoleDisplayMode>('hidden')
 const logConsoleActiveSessionId = ref<string | undefined>()
 const trackedSessionIds = ref<string[]>([])
@@ -182,6 +183,10 @@ watch(
 function navigateDetailTab(tab: DetailPanelTab): void {
   detailInitialTab.value = tab
   detailTabRequest.value += 1
+}
+
+function markEnvironmentsChanged(): void {
+  environmentRevision.value += 1
 }
 
 function openRunResultModal(scriptId: string, sessionId?: string): void {
@@ -383,7 +388,11 @@ onUnmounted(() => {
       />
       <DevGuidePanel :open="showDevGuide" @close="closeDevGuide" @imported="onExampleImported" />
       <ExecutionHistoryPanel :open="showExecutionHistory" @close="closeExecutionHistory" />
-      <SettingsPanel :open="showSettings" @close="closeSettings" />
+      <SettingsPanel
+        :open="showSettings"
+        @close="closeSettings"
+        @environments-changed="markEnvironmentsChanged"
+      />
       <div class="flex flex-1 min-h-0 min-w-0 overflow-x-auto">
           <div class="flex flex-1 flex-col min-w-0 min-h-0 overflow-hidden">
             <MainContent
@@ -448,6 +457,7 @@ onUnmounted(() => {
             :runner="runner"
             :initial-tab="detailInitialTab"
             :tab-request="detailTabRequest"
+            :environment-revision="environmentRevision"
             :category-definitions="categoryDefinitions"
             @close="detailVisible = false"
             @refresh="refresh()"

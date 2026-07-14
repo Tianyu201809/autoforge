@@ -15,7 +15,10 @@ const props = defineProps<{ open: boolean }>()
 
 const appVersion = window.api.versions.app
 
-const emit = defineEmits<{ close: [] }>()
+const emit = defineEmits<{
+  close: []
+  'environments-changed': []
+}>()
 
 const browserPath = ref('')
 const pythonPath = ref('')
@@ -193,6 +196,7 @@ async function saveEnv(): Promise<void> {
     }
     environments.value = await window.autoforge.env.list()
     syncEditingEnv(envId)
+    emit('environments-changed')
     envSaved.value = true
   } catch (err) {
     pushToast({
@@ -213,6 +217,7 @@ async function createEnv(): Promise<void> {
   })
   environments.value = await window.autoforge.env.list()
   syncEditingEnv(env.id)
+  emit('environments-changed')
   envSaved.value = false
 }
 
@@ -230,6 +235,7 @@ async function deleteEnv(id: string): Promise<void> {
   await window.autoforge.env.delete(id)
   environments.value = await window.autoforge.env.list()
   syncEditingEnv()
+  emit('environments-changed')
   envSaved.value = false
 }
 

@@ -17,7 +17,7 @@ import {
 } from 'lucide-vue-next'
 import { normalizeCronExpression } from '../../../shared/cron-schedule'
 import { SCRIPT_ICON_OPTIONS } from '../../../shared/script-icons'
-import type { EnvironmentProfile, ScriptItem } from '../../../shared/types/script'
+import type { EnvironmentProfile, ScriptItem, SessionStatus } from '../../../shared/types/script'
 import type { ScriptIcon } from '../../../shared/script-contract'
 import type { useScriptRunner } from '../composables/useScriptRunner'
 import { resolveScriptIcon } from '../lib/script-icon-map'
@@ -52,6 +52,7 @@ const props = defineProps<{
   runner: ReturnType<typeof useScriptRunner>
   initialTab?: DetailPanelTab
   tabRequest?: number
+  environmentRevision?: number
   categoryDefinitions?: import('../../../shared/types/script').CategoryDefinition[]
 }>()
 
@@ -296,6 +297,10 @@ const viewingSessionFailed = computed(() => viewingSession.value?.status === 'er
 
 const viewingSessionExitCode = computed(() => viewingSession.value?.exitCode)
 
+function isTerminalSessionStatus(status: SessionStatus | undefined): boolean {
+  return status === 'success' || status === 'error' || status === 'stopped'
+}
+
 const runResultOutputDir = computed(() => extractRunResultOutputDir(runResult.value))
 
 const runResultSectionBrief = computed(() => {
@@ -349,9 +354,16 @@ async function loadContent(): Promise<void> {
   await loadManifest()
 }
 
-async function loadEnvironments(): Promise<void> {
-  environments.value = await window.autoforge.env.list()
-  selectedEnvId.value = props.script.defaultEnvId ?? environments.value.find((e) => e.isDefault)?.id ?? environments.value[0]?.id ?? ''
+async function loadEnvironments(options: { preserveSelection?: boolean } = {}): Promise<void> {
+  const previousEnvId = selectedEnvId.value
+  const list = await window.autoforge.env.list()
+  environments.value = list
+  const fallbackEnvId =
+    props.script.defaultEnvId ?? list.find((e) => e.isDefault)?.id ?? list[0]?.id ?? ''
+  selectedEnvId.value =
+    options.preserveSelection && list.some((e) => e.id === previousEnvId)
+      ? previousEnvId
+      : fallbackEnvId
   syncEnvVars()
 }
 
@@ -620,6 +632,15 @@ watch(
 )
 
 watch(
+  () => viewingSession.value?.status,
+  (status, previousStatus) => {
+    if (previousStatus === 'running' && isTerminalSessionStatus(status)) {
+      runResultSectionExpanded.value = true
+    }
+  }
+)
+
+watch(
   () => props.tabRequest,
   () => {
     if (props.initialTab) activeTab.value = props.initialTab
@@ -628,6 +649,13 @@ watch(
     }
   },
   { immediate: true }
+)
+
+watch(
+  () => props.environmentRevision,
+  async () => {
+    await loadEnvironments({ preserveSelection: true })
+  }
 )
 
 watch(selectedEnvId, async (_newId, oldId) => {
