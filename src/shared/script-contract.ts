@@ -133,6 +133,10 @@ export interface ScriptManifest {
     /** 无头模式，默认 false（显示浏览器窗口，便于手动验证码等） */
     headless?: boolean
   }
+  /** 导出 ZIP 时补充无法通过静态依赖分析发现的运行资源 */
+  export?: {
+    include: string[]
+  }
 }
 
 /** 脚本必须导出的 run 函数签名（TypeScript 侧描述，运行时 duck-type 校验） */
@@ -380,6 +384,18 @@ export function validateManifest(raw: unknown): { ok: true; manifest: ScriptMani
     const browser = obj.browser as Record<string, unknown>
     if (typeof browser.headless === 'boolean') {
       manifest.browser = { headless: browser.headless }
+    }
+  }
+  if (obj.export && typeof obj.export === 'object') {
+    const exportConfig = obj.export as Record<string, unknown>
+    if (exportConfig.include !== undefined && !Array.isArray(exportConfig.include)) {
+      return { ok: false, error: 'export.include 必须是字符串数组' }
+    }
+    if (Array.isArray(exportConfig.include)) {
+      if (!exportConfig.include.every((item) => typeof item === 'string' && item.trim())) {
+        return { ok: false, error: 'export.include 必须只包含非空字符串' }
+      }
+      manifest.export = { include: exportConfig.include.map((item) => String(item).trim()) }
     }
   }
   return { ok: true, manifest }

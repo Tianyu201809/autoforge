@@ -21,13 +21,36 @@ export class ScriptRegistry {
     return scriptStore.getScriptById(id)
   }
 
-  importFromPath(sourcePath: string): ScriptMeta {
-    const meta = scriptWorkspace.import(sourcePath)
+  getByHubScriptId(hubScriptId: string): ScriptMeta | undefined {
+    return scriptStore.getScriptByHubScriptId(hubScriptId)
+  }
+
+  importFromPath(sourcePath: string, options?: { hubScriptId?: string }): ScriptMeta {
+    const imported = scriptWorkspace.import(sourcePath)
+    const meta = {
+      ...imported,
+      hubScriptId: options?.hubScriptId?.trim() || undefined
+    }
     try {
       return scriptStore.addScript(meta)
     } catch (err) {
       scriptWorkspace.deleteScript(meta.id, meta.workspacePath)
       throw err
+    }
+  }
+
+  updateFromHubPackage(scriptId: string, sourceDir: string): ScriptMeta {
+    const existing = scriptStore.getScriptById(scriptId)
+    if (!existing?.hubScriptId) throw new Error('Hub 脚本不存在或缺少稳定 ID')
+    try {
+      return scriptWorkspace.replaceFromDirectory(existing, sourceDir, (meta) => {
+        const updated = scriptStore.updateScript(scriptId, meta)
+        if (!updated) throw new Error('无法更新 Hub 脚本元数据')
+        return updated
+      })
+    } catch (error) {
+      scriptStore.updateScript(scriptId, existing)
+      throw error
     }
   }
 

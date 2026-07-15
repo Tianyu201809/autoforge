@@ -5,6 +5,7 @@ import {
   Archive,
   Check,
   ChevronRight,
+  Download,
   FolderOpen,
   Loader2,
   Clock,
@@ -32,6 +33,7 @@ import {
   unregisterScriptCardMenuClose
 } from '../composables/useScriptCardMenu'
 import { useToast } from '../composables/useToast'
+import { askConfirm } from '../composables/useConfirmDialog'
 
 const { pushToast } = useToast()
 
@@ -60,6 +62,7 @@ const menuOpen = ref(false)
 const categoryPickerOpen = ref(false)
 const savingCategory = ref(false)
 const renaming = ref(false)
+const exporting = ref(false)
 const menuBtnRef = ref<HTMLElement | null>(null)
 const menuDropdownRef = ref<HTMLElement | null>(null)
 const categoryPickerRef = ref<HTMLElement | null>(null)
@@ -90,6 +93,37 @@ const footerMetaCompact = computed(() => {
   if (meta.startsWith('最近运行 ')) return meta.slice(5)
   return meta
 })
+
+async function handleExport(): Promise<void> {
+  if (exporting.value) return
+  exporting.value = true
+  closeMenu()
+  try {
+    const preview = await window.autoforge.scripts.previewExport(props.script.id)
+    const confirmed = await askConfirm({
+      title: '导出脚本 ZIP',
+      message: preview.message,
+      confirmLabel: '选择保存位置',
+      cancelLabel: '取消'
+    })
+    if (!confirmed) return
+    const result = await window.autoforge.scripts.exportZip(props.script.id)
+    if (!result) return
+    pushToast({
+      type: 'success',
+      title: '导出成功',
+      message: `${result.fileName}（${result.fileCount} 个文件）`
+    })
+  } catch (error) {
+    pushToast({
+      type: 'error',
+      title: '导出失败',
+      message: error instanceof Error ? error.message : String(error)
+    })
+  } finally {
+    exporting.value = false
+  }
+}
 
 const footerShowsRunTime = computed(() => footerMetaFull.value.startsWith('最近运行 '))
 
@@ -502,6 +536,15 @@ onUnmounted(() => {
                 <button type="button" class="w-full flex items-center gap-2 px-3 py-1.5 text-[12px] sb-text-muted hover:sb-text-primary hover:sb-bg-hover text-left" @click="emit('openDir'); closeMenu()">
                   <FolderOpen class="w-3.5 h-3.5" :stroke-width="1.5" />
                   打开目录
+                </button>
+                <button
+                  type="button"
+                  class="w-full flex items-center gap-2 px-3 py-1.5 text-[12px] sb-text-muted hover:sb-text-primary hover:sb-bg-hover text-left disabled:opacity-40"
+                  :disabled="exporting"
+                  @click="handleExport"
+                >
+                  <Download class="w-3.5 h-3.5" :stroke-width="1.5" />
+                  导出 ZIP
                 </button>
                 <button
                   v-if="categoryDefinitions?.length"

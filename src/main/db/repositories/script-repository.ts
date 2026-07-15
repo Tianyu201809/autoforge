@@ -11,7 +11,7 @@ import {
 
 const SCRIPT_JOIN = `
   SELECT
-    s.id, s.name, s.description, s.workspace_path, s.category, s.category_label,
+    s.id, s.hub_script_id, s.name, s.description, s.workspace_path, s.category, s.category_label,
     s.category_color, s.icon, s.icon_color, s.icon_bg, s.icon_border, s.version,
     s.entry, s.imported_at, s.env_schema, s.param_schema, s.dependencies, s.browser,
     p.starred, p.archived, p.recent_run_at, p.schedule, p.default_env_id,
@@ -33,6 +33,13 @@ export class ScriptRepository {
     return row ? rowToScriptBase(row as Parameters<typeof rowToScriptBase>[0]) : undefined
   }
 
+  getByHubScriptId(hubScriptId: string): ScriptMeta | undefined {
+    const normalized = hubScriptId.trim()
+    if (!normalized) return undefined
+    const row = this.db.prepare(`${SCRIPT_JOIN} WHERE s.hub_script_id = ?`).get(normalized)
+    return row ? rowToScriptBase(row as Parameters<typeof rowToScriptBase>[0]) : undefined
+  }
+
   insert(meta: Omit<ScriptMeta, 'starred' | 'archived'>): void {
     const scriptRow = {
       ...scriptMetaToScriptRow(meta),
@@ -41,11 +48,11 @@ export class ScriptRepository {
     this.db
       .prepare(
         `INSERT INTO scripts (
-          id, name, description, workspace_path, category, category_label, category_color,
+          id, hub_script_id, name, description, workspace_path, category, category_label, category_color,
           icon, icon_color, icon_bg, icon_border, version, entry, imported_at, env_schema, param_schema,
           dependencies, browser
         ) VALUES (
-          @id, @name, @description, @workspace_path, @category, @category_label, @category_color,
+          @id, @hub_script_id, @name, @description, @workspace_path, @category, @category_label, @category_color,
           @icon, @icon_color, @icon_bg, @icon_border, @version, @entry, @imported_at, @env_schema, @param_schema,
           @dependencies, @browser
         )`
@@ -77,7 +84,7 @@ export class ScriptRepository {
       this.db
         .prepare(
           `UPDATE scripts SET
-            name = @name, description = @description, workspace_path = @workspace_path,
+            hub_script_id = @hub_script_id, name = @name, description = @description, workspace_path = @workspace_path,
             category = @category, category_label = @category_label, category_color = @category_color,
             icon = @icon, icon_color = @icon_color, icon_bg = @icon_bg, icon_border = @icon_border,
             version = @version, entry = @entry, imported_at = @imported_at, env_schema = @env_schema, param_schema = @param_schema,
@@ -164,11 +171,11 @@ export class ScriptRepository {
     this.db
       .prepare(
         `INSERT INTO scripts (
-          id, name, description, workspace_path, category, category_label, category_color,
+          id, hub_script_id, name, description, workspace_path, category, category_label, category_color,
           icon, icon_color, icon_bg, icon_border, version, entry, imported_at, env_schema, param_schema,
           dependencies, browser
         ) VALUES (
-          @id, @name, @description, @workspace_path, @category, @category_label, @category_color,
+          @id, @hub_script_id, @name, @description, @workspace_path, @category, @category_label, @category_color,
           @icon, @icon_color, @icon_bg, @icon_border, @version, @entry, @imported_at, @env_schema, @param_schema,
           @dependencies, @browser
         )`

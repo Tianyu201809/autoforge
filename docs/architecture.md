@@ -82,7 +82,7 @@ scriptRegistry.importFromPath()
 showMainWindow + EVENT_HUB_SCRIPT_INSTALLED → UI 选中脚本
 ```
 
-约定：须本机已运行 Autoforge；`zipUrl` 为公开 http(s)；重复安装为新副本。详见 [v1.15.0](./v1.15.0.md) 与设计规格。
+约定：须本机已运行 Autoforge；`zipUrl` 为公开 http(s)；Hub 请求必须携带稳定 `hubScriptId`。重复安装时用户可更新现有脚本或取消，更新保留本地偏好与配置。详见 [v1.15.0](./v1.15.0.md) 与最新设计规格。
 
 ## 执行生命周期
 

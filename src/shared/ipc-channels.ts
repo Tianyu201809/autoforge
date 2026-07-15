@@ -6,6 +6,10 @@ export const IPC = {
 
   SCRIPTS_IMPORT: 'scripts:import',
 
+  SCRIPTS_EXPORT_ZIP: 'scripts:export-zip',
+
+  SCRIPTS_EXPORT_PREVIEW: 'scripts:export-preview',
+
   SCRIPTS_UPDATE: 'scripts:update',
 
   SCRIPTS_DELETE: 'scripts:delete',
@@ -151,4 +155,3 @@ export const IPC = {
 
 
 export type IpcChannel = (typeof IPC)[keyof typeof IPC]
-

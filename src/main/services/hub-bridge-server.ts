@@ -10,7 +10,7 @@ const MAX_BODY_BYTES = 64 * 1024
 
 let server: http.Server | null = null
 let installing = false
-let onInstalled: ((payload: { scriptId: string; name: string }) => void) | null = null
+let onInstalled: ((payload: { scriptId: string; name: string; status: 'installed' | 'updated' }) => void) | null = null
 
 function setCors(res: http.ServerResponse): void {
   res.setHeader('Access-Control-Allow-Origin', '*')
@@ -102,8 +102,15 @@ async function handleInstall(req: http.IncomingMessage, res: http.ServerResponse
       hubScriptId: typeof input.hubScriptId === 'string' ? input.hubScriptId : undefined
     })
 
-    onInstalled?.({ scriptId: result.scriptId, name: result.name })
-    sendJson(res, 200, { ok: true, scriptId: result.scriptId, name: result.name })
+    if (result.status !== 'duplicate_cancelled') {
+      onInstalled?.({ scriptId: result.scriptId, name: result.name, status: result.status })
+    }
+    sendJson(res, 200, {
+      ok: true,
+      status: result.status,
+      scriptId: result.scriptId,
+      name: result.name
+    })
   } catch (err) {
     if (err instanceof HubInstallError) {
       sendJson(res, statusForError(err.code), {
@@ -161,7 +168,7 @@ function handleRequest(req: http.IncomingMessage, res: http.ServerResponse): voi
 }
 
 export function startHubBridgeServer(options: {
-  onInstalled: (payload: { scriptId: string; name: string }) => void
+  onInstalled: (payload: { scriptId: string; name: string; status: 'installed' | 'updated' }) => void
 }): void {
   if (server) {
     return

@@ -336,7 +336,7 @@ onMounted(() => {
     terminalDetached.value = open
   })
 
-  unsubHubInstalled = window.autoforge.onHubScriptInstalled(async ({ scriptId, name }) => {
+  unsubHubInstalled = window.autoforge.onHubScriptInstalled(async ({ scriptId, name, status }) => {
     await refresh()
     const script = scripts.value.find((s) => s.id === scriptId)
     if (script) {
@@ -346,7 +346,11 @@ onMounted(() => {
       navigateDetailTab('detail')
       detailVisible.value = true
     }
-    pushToast({ type: 'success', title: '已从 Hub 添加', message: name || '脚本已导入' })
+    pushToast({
+      type: 'success',
+      title: status === 'updated' ? 'Hub 脚本已更新' : '已从 Hub 添加',
+      message: name || (status === 'updated' ? '脚本已更新' : '脚本已导入')
+    })
   })
 })
 

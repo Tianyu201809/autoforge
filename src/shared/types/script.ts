@@ -37,6 +37,8 @@ export interface EnvironmentProfile {
 
 export interface ScriptMeta {
   id: string
+  /** Hub 分配的稳定脚本 ID；普通本地导入没有该字段 */
+  hubScriptId?: string
   name: string
   description: string
   /** 脚本包在 userData/scripts/{id} 下的目录 */
@@ -291,6 +293,19 @@ export interface ScriptWorkspaceFilesInfo {
   entryPath: string
   manifestPath: string
   files: string[]
+}
+
+export interface ScriptExportResult {
+  path: string
+  fileName: string
+  fileCount: number
+  totalBytes: number
+}
+
+export interface ScriptExportPreview {
+  fileCount: number
+  totalBytes: number
+  message: string
 }
 
 export interface ScriptFileContent {

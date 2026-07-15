@@ -99,11 +99,15 @@ export interface FloatingBallApi {
 }
 
 export interface AutoforgeApi {
-  onHubScriptInstalled: (callback: (payload: { scriptId: string; name: string }) => void) => () => void
+  onHubScriptInstalled: (
+    callback: (payload: { scriptId: string; name: string; status: 'installed' | 'updated' }) => void
+  ) => () => void
   scripts: {
     list: () => Promise<ScriptListResponse>
     get: (id: string) => Promise<ScriptItem | null>
     import: (sourcePath: string) => Promise<ScriptItem>
+    exportZip: (id: string) => Promise<import('../../shared/types/script').ScriptExportResult | null>
+    previewExport: (id: string) => Promise<import('../../shared/types/script').ScriptExportPreview>
     update: (id: string, patch: Partial<ScriptMeta>) => Promise<ScriptItem | null>
     delete: (id: string) => Promise<boolean>
     toggleStar: (id: string) => Promise<ScriptItem | null>

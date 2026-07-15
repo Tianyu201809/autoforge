@@ -23,6 +23,12 @@ import { scriptRegistry } from '../services/script-registry'
 import { scriptStore } from '../services/script-store'
 import { scriptWorkspace } from '../services/script-workspace'
 import { executionHistory } from '../services/execution-history'
+import {
+  buildScriptExportPlan,
+  describeExportPlan,
+  exportDisplayName,
+  writeScriptExportZip
+} from '../services/script-package-exporter'
 import { removeParamAttachment, stageParamAttachments } from '../services/script-param-inputs'
 import { SchedulerService } from '../services/scheduler'
 import {
@@ -81,6 +87,39 @@ export function registerIpcHandlers(getWindow: () => BrowserWindow | null): void
     const script = scriptRegistry.importFromPath(sourcePath)
     scheduler.reload(scriptRegistry.listAll())
     return enrichScriptItem(script, runner.listSessions())
+  })
+
+  ipcMain.handle(IPC.SCRIPTS_EXPORT_ZIP, async (_event, id: string) => {
+    const script = scriptRegistry.getById(id)
+    if (!script) throw new Error('脚本不存在')
+    const manifest = scriptWorkspace.readManifest(script.workspacePath)
+    const plan = buildScriptExportPlan(script, manifest)
+    const win = getWindow()
+    const saveResult = await dialog.showSaveDialog(win ?? undefined, {
+      title: '导出脚本 ZIP',
+      defaultPath: plan.defaultFileName,
+      filters: [{ name: 'ZIP 压缩包', extensions: ['zip'] }]
+    })
+    if (saveResult.canceled || !saveResult.filePath) return null
+    writeScriptExportZip(script, plan, saveResult.filePath)
+    return {
+      path: saveResult.filePath,
+      fileName: exportDisplayName(saveResult.filePath),
+      fileCount: plan.files.length,
+      totalBytes: plan.totalBytes
+    }
+  })
+
+  ipcMain.handle(IPC.SCRIPTS_EXPORT_PREVIEW, (_event, id: string) => {
+    const script = scriptRegistry.getById(id)
+    if (!script) throw new Error('脚本不存在')
+    const manifest = scriptWorkspace.readManifest(script.workspacePath)
+    const plan = buildScriptExportPlan(script, manifest)
+    return {
+      fileCount: plan.files.length,
+      totalBytes: plan.totalBytes,
+      message: `${describeExportPlan(plan)}\n\n请确认动态加载的模板或资源已在 autoforge.json 的 export.include 中声明。`
+    }
   })
 
   ipcMain.handle(IPC.SCRIPTS_UPDATE, (_event, id: string, patch: Partial<ScriptMeta>) => {

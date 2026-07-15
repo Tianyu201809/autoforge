@@ -99,6 +99,12 @@ export class ScriptStore {
     return script ? this.applyPreference(script) : undefined
   }
 
+  getScriptByHubScriptId(hubScriptId: string): ScriptMeta | undefined {
+    const repos = this.ensureInitialized()
+    const script = repos.scripts.getByHubScriptId(hubScriptId)
+    return script ? this.applyPreference(script) : undefined
+  }
+
   getEnvironments(): EnvironmentProfile[] {
     return this.ensureInitialized().environments.listAll()
   }

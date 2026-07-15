@@ -6,6 +6,7 @@ import {
   mkdirSync,
   readFileSync,
   readdirSync,
+  renameSync,
   rmSync,
   statSync,
   writeFileSync
@@ -112,6 +113,15 @@ export class ScriptWorkspace {
     return result.manifest
   }
 
+  validatePackageDirectory(scriptDir: string): ScriptManifest {
+    const manifest = this.readManifest(scriptDir)
+    const entryPath = resolveSafeWorkspaceFile(scriptDir, manifest.entry ?? 'index.mjs')
+    if (!existsSync(entryPath) || !statSync(entryPath).isFile()) {
+      throw new Error(`入口文件不存在: ${manifest.entry ?? 'index.mjs'}`)
+    }
+    return manifest
+  }
+
   /** 读取 manifest，并尝试修复常见的 autoforge / name 字段问题 */
   readManifestRelaxed(scriptDir: string): ScriptManifest {
     try {
@@ -202,7 +212,7 @@ export class ScriptWorkspace {
 
   /** 从已有目录（含 autoforge.json）导入 */
   importFromDirectory(sourceDir: string): ScriptMeta {
-    const manifest = this.readManifest(sourceDir)
+    const manifest = this.validatePackageDirectory(sourceDir)
     const scriptId = randomUUID()
     const targetDir = this.getScriptDir(scriptId)
     cpSync(sourceDir, targetDir, { recursive: true })
@@ -242,6 +252,53 @@ export class ScriptWorkspace {
       return this.importFromDirectory(sourcePath)
     }
     return this.importFromFile(sourcePath)
+  }
+
+  replaceFromDirectory(
+    script: ScriptMeta,
+    sourceDir: string,
+    persist: (meta: ScriptMeta) => ScriptMeta
+  ): ScriptMeta {
+    if (!existsSync(sourceDir) || !statSync(sourceDir).isDirectory()) {
+      throw new Error(`脚本包目录不存在: ${sourceDir}`)
+    }
+    const manifest = this.validatePackageDirectory(sourceDir)
+    const targetDir = resolve(script.workspacePath)
+    const stagingDir = `${targetDir}.incoming-${randomUUID()}`
+    const backupDir = `${targetDir}.backup-${randomUUID()}`
+    let activated = false
+    let backupCreated = false
+
+    try {
+      cpSync(sourceDir, stagingDir, { recursive: true })
+      this.validatePackageDirectory(stagingDir)
+      renameSync(targetDir, backupDir)
+      backupCreated = true
+      renameSync(stagingDir, targetDir)
+      activated = true
+
+      const meta = {
+        ...this.manifestToMeta(script.id, manifest),
+        workspacePath: targetDir,
+        hubScriptId: script.hubScriptId,
+        importedAt: script.importedAt
+      } as ScriptMeta
+      const updated = persist(meta)
+      try {
+        rmSync(backupDir, { recursive: true, force: true })
+      } catch {
+        /* 更新已持久化，备份目录留待后续人工清理 */
+      }
+      return updated
+    } catch (error) {
+      if (activated && existsSync(targetDir)) {
+        rmSync(targetDir, { recursive: true, force: true })
+      }
+      if (backupCreated && existsSync(backupDir)) renameSync(backupDir, targetDir)
+      throw error
+    } finally {
+      if (existsSync(stagingDir)) rmSync(stagingDir, { recursive: true, force: true })
+    }
   }
 
   deleteScript(scriptId: string, workspacePath?: string): void {

@@ -29,6 +29,7 @@ export function intToBool(value: number | null | undefined): boolean {
 
 export interface ScriptRow {
   id: string
+  hub_script_id: string | null
   name: string
   description: string
   workspace_path: string
@@ -95,6 +96,7 @@ export interface ExecutionRow {
 export function rowToScriptBase(row: ScriptRow): ScriptMeta {
   return {
     id: row.id,
+    hubScriptId: row.hub_script_id ?? undefined,
     name: row.name,
     description: row.description,
     workspacePath: row.workspace_path,
@@ -155,6 +157,7 @@ export function preferenceToRow(scriptId: string, pref: ScriptPreference): Scrip
 export function scriptMetaToScriptRow(meta: Omit<ScriptMeta, 'starred' | 'archived'> | ScriptMeta): Omit<ScriptRow, keyof ScriptPreferenceRow | 'starred' | 'archived' | 'recent_run_at' | 'schedule' | 'default_env_id' | 'config_by_env' | 'params_by_env' | 'saved_params'> {
   return {
     id: meta.id,
+    hub_script_id: meta.hubScriptId?.trim() || null,
     name: meta.name,
     description: meta.description,
     workspace_path: meta.workspacePath,
