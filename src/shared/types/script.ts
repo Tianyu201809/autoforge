@@ -143,6 +143,10 @@ export interface PythonStatusInfo {
 }
 
 export interface AppConfig {
+  /** AutoforgeHub 网站地址 */
+  hub?: {
+    url?: string
+  }
   browser?: {
     executablePath?: string
   }

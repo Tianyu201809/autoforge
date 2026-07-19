@@ -16,6 +16,7 @@ export class ConfigRepository {
     return {
       ...DEFAULT_CONFIG,
       ...parsed,
+      hub: { ...DEFAULT_CONFIG.hub, ...parsed.hub },
       browser: { ...DEFAULT_CONFIG.browser, ...parsed.browser },
       window: parsed.window
     }
@@ -26,6 +27,7 @@ export class ConfigRepository {
     const next: AppConfig = {
       ...current,
       ...patch,
+      hub: { ...current.hub, ...patch.hub },
       browser: { ...current.browser, ...patch.browser },
       window: { ...current.window, ...patch.window }
     }
@@ -43,6 +45,7 @@ export class ConfigRepository {
     const next: AppConfig = {
       ...merged,
       ...config,
+      hub: { ...merged.hub, ...config.hub },
       browser: { ...merged.browser, ...config.browser },
       window: { ...merged.window, ...config.window }
     }

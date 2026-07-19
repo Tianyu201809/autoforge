@@ -21,6 +21,7 @@ const emit = defineEmits<{
 }>()
 
 const browserPath = ref('')
+const autoforgeHubUrl = ref('')
 const pythonPath = ref('')
 const pipIndexUrl = ref('')
 const runTimeoutSeconds = ref(0)
@@ -73,6 +74,7 @@ watch([trayMode, floatingMode, globalShortcutEnabled, globalShortcut], () => {
 async function initializeSettings(): Promise<void> {
   if (initialized.value) return
   const config = await window.autoforge.config.get()
+  autoforgeHubUrl.value = config.hub?.url ?? ''
   browserPath.value = config.browser?.executablePath ?? ''
   pythonPath.value = config.python?.executablePath ?? ''
   pipIndexUrl.value = config.python?.pipIndexUrl ?? ''
@@ -128,6 +130,9 @@ async function save(): Promise<void> {
   saved.value = false
   try {
     await window.autoforge.config.set({
+      hub: {
+        url: autoforgeHubUrl.value.trim() || undefined
+      },
       browser: { executablePath: browserPath.value || undefined },
       python: {
         executablePath: pythonPath.value || undefined,
@@ -403,6 +408,22 @@ async function removeGlobalPythonDep(name: string): Promise<void> {
             <p class="text-[11px] sb-text-faint mt-0.5">本机自动化脚本锻造与管理桌面应用</p>
           </div>
           <span class="text-[13px] font-mono sb-text-primary shrink-0">v{{ appVersion }}</span>
+        </div>
+      </section>
+
+      <!-- AutoforgeHub -->
+      <section class="space-y-3">
+        <h2 class="text-[13px] font-medium sb-text-secondary">AutoforgeHub</h2>
+        <p class="text-[11px] sb-text-faint">配置后可从侧边栏直接进入 AutoforgeHub。</p>
+        <div>
+          <label class="text-[12px] sb-text-muted">AutoforgeHub 地址</label>
+          <input
+            v-model="autoforgeHubUrl"
+            type="url"
+            placeholder="如 https://hub.example.com"
+            class="mt-1 w-full h-9 px-3 rounded-lg sb-input border text-[13px] font-mono outline-none"
+          />
+          <p class="mt-1 text-[11px] sb-text-faint">支持 http:// 和 https:// 地址。</p>
         </div>
       </section>
 

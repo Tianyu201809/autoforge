@@ -60,12 +60,25 @@ function onKeydown(e: KeyboardEvent): void {
   }
 }
 
-function openScriptMarket(): void {
-  pushToast({
-    type: 'info',
-    title: '脚本市场',
-    message: '建设中，敬请期待'
-  })
+async function openAutoforgeHub(): Promise<void> {
+  try {
+    const config = await window.autoforge.config.get()
+    const url = config.hub?.url?.trim()
+    if (!url) {
+      pushToast({ type: 'info', title: 'AutoforgeHub', message: 'AutoforgeHub地址未设置' })
+      return
+    }
+    const opened = await window.autoforge.system.openExternal(url)
+    if (!opened) {
+      pushToast({ type: 'error', title: '打开失败', message: 'AutoforgeHub地址无效' })
+    }
+  } catch (err) {
+    pushToast({
+      type: 'error',
+      title: '打开失败',
+      message: err instanceof Error ? err.message : '无法打开AutoforgeHub'
+    })
+  }
 }
 
 const sidebarWidth = ref(MAIN_SIDEBAR_DEFAULT_WIDTH)
@@ -228,11 +241,10 @@ onUnmounted(() => {
       <button
         type="button"
         class="w-full flex items-center gap-2.5 px-2 py-1.5 rounded-md sb-text-muted hover:sb-text-secondary sb-bg-hover text-[13px] transition-colors"
-        @click="openScriptMarket"
+        @click="openAutoforgeHub"
       >
         <Store class="w-4 h-4" :stroke-width="1.5" />
-        <span>脚本市场</span>
-        <span class="ml-auto text-[10px] sb-text-faint sb-bg-inset px-1.5 py-0.5 rounded border sb-border-subtle">Soon</span>
+        <span>进入AutoforgeHub</span>
       </button>
       <button
         type="button"
