@@ -101,8 +101,8 @@ export class PipelineStore {
     if (!current) throw new Error('流水线不存在')
     const configByEnv = { ...(current.configByEnv ?? {}) }
     const paramsByEnv = { ...(current.paramsByEnv ?? {}) }
-    if (values.config) configByEnv[envId] = { ...(configByEnv[envId] ?? {}), ...values.config }
-    if (values.params) paramsByEnv[envId] = { ...(paramsByEnv[envId] ?? {}), ...values.params }
+    if (values.config) configByEnv[envId] = { ...values.config }
+    if (values.params) paramsByEnv[envId] = { ...values.params }
     return this.repositories.pipelines.update(id, { configByEnv, paramsByEnv })!
   }
 
