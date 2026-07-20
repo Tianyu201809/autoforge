@@ -5,7 +5,8 @@ import type {
   PipelineMeta,
   PipelineNode,
   PipelineNodeSession,
-  PipelineSession
+  PipelineSession,
+  ScriptMeta
 } from '../../shared/types/script'
 import { pipelineStore } from './pipeline-store'
 import { scriptRegistry } from './script-registry'
@@ -112,10 +113,7 @@ export class PipelineRunnerService {
         session.nodes.push(nodeSession)
         this.broadcast(session)
 
-        const params = {
-          ...(node.paramValues ?? {}),
-          ...this.resolveNodeValues(pipeline, node, script.paramSchema.map((field) => field.key), runtimeParams, 'params', session.envId)
-        }
+        const params = this.resolveNodeParams(pipeline, node, script, runtimeParams, session.envId)
         const env = this.resolveNodeValues(pipeline, node, script.envSchema.map((field) => field.key), runtimeParams, 'env', session.envId)
         const mappedParams = this.applyMappings(node, previousResult, runtimeParams, params)
         const childPromise = this.scriptRunner.startAndWait(script.id, session.envId, mappedParams, previousResult, env)
@@ -174,6 +172,21 @@ export class PipelineRunnerService {
       if (value !== undefined) values[key] = value
     }
     return values
+  }
+
+  private resolveNodeParams(
+    pipeline: PipelineMeta,
+    node: PipelineNode,
+    script: ScriptMeta,
+    runtimeParams: Record<string, string>,
+    envId?: string
+  ): Record<string, string> {
+    const inheritedEnvId = script.defaultEnvId ?? envId
+    return {
+      ...scriptStore.resolveParamsForScript(script, inheritedEnvId),
+      ...(node.paramValues ?? {}),
+      ...this.resolveNodeValues(pipeline, node, script.paramSchema.map((field) => field.key), runtimeParams, 'params', envId)
+    }
   }
 
   private applyMappings(

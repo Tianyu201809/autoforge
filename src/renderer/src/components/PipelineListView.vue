@@ -81,7 +81,7 @@ onBeforeUnmount(() => listTween?.kill())
 
 <template>
   <div class="pipeline-list-view flex h-full min-h-0 w-full flex-1 flex-col">
-    <header class="pipeline-list-header flex items-center gap-4 border-b sb-border-subtle px-6 py-5">
+    <header class="pipeline-list-header flex items-center gap-4 border-b sb-border-subtle px-6 py-5" style="-webkit-app-region: drag">
       <div class="pipeline-list-title flex items-center gap-3">
         <span class="pipeline-list-icon"><Workflow class="h-5 w-5" /></span>
         <div>
@@ -89,7 +89,7 @@ onBeforeUnmount(() => listTween?.kill())
           <p class="mt-1 text-[11px] sb-text-faint">编排脚本，逐步传递执行结果</p>
         </div>
       </div>
-      <div class="ml-auto flex items-center gap-2">
+      <div class="ml-auto flex items-center gap-2" style="-webkit-app-region: no-drag">
         <label class="pipeline-search-field"><Search class="h-3.5 w-3.5" /><input ref="searchInputRef" v-model="query" placeholder="搜索流水线" /></label>
         <button class="h-9 rounded-lg sb-btn-accent px-3.5 text-[12px] font-medium" @click="emit('create')"><Plus class="mr-1.5 inline h-3.5 w-3.5" />新建流水线</button>
         <button class="pipeline-workspace-exit" title="返回主应用" @click="emit('close')"><ArrowLeft class="h-3.5 w-3.5" />返回主应用</button>

@@ -1,15 +1,16 @@
 <script setup lang="ts">
 import { computed, nextTick, onMounted, onUnmounted, ref, watch } from 'vue'
-import { ArrowDown, ArrowLeft, ArrowUp, Check, PanelLeftClose, PanelLeftOpen, PanelRightClose, PanelRightOpen, Play, Plus, Save, Trash2, Workflow, X } from 'lucide-vue-next'
+import { ArrowDown, ArrowLeft, ArrowUp, Check, ChevronLeft, ChevronRight, Play, Plus, Save, Trash2, Workflow, X } from 'lucide-vue-next'
 import { gsap } from 'gsap'
 import type { EnvironmentProfile, PipelineMeta, PipelineNode, PipelineSession, ScriptMeta } from '../../../shared/types/script'
 import { askConfirm } from '../composables/useConfirmDialog'
+import { resolveScriptIcon } from '../lib/script-icon-map'
 
 const props = defineProps<{ open: boolean; scripts: ScriptMeta[]; pipeline: PipelineMeta | null; initialSession?: PipelineSession | null }>()
 const emit = defineEmits<{ close: []; back: []; saved: [pipeline: PipelineMeta]; deleted: [] }>()
 
 const selectedNodeId = ref<string | null>(null)
-const draft = ref<PipelineMeta | null>(props.pipeline ? structuredClone(props.pipeline) : null)
+const draft = ref<PipelineMeta | null>(props.pipeline ? cloneForIpc(props.pipeline) : null)
 const lastSavedSnapshot = ref('')
 const runtimeValues = ref<Record<string, string>>({})
 const runtimeConfig = ref<Record<string, string>>({})
@@ -24,6 +25,9 @@ const nameInputRef = ref<HTMLInputElement | null>(null)
 const canvasSize = ref({ width: 1200, height: 700 })
 const leftSidebarRef = ref<HTMLElement | null>(null)
 const rightSidebarRef = ref<HTMLElement | null>(null)
+const leftSidebarWidth = ref(250)
+const rightSidebarWidth = ref(330)
+const resizingPanel = ref<'left' | 'right' | null>(null)
 const isPanning = ref(false)
 const panStartX = ref(0)
 const panStartOffsetX = ref(0)
@@ -48,6 +52,13 @@ const panStartOffsetY = ref(0)
 const fieldRefs = new Map<string, HTMLElement>()
 const connectionPaths = ref<{ id: string; d: string; status: string }[]>([])
 
+const PIPELINE_LEFT_WIDTH_KEY = 'autoforge-pipeline-left-width'
+const PIPELINE_RIGHT_WIDTH_KEY = 'autoforge-pipeline-right-width'
+const PIPELINE_LEFT_MIN_WIDTH = 210
+const PIPELINE_LEFT_MAX_WIDTH = 380
+const PIPELINE_RIGHT_MIN_WIDTH = 280
+const PIPELINE_RIGHT_MAX_WIDTH = 460
+
 const canvasTrackStyle = computed(() => ({
   zoom: canvasScale.value,
   minWidth: `${Math.max(900, Math.ceil(canvasSize.value.width / canvasScale.value + 240))}px`,
@@ -65,6 +76,64 @@ const filteredScripts = computed(() => {
 })
 
 const selectedNode = computed(() => draft.value?.nodes.find((node) => node.id === selectedNodeId.value) ?? null)
+const leftSidebarStyle = computed(() => ({
+  width: `${leftCollapsed.value ? 48 : leftSidebarWidth.value}px`,
+  flexBasis: `${leftCollapsed.value ? 48 : leftSidebarWidth.value}px`
+}))
+const rightSidebarStyle = computed(() => ({
+  width: `${rightCollapsed.value ? 48 : rightSidebarWidth.value}px`,
+  flexBasis: `${rightCollapsed.value ? 48 : rightSidebarWidth.value}px`
+}))
+
+function clampPipelinePanelWidth(side: 'left' | 'right', width: number): number {
+  return side === 'left'
+    ? Math.min(PIPELINE_LEFT_MAX_WIDTH, Math.max(PIPELINE_LEFT_MIN_WIDTH, width))
+    : Math.min(PIPELINE_RIGHT_MAX_WIDTH, Math.max(PIPELINE_RIGHT_MIN_WIDTH, width))
+}
+
+function loadPipelinePanelWidths(): void {
+  const storedLeft = Number(localStorage.getItem(PIPELINE_LEFT_WIDTH_KEY))
+  const storedRight = Number(localStorage.getItem(PIPELINE_RIGHT_WIDTH_KEY))
+  leftSidebarWidth.value = clampPipelinePanelWidth('left', Number.isFinite(storedLeft) && storedLeft > 0 ? storedLeft : 250)
+  rightSidebarWidth.value = clampPipelinePanelWidth('right', Number.isFinite(storedRight) && storedRight > 0 ? storedRight : 330)
+}
+
+function onPipelinePanelResizeStart(side: 'left' | 'right', event: MouseEvent): void {
+  event.preventDefault()
+  resizingPanel.value = side
+  const startX = event.clientX
+  const startWidth = side === 'left' ? leftSidebarWidth.value : rightSidebarWidth.value
+
+  const onMove = (moveEvent: MouseEvent): void => {
+    const delta = moveEvent.clientX - startX
+    const nextWidth = side === 'left' ? startWidth + delta : startWidth - delta
+    if (side === 'left') leftSidebarWidth.value = clampPipelinePanelWidth(side, nextWidth)
+    else rightSidebarWidth.value = clampPipelinePanelWidth(side, nextWidth)
+    void nextTick(measureConnections)
+  }
+
+  const onUp = (): void => {
+    resizingPanel.value = null
+    localStorage.setItem(side === 'left' ? PIPELINE_LEFT_WIDTH_KEY : PIPELINE_RIGHT_WIDTH_KEY, String(side === 'left' ? leftSidebarWidth.value : rightSidebarWidth.value))
+    document.removeEventListener('mousemove', onMove)
+    document.removeEventListener('mouseup', onUp)
+    document.body.style.cursor = ''
+    document.body.style.userSelect = ''
+  }
+
+  document.body.style.cursor = 'col-resize'
+  document.body.style.userSelect = 'none'
+  document.addEventListener('mousemove', onMove)
+  document.addEventListener('mouseup', onUp)
+}
+
+function resetPipelinePanelWidth(side: 'left' | 'right'): void {
+  const width = side === 'left' ? 250 : 330
+  if (side === 'left') leftSidebarWidth.value = width
+  else rightSidebarWidth.value = width
+  localStorage.setItem(side === 'left' ? PIPELINE_LEFT_WIDTH_KEY : PIPELINE_RIGHT_WIDTH_KEY, String(width))
+  void nextTick(measureConnections)
+}
 
 function blankDraft(): PipelineMeta {
   return {
@@ -86,7 +155,7 @@ function resetDraft(pipeline: PipelineMeta | null): void {
   canvasScale.value = 1
   panOffsetX.value = 0
   panOffsetY.value = 0
-  draft.value = pipeline ? structuredClone(pipeline) : blankDraft()
+  draft.value = pipeline ? cloneForIpc(pipeline) : blankDraft()
   lastSavedSnapshot.value = JSON.stringify(draft.value)
   runtimeValues.value = {}
   runtimeConfig.value = {}
@@ -474,7 +543,7 @@ async function save(): Promise<void> {
     const saved = draft.value.id
       ? await window.autoforge.pipelines.update(draft.value.id, payload)
       : await window.autoforge.pipelines.create(payload)
-    draft.value = structuredClone(saved)
+    draft.value = cloneForIpc(saved)
     lastSavedSnapshot.value = JSON.stringify(draft.value)
     emit('saved', saved)
   } catch (err) {
@@ -557,6 +626,7 @@ watch(rightCollapsed, () => {
   })
 })
 onMounted(() => {
+  loadPipelinePanelWidths()
   if (props.open) {
     resetDraft(props.pipeline)
     void loadEnvironment()
@@ -579,6 +649,8 @@ onMounted(() => {
 })
 onUnmounted(() => {
   cancelConnection()
+  document.body.style.cursor = ''
+  document.body.style.userSelect = ''
   gsap.killTweensOf([canvasRef.value, leftSidebarRef.value, rightSidebarRef.value])
   offSession?.()
   offResize?.()
@@ -587,7 +659,7 @@ onUnmounted(() => {
 
 <template>
   <div v-if="open" class="pipeline-editor-view flex h-full min-h-0 w-full min-w-0 max-w-full flex-col overflow-hidden">
-      <header class="h-14 px-5 border-b sb-border-subtle flex items-center gap-3 shrink-0">
+      <header class="h-14 px-5 border-b sb-border-subtle flex items-center gap-3 shrink-0" style="-webkit-app-region: drag">
         <Workflow class="w-5 h-5 text-[var(--sb-accent-solid)]" />
         <button class="workflow-back-button" title="返回流水线列表" @click="attemptLeave('back')"><ArrowLeft class="w-4 h-4" />列表</button>
         <div class="min-w-0 flex-1">
@@ -599,14 +671,15 @@ onUnmounted(() => {
         <button class="sb-icon-btn" title="关闭" @click="attemptLeave('close')"><X class="w-4 h-4" /></button>
       </header>
       <div class="flex min-h-0 min-w-0 flex-1">
-        <aside ref="leftSidebarRef" class="workflow-sidebar border-r sb-border-subtle p-4 flex flex-col gap-3 min-h-0 bg-[color-mix(in_srgb,var(--sb-bg-panel)_92%,transparent)]" :class="leftCollapsed && 'is-collapsed'">
-          <button class="workflow-collapse-button" :title="leftCollapsed ? '展开左侧栏' : '收起左侧栏'" @click="leftCollapsed = !leftCollapsed"><PanelLeftOpen v-if="leftCollapsed" class="w-4 h-4" /><PanelLeftClose v-else class="w-4 h-4" /></button>
+        <aside ref="leftSidebarRef" class="workflow-sidebar border-r sb-border-subtle p-4 flex flex-col gap-3 min-h-0 bg-[color-mix(in_srgb,var(--sb-bg-panel)_92%,transparent)]" :class="[leftCollapsed && 'is-collapsed', resizingPanel === 'left' && 'is-resizing']" :style="leftSidebarStyle">
+          <div v-if="!leftCollapsed" class="resize-handle-col resize-handle-col--edge-right workflow-panel-resize-handle" :class="resizingPanel === 'left' && 'is-active'" title="拖拽调整宽度，双击恢复默认" @mousedown="onPipelinePanelResizeStart('left', $event)" @dblclick="resetPipelinePanelWidth('left')" />
+          <button class="workflow-collapse-button" :title="leftCollapsed ? '展开左侧栏' : '收起左侧栏'" @click="leftCollapsed = !leftCollapsed"><ChevronRight v-if="leftCollapsed" class="w-4 h-4" /><ChevronLeft v-else class="w-4 h-4" /></button>
           <div class="workflow-library">
             <div class="workflow-pane-heading"><span>节点库</span><span class="workflow-pane-count">{{ filteredScripts.length }}</span></div>
             <input v-model="search" class="sb-input workflow-library-search" placeholder="搜索脚本" />
             <div class="workflow-library-list">
               <button v-for="script in filteredScripts" :key="script.id" draggable="true" class="workflow-library-item" @click="addNode(script.id)" @dragstart="onScriptDragStart($event, script.id)">
-                <span class="workflow-library-icon"><Workflow class="w-3.5 h-3.5" /></span><span class="truncate">{{ script.name }}</span><Plus class="w-3.5 h-3.5 ml-auto" />
+                <span class="workflow-library-icon" :class="[script.iconBg, script.iconBorder]"><component :is="resolveScriptIcon(script.icon)" class="w-3.5 h-3.5" :class="script.iconColor" :stroke-width="1.5" /></span><span class="truncate">{{ script.name }}</span><Plus class="w-3.5 h-3.5 ml-auto" />
               </button>
               <span v-if="!filteredScripts.length" class="workflow-library-empty">没有匹配脚本</span>
             </div>
@@ -762,8 +835,9 @@ onUnmounted(() => {
           <div v-if="false && session" class="rounded-xl border sb-border-subtle p-4"><div class="flex items-center justify-between mb-3"><h3 class="text-[12px] font-semibold sb-text-primary">运行状态</h3><span class="text-[11px]">{{ session.status }}</span></div><div class="space-y-1.5"><div v-for="node in session.nodes" :key="node.nodeId" class="flex items-center gap-2 text-[11px] sb-text-muted"><Check v-if="node.status === 'success'" class="w-3.5 h-3.5 text-emerald-400" /><span v-else class="w-3.5 h-3.5 rounded-full border sb-border-subtle"></span>{{ draft.nodes.find((item) => item.id === node.nodeId)?.name }}</div></div></div>
           <footer class="pipeline-editor-footer flex items-center justify-end gap-2"><button class="h-8 px-3 rounded-lg sb-btn-ghost text-[12px]" @click="attemptLeave('close')">关闭</button><button class="h-8 px-3 rounded-lg sb-btn-ghost text-[12px] flex items-center gap-1.5" :disabled="saving" @click="save"><Save class="w-3.5 h-3.5" />{{ saving ? '保存中' : '保存' }}</button><button v-if="session?.status === 'running'" class="h-8 px-3 rounded-lg bg-rose-500/10 text-rose-400 text-[12px]" @click="stop">停止</button><button v-else class="h-8 px-3 rounded-lg sb-btn-accent text-[12px] flex items-center gap-1.5" @click="run"><Play class="w-3.5 h-3.5" />运行流水线</button></footer>
         </main>
-        <aside v-if="draft" ref="rightSidebarRef" class="workflow-inspector" :class="rightCollapsed && 'is-collapsed'">
-          <button class="workflow-collapse-button workflow-collapse-button--right" :title="rightCollapsed ? '展开右侧栏' : '收起右侧栏'" @click="rightCollapsed = !rightCollapsed"><PanelRightOpen v-if="rightCollapsed" class="w-4 h-4" /><PanelRightClose v-else class="w-4 h-4" /></button>
+        <aside v-if="draft" ref="rightSidebarRef" class="workflow-inspector" :class="[rightCollapsed && 'is-collapsed', resizingPanel === 'right' && 'is-resizing']" :style="rightSidebarStyle">
+          <div v-if="!rightCollapsed" class="resize-handle-col resize-handle-col--edge-left workflow-panel-resize-handle" :class="resizingPanel === 'right' && 'is-active'" title="拖拽调整宽度，双击恢复默认" @mousedown="onPipelinePanelResizeStart('right', $event)" @dblclick="resetPipelinePanelWidth('right')" />
+          <button class="workflow-collapse-button workflow-collapse-button--right" :title="rightCollapsed ? '展开右侧栏' : '收起右侧栏'" @click="rightCollapsed = !rightCollapsed"><ChevronLeft v-if="rightCollapsed" class="w-4 h-4" /><ChevronRight v-else class="w-4 h-4" /></button>
           <div v-if="!rightCollapsed" class="workflow-inspector-head"><div><span class="workflow-eyebrow">Inspector</span><h3>节点属性</h3></div><button v-if="selectedNode" class="sb-icon-btn text-rose-400" title="删除节点" @click="removeNode(draft.nodes.findIndex((node) => node.id === selectedNode.id))"><Trash2 class="w-4 h-4" /></button></div>
           <div v-if="!rightCollapsed && selectedNode" class="workflow-inspector-body">
             <div class="workflow-inspector-node"><span class="pipeline-node-index">{{ selectedNode.order + 1 }}</span><div><strong>{{ selectedNode.name }}</strong><small>{{ scriptFor(selectedNode)?.name }}</small></div></div>
@@ -821,10 +895,13 @@ onUnmounted(() => {
 .workflow-back-button { display: inline-flex; height: 30px; align-items: center; gap: 6px; padding: 0 9px; border: 1px solid var(--sb-border); border-radius: 8px; color: var(--sb-text-muted); font-size: 11px; transition: 160ms ease; }
 .workflow-back-button:hover { border-color: color-mix(in srgb, var(--sb-accent-solid) 55%, var(--sb-border)); color: var(--sb-text-primary); background: color-mix(in srgb, var(--sb-accent-solid) 8%, transparent); }
 .workflow-sidebar { position: relative; width: 250px; flex: 0 0 250px; transition: width 200ms ease, flex-basis 200ms ease, padding 200ms ease; }
+.workflow-sidebar.is-resizing, .workflow-inspector.is-resizing { transition: none; }
 .workflow-sidebar.is-collapsed { width: 48px; flex-basis: 48px; padding: 10px 8px; }
 .workflow-sidebar.is-collapsed > :not(.workflow-collapse-button) { display: none; }
-.workflow-collapse-button { display: grid; width: 28px; height: 28px; place-items: center; margin-left: auto; border: 1px solid var(--sb-border); border-radius: 8px; color: var(--sb-text-muted); transition: 160ms ease; }
-.workflow-collapse-button:hover { color: var(--sb-accent-solid); border-color: color-mix(in srgb, var(--sb-accent-solid) 55%, var(--sb-border)); background: color-mix(in srgb, var(--sb-accent-solid) 8%, transparent); }
+.workflow-collapse-button { position: relative; z-index: 2; display: grid; width: 28px; height: 28px; place-items: center; margin-left: auto; border: 1px solid color-mix(in srgb, var(--sb-border) 80%, transparent); border-radius: 999px; color: var(--sb-text-muted); background: color-mix(in srgb, var(--sb-bg-panel) 92%, transparent); box-shadow: 0 4px 12px color-mix(in srgb, #000 8%, transparent); transition: 160ms ease; }
+.workflow-collapse-button:hover { color: var(--sb-accent-solid); border-color: color-mix(in srgb, var(--sb-accent-solid) 55%, var(--sb-border)); background: color-mix(in srgb, var(--sb-accent-solid) 8%, var(--sb-bg-panel)); transform: scale(1.05); }
+.workflow-panel-resize-handle { z-index: 3; }
+.pipeline-editor-view > header button { -webkit-app-region: no-drag; }
 .workflow-top-action { display: inline-flex; align-items: center; gap: 6px; height: 30px; padding: 0 12px; border: 1px solid var(--sb-border); border-radius: 8px; color: var(--sb-text-secondary); font-size: 11px; transition: 160ms ease; }
 .workflow-top-action:hover { border-color: color-mix(in srgb, var(--sb-accent-solid) 60%, var(--sb-border)); color: var(--sb-text-primary); }
 .workflow-top-action.is-primary { border-color: transparent; color: white; background: var(--sb-accent-solid); box-shadow: 0 8px 18px color-mix(in srgb, var(--sb-accent-solid) 24%, transparent); }
@@ -833,12 +910,12 @@ onUnmounted(() => {
 .workflow-pane-count { min-width: 19px; padding: 2px 6px; border-radius: 99px; color: var(--sb-accent-solid); font-size: 9px; text-align: center; background: color-mix(in srgb, var(--sb-accent-solid) 12%, transparent); }
 .workflow-library { display: flex; min-height: 0; flex: 1; flex-direction: column; padding-top: 14px; border-top: 1px solid var(--sb-border-subtle); }
 .workflow-library-search { width: 100%; height: 30px; margin-bottom: 8px; padding: 0 9px; font-size: 11px; }
-.workflow-library-list { display: grid; min-height: 0; flex: 1; gap: 4px; overflow-y: auto; }
-.workflow-library-item { display: flex; align-items: center; gap: 7px; min-height: 34px; padding: 5px 7px; border: 1px solid transparent; border-radius: 8px; color: var(--sb-text-secondary); font-size: 10px; text-align: left; transition: 150ms ease; }
+.workflow-library-list { display: grid; align-content: start; grid-auto-rows: minmax(34px, max-content); min-height: 0; flex: 1; gap: 4px; overflow-y: auto; }
+.workflow-library-item { display: flex; align-items: center; width: 100%; min-height: 34px; padding: 5px 7px; border: 1px solid transparent; border-radius: 8px; color: var(--sb-text-secondary); font-size: 10px; text-align: left; transition: 150ms ease; }
 .workflow-library-item:hover { border-color: color-mix(in srgb, var(--sb-accent-solid) 40%, var(--sb-border)); color: var(--sb-text-primary); background: color-mix(in srgb, var(--sb-accent-solid) 8%, transparent); }
-.workflow-library-icon { display: grid; width: 23px; height: 23px; flex: 0 0 23px; place-items: center; border-radius: 7px; color: var(--sb-accent-solid); background: color-mix(in srgb, var(--sb-accent-solid) 12%, transparent); }
+.workflow-library-icon { display: grid; width: 23px; height: 23px; flex: 0 0 23px; place-items: center; overflow: hidden; border-radius: 7px; }
 .workflow-library-empty { padding: 16px 4px; color: var(--sb-text-faint); font-size: 10px; }
-.workflow-inspector { display: flex; width: 330px; flex: 0 0 330px; flex-direction: column; min-height: 0; border-left: 1px solid var(--sb-border-subtle); background: color-mix(in srgb, var(--sb-bg-panel) 94%, transparent); }
+.workflow-inspector { position: relative; display: flex; width: 330px; flex: 0 0 330px; flex-direction: column; min-height: 0; border-left: 1px solid var(--sb-border-subtle); background: color-mix(in srgb, var(--sb-bg-panel) 94%, transparent); transition: width 200ms ease, flex-basis 200ms ease; }
 .workflow-inspector.is-collapsed { width: 48px; flex-basis: 48px; align-items: center; padding-top: 10px; }
 .workflow-collapse-button--right { margin-left: 0; }
 .workflow-inspector-head { display: flex; align-items: flex-start; justify-content: space-between; padding: 20px 18px 15px; border-bottom: 1px solid var(--sb-border-subtle); }

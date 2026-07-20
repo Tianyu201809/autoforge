@@ -263,6 +263,7 @@ onUnmounted(() => {
       >
         <Workflow class="w-4 h-4" :stroke-width="1.5" />
         <span>流水线</span>
+        <span class="sidebar-beta-badge">Beta</span>
       </button>
       <button
         type="button"
