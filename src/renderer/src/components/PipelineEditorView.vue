@@ -35,6 +35,14 @@ const leftCollapsed = ref(false)
 const rightCollapsed = ref(false)
 const runtimeDrawerOpen = ref(false)
 const dragSource = ref<{ source: 'previous-result' | 'pipeline-input'; sourcePath?: string } | null>(null)
+interface ConnectionDraft {
+  sourceNodeId: string
+  pointerX: number
+  pointerY: number
+}
+
+const connectionDraft = ref<ConnectionDraft | null>(null)
+const connectionPreviewPath = ref('')
 const panStartY = ref(0)
 const panStartOffsetY = ref(0)
 const fieldRefs = new Map<string, HTMLElement>()
@@ -74,6 +82,10 @@ function blankDraft(): PipelineMeta {
 }
 
 function resetDraft(pipeline: PipelineMeta | null): void {
+  cancelConnection()
+  canvasScale.value = 1
+  panOffsetX.value = 0
+  panOffsetY.value = 0
   draft.value = pipeline ? structuredClone(pipeline) : blankDraft()
   lastSavedSnapshot.value = JSON.stringify(draft.value)
   runtimeValues.value = {}
@@ -81,6 +93,7 @@ function resetDraft(pipeline: PipelineMeta | null): void {
   session.value = props.initialSession ?? null
   error.value = ''
   selectedNodeId.value = draft.value.nodes[0]?.id ?? null
+  void nextTick(() => centerCanvasView('auto', 'start'))
 }
 
 const isDirty = computed(() => Boolean(draft.value && JSON.stringify(draft.value) !== lastSavedSnapshot.value))
@@ -103,6 +116,7 @@ async function attemptLeave(target: 'back' | 'close'): Promise<void> {
   }
   if (target === 'back') emit('back')
   else emit('close')
+  cancelConnection()
 }
 
 function addNode(scriptId: string): void {
@@ -119,7 +133,7 @@ function addNode(scriptId: string): void {
   draft.value.nodes.push(node)
   selectedNodeId.value = node.id
   void nextTick(() => {
-    scrollCanvasToEnd()
+    revealNodeInCanvas(node.id)
     animateNodeIn(node.id)
   })
 }
@@ -135,10 +149,17 @@ function animateNodeIn(nodeId: string): void {
   gsap.fromTo(element, { opacity: 0, y: 18, scale: 0.96 }, { opacity: 1, y: 0, scale: 1, duration: 0.38, ease: 'back.out(1.4)', clearProps: 'transform' })
 }
 
-function scrollCanvasToEnd(): void {
+function revealNodeInCanvas(nodeId: string): void {
   const canvas = canvasRef.value
-  if (!canvas) return
-  canvas.scrollTo({ left: canvas.scrollWidth, top: Math.max(0, (canvas.scrollHeight - canvas.clientHeight) / 2), behavior: 'smooth' })
+  const element = nodeElement(nodeId)
+  if (!canvas || !element) return
+  const canvasRect = canvas.getBoundingClientRect()
+  const nodeRect = element.getBoundingClientRect()
+  canvas.scrollTo({
+    left: Math.max(0, canvas.scrollLeft + nodeRect.left - canvasRect.left - (canvas.clientWidth - nodeRect.width) / 2),
+    top: Math.max(0, canvas.scrollTop + nodeRect.top - canvasRect.top - (canvas.clientHeight - nodeRect.height) / 2),
+    behavior: 'smooth'
+  })
 }
 
 function centerCanvasView(behavior: 'auto' | 'smooth' = 'smooth', align: 'start' | 'center' = 'center'): void {
@@ -157,7 +178,7 @@ function onCanvasWheel(event: WheelEvent): void {
   if (event.ctrlKey) {
     event.preventDefault()
     const delta = event.deltaY < 0 ? 0.1 : -0.1
-    canvasScale.value = Math.min(3.5, Math.max(0.2, Number((canvasScale.value + delta).toFixed(2))))
+    canvasScale.value = Math.min(1.5, Math.max(0.5, Number((canvasScale.value + delta).toFixed(2))))
     return
   }
   if (Math.abs(event.deltaY) > Math.abs(event.deltaX)) event.preventDefault()
@@ -165,7 +186,7 @@ function onCanvasWheel(event: WheelEvent): void {
 }
 
 function setCanvasScale(delta: number): void {
-  canvasScale.value = Math.min(3.5, Math.max(0.2, Number((canvasScale.value + delta).toFixed(2))))
+  canvasScale.value = Math.min(1.5, Math.max(0.5, Number((canvasScale.value + delta).toFixed(2))))
 }
 
 function resetCanvasView(): void {
@@ -177,7 +198,7 @@ function resetCanvasView(): void {
 
 function fitCanvasView(): void {
   if (!draft.value) return
-  canvasScale.value = Math.min(1.08, Math.max(0.72, Number((1.08 - Math.max(0, draft.value.nodes.length - 3) * 0.04).toFixed(2))))
+  canvasScale.value = Math.min(1.08, Math.max(0.5, Number((1.08 - Math.max(0, draft.value.nodes.length - 3) * 0.04).toFixed(2))))
   panOffsetX.value = 0
   panOffsetY.value = 0
   void nextTick(() => {
@@ -187,6 +208,10 @@ function fitCanvasView(): void {
 }
 
 function onCanvasKeydown(event: KeyboardEvent): void {
+  if (event.key === 'Escape') {
+    cancelConnection()
+    return
+  }
   if (!['ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown'].includes(event.key)) return
   event.preventDefault()
   canvasRef.value?.scrollBy({
@@ -209,7 +234,9 @@ function onScriptDragStart(event: DragEvent, scriptId: string): void {
 }
 
 function onCanvasPointerDown(event: PointerEvent): void {
-  if ((event.target as HTMLElement).closest('button, input, select, textarea')) return
+  const target = event.target as HTMLElement
+  if (target.closest('button, input, select, textarea, .pipeline-node-card, .pipeline-field-links, .pipeline-mapping-row')) return
+  if (connectionDraft.value) cancelConnection()
   if (event.button !== 0 && event.button !== 2) return
   event.preventDefault()
   const canvas = canvasRef.value
@@ -223,6 +250,7 @@ function onCanvasPointerDown(event: PointerEvent): void {
 }
 
 function onCanvasPointerMove(event: PointerEvent): void {
+  updateConnectionPreview(event)
   if (!isPanning.value || !canvasRef.value) return
   panOffsetX.value = panStartOffsetX.value + event.clientX - panStartX.value
   panOffsetY.value = panStartOffsetY.value + event.clientY - panStartY.value
@@ -235,6 +263,7 @@ function onCanvasPointerUp(event: PointerEvent): void {
 }
 
 async function removeNode(index: number): Promise<void> {
+  cancelConnection()
   const node = draft.value?.nodes[index]
   const element = node ? nodeElement(node.id) : undefined
   if (element && !window.matchMedia('(prefers-reduced-motion: reduce)').matches) {
@@ -249,6 +278,7 @@ async function removeNode(index: number): Promise<void> {
 
 function moveNode(index: number, offset: number): void {
   if (!draft.value) return
+  cancelConnection()
   const next = index + offset
   if (next < 0 || next >= draft.value.nodes.length) return
   const [node] = draft.value.nodes.splice(index, 1)
@@ -307,6 +337,7 @@ function onFixedParamInput(event: Event, node: PipelineNode, key: string): void 
 
 function removeMapping(node: PipelineNode, index: number): void {
   node.inputMappings?.splice(index, 1)
+  void nextTick(measureConnections)
 }
 
 function scriptFor(node: PipelineNode): ScriptMeta | undefined {
@@ -333,6 +364,73 @@ function fieldPoint(key: string, trackRect: DOMRect, side: 'source' | 'target'):
   }
 }
 
+function bezierPath(source: { x: number; y: number }, target: { x: number; y: number }): string {
+  const distance = Math.max(56, Math.abs(target.x - source.x) * 0.45)
+  return `M ${source.x} ${source.y} C ${source.x + distance} ${source.y}, ${target.x - distance} ${target.y}, ${target.x} ${target.y}`
+}
+
+function isAdjacentConnectionTarget(sourceNodeId: string, targetNodeId: string): boolean {
+  if (!draft.value) return false
+  const sourceIndex = draft.value.nodes.findIndex((node) => node.id === sourceNodeId)
+  const targetIndex = draft.value.nodes.findIndex((node) => node.id === targetNodeId)
+  return sourceIndex >= 0 && targetIndex === sourceIndex + 1
+}
+
+function isConnectionSource(nodeId: string): boolean {
+  return connectionDraft.value?.sourceNodeId === nodeId
+}
+
+function canStartConnection(nodeId: string): boolean {
+  if (!draft.value) return false
+  const sourceIndex = draft.value.nodes.findIndex((node) => node.id === nodeId)
+  return sourceIndex >= 0 && sourceIndex < draft.value.nodes.length - 1
+}
+
+function isConnectionTarget(nodeId: string): boolean {
+  return Boolean(connectionDraft.value && isAdjacentConnectionTarget(connectionDraft.value.sourceNodeId, nodeId))
+}
+
+function startConnection(event: PointerEvent, node: PipelineNode): void {
+  if (!canStartConnection(node.id)) return
+  cancelConnection()
+  connectionDraft.value = { sourceNodeId: node.id, pointerX: event.clientX, pointerY: event.clientY }
+  updateConnectionPreview(event)
+}
+
+function updateConnectionPreview(event: PointerEvent): void {
+  const draftConnection = connectionDraft.value
+  const track = document.querySelector('.pipeline-canvas-track')
+  if (!draftConnection || !(track instanceof HTMLElement)) return
+  const trackRect = track.getBoundingClientRect()
+  const scale = canvasScale.value || 1
+  const pointer = {
+    x: (event.clientX - trackRect.left) / scale,
+    y: (event.clientY - trackRect.top) / scale
+  }
+  const source = fieldPoint(`output:${draftConnection.sourceNodeId}`, trackRect, 'source')
+  if (!source) return
+  connectionDraft.value = { ...draftConnection, pointerX: event.clientX, pointerY: event.clientY }
+  connectionPreviewPath.value = bezierPath(source, pointer)
+}
+
+function finishConnection(node: PipelineNode, targetParam: string): void {
+  const draftConnection = connectionDraft.value
+  if (!draftConnection || !isAdjacentConnectionTarget(draftConnection.sourceNodeId, node.id)) return
+  const mappings = [...(node.inputMappings ?? [])]
+  const nextMapping = { source: 'previous-result' as const, sourcePath: '', targetParam }
+  const index = mappings.findIndex((mapping) => mapping.targetParam === targetParam)
+  if (index >= 0) mappings[index] = nextMapping
+  else mappings.push(nextMapping)
+  node.inputMappings = mappings
+  cancelConnection()
+  void nextTick(measureConnections)
+}
+
+function cancelConnection(): void {
+  connectionDraft.value = null
+  connectionPreviewPath.value = ''
+}
+
 function measureConnections(): void {
   const track = document.querySelector('.pipeline-canvas-track')
   if (!(track instanceof HTMLElement) || !draft.value) return
@@ -346,10 +444,9 @@ function measureConnections(): void {
       const source = fieldPoint(sourceKey, trackRect, 'source')
       const target = fieldPoint(`target:${node.id}:${mapping.targetParam}`, trackRect, 'target')
       if (!source || !target) continue
-      const dx = Math.max(70, (target.x - source.x) * 0.45)
       const nodeState = nodeStatus(node.id)
       const status = nodeState === 'error' ? 'error' : nodeState === 'running' ? 'running' : nodeState === 'success' ? 'success' : 'idle'
-      nextPaths.push({ id: `${node.id}-${mappingIndex}`, d: `M ${source.x} ${source.y} C ${source.x + dx} ${source.y}, ${target.x - dx} ${target.y}, ${target.x} ${target.y}`, status })
+      nextPaths.push({ id: `${node.id}-${mappingIndex}`, d: bezierPath(source, target), status })
     }
   }
   connectionPaths.value = nextPaths
@@ -357,18 +454,6 @@ function measureConnections(): void {
 
 function nodeStatus(nodeId: string): PipelineSession['status'] | 'idle' {
   return session.value?.nodes.find((item) => item.nodeId === nodeId)?.status ?? 'idle'
-}
-
-function connectorStatus(index: number): 'idle' | 'running' | 'success' | 'error' {
-  if (!draft.value) return 'idle'
-  const current = draft.value.nodes[index]
-  const next = draft.value.nodes[index + 1]
-  const currentStatus = nodeStatus(current.id)
-  const nextStatus = nodeStatus(next.id)
-  if (currentStatus === 'error' || nextStatus === 'error') return 'error'
-  if (nextStatus === 'running') return 'running'
-  if (currentStatus === 'success' && nextStatus === 'success') return 'success'
-  return 'idle'
 }
 
 const aggregateParams = computed(() => {
@@ -488,11 +573,12 @@ onMounted(() => {
     measureConnections()
   }
   handleResize()
-  void nextTick(() => centerCanvasView('auto'))
+  void nextTick(() => centerCanvasView('auto', 'start'))
   window.addEventListener('resize', handleResize)
   offResize = () => window.removeEventListener('resize', handleResize)
 })
 onUnmounted(() => {
+  cancelConnection()
   gsap.killTweensOf([canvasRef.value, leftSidebarRef.value, rightSidebarRef.value])
   offSession?.()
   offResize?.()
@@ -541,7 +627,7 @@ onUnmounted(() => {
                 <p class="text-[10px] sb-text-faint mt-1">拖动画布浏览 · 节点按顺序执行</p>
               </div>
               <div class="pipeline-canvas-tools">
-                <span class="pipeline-canvas-hint">Workflow canvas</span>
+                <span class="pipeline-canvas-hint">{{ connectionDraft ? '请选择下一节点的输入字段' : 'Workflow canvas' }}</span>
                 <button class="pipeline-tool-button" :class="showGrid && 'is-active'" title="切换网格" @click="showGrid = !showGrid">网格</button>
                 <button class="pipeline-tool-button" title="适配画布" @click="fitCanvasView">适配</button>
                 <button class="pipeline-tool-button" title="重置视图" @click="resetCanvasView">重置</button>
@@ -568,19 +654,26 @@ onUnmounted(() => {
             >
               <div v-if="!draft.nodes.length" class="pipeline-canvas-empty">从右侧选择脚本，开始搭建流水线</div>
               <div v-else class="pipeline-canvas-track" :style="canvasTrackStyle">
-                <svg class="workflow-connections" :width="Math.max(900, draft.nodes.length * 440)" height="560" aria-hidden="true">
+                <svg class="workflow-connections" :width="Math.max(900, draft.nodes.length * 360)" height="560" aria-hidden="true">
                   <defs>
                     <filter id="workflow-line-glow"><feGaussianBlur stdDeviation="2.5" result="blur" /><feMerge><feMergeNode in="blur" /><feMergeNode in="SourceGraphic" /></feMerge></filter>
+                    <marker v-for="status in ['idle', 'running', 'success', 'error']" :id="`workflow-arrow-${status}`" :key="status" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto" markerUnits="strokeWidth">
+                      <path class="workflow-arrow" :class="`is-${status}`" d="M 1 1 L 9 5 L 1 9 Z" />
+                    </marker>
+                    <marker id="workflow-arrow-preview" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto" markerUnits="strokeWidth">
+                      <path class="workflow-arrow is-preview" d="M 1 1 L 9 5 L 1 9 Z" />
+                    </marker>
                   </defs>
                   <g v-for="connection in connectionPaths" :key="connection.id" class="workflow-connection" :class="`is-${connection.status}`">
                     <path class="workflow-connection-halo" :d="connection.d" />
-                    <path class="workflow-connection-line" :d="connection.d" />
+                    <path class="workflow-connection-line" :d="connection.d" :marker-end="`url(#workflow-arrow-${connection.status})`" />
                     <circle v-if="connection.status === 'running'" class="workflow-connection-particle"><animateMotion dur="1.2s" repeatCount="indefinite" :path="connection.d" /></circle>
                     <circle v-if="connection.status === 'running'" class="workflow-connection-particle is-delayed"><animateMotion dur="1.2s" begin="-.58s" repeatCount="indefinite" :path="connection.d" /></circle>
                   </g>
+                  <path v-if="connectionPreviewPath" class="workflow-connection-preview" :d="connectionPreviewPath" marker-end="url(#workflow-arrow-preview)" aria-hidden="true" />
                 </svg>
                 <template v-for="(node, index) in draft.nodes" :key="node.id">
-                  <article class="pipeline-node-card" :data-node-id="node.id" :style="{ zoom: 1 / canvasScale }" :class="[`is-${nodeStatus(node.id)}`, selectedNodeId === node.id && 'is-selected', session?.currentNodeId === node.id && 'is-current']" @click="selectNode(node)">
+                  <article class="pipeline-node-card" :data-node-id="node.id" :class="[`is-${nodeStatus(node.id)}`, selectedNodeId === node.id && 'is-selected', session?.currentNodeId === node.id && 'is-current', isConnectionSource(node.id) && 'is-connection-source']" @click="selectNode(node)">
                     <div class="pipeline-node-glow"></div>
                     <div class="relative flex items-start gap-2">
                       <span class="pipeline-node-index">{{ index + 1 }}</span>
@@ -603,8 +696,9 @@ onUnmounted(() => {
                           :key="field.key"
                           class="pipeline-field-chip is-source"
                           :ref="(element) => setFieldRef(`source:${node.id}:${field.key}`, element)"
-                          draggable="true"
-                          @dragstart="startFieldDrag($event, { source: 'pipeline-input', sourcePath: `${node.id}.${field.key}` })"
+                           draggable="true"
+                           @dragstart="startFieldDrag($event, { source: 'pipeline-input', sourcePath: `${node.id}.${field.key}` })"
+                           @pointerdown.stop
                         >{{ field.label }}<span class="pipeline-port"></span></button>
                       </div>
                       <div v-else class="pipeline-field-group">
@@ -614,20 +708,25 @@ onUnmounted(() => {
                           :key="field.key"
                           class="pipeline-param-drop"
                           :ref="(element) => setFieldRef(`target:${node.id}:${field.key}`, element)"
+                          :class="isConnectionTarget(node.id) && 'is-connection-target'"
+                          @pointerdown.stop
+                          @click.stop="finishConnection(node, field.key)"
                           @dragover.prevent
                           @drop="dropFieldMapping($event, node, field.key)"
                         >
                           <span class="pipeline-param-drop-label">{{ field.label }}</span>
                           <input :value="fixedParamValue(node, field.key)" class="pipeline-fixed-param" :placeholder="`固定值 · ${field.key}`" @input="onFixedParamInput($event, node, field.key)" />
-                          <span class="pipeline-port is-target"></span>
+                          <button class="pipeline-port-button is-target" type="button" aria-label="连接到此输入字段" @click.stop="finishConnection(node, field.key)">＋</button>
                         </div>
                       </div>
                       <button
                         class="pipeline-result-source"
+                        :class="isConnectionSource(node.id) && 'is-connection-source'"
                         :ref="(element) => setFieldRef(`output:${node.id}`, element)"
-                        draggable="true"
-                        @dragstart="startFieldDrag($event, { source: 'previous-result' })"
-                      >拖拽完整输出 <span class="pipeline-port"></span></button>
+                        :disabled="!canStartConnection(node.id)"
+                        title="点击后连接到下一节点输入字段"
+                        @pointerdown.stop.prevent="startConnection($event, node)"
+                      ><span>完整输出 <small>点击连接</small></span><span class="pipeline-port"></span></button>
                     </div>
                     <div class="pipeline-mappings">
                       <div v-for="(mapping, mappingIndex) in node.inputMappings" :key="mappingIndex" class="pipeline-mapping-row">
@@ -640,22 +739,6 @@ onUnmounted(() => {
                       <button class="pipeline-add-mapping" @click="addMapping(node)">+ 添加输入映射</button>
                     </div>
                   </article>
-                  <div v-if="index < draft.nodes.length - 1" class="pipeline-connector" :class="`is-${connectorStatus(index)}`" aria-hidden="true">
-                    <svg class="pipeline-connector-svg" viewBox="0 0 132 72" preserveAspectRatio="none">
-                      <defs>
-                        <linearGradient :id="`connector-gradient-${index}`" x1="0" x2="1">
-                          <stop offset="0" stop-color="currentColor" stop-opacity="0.1" />
-                          <stop offset="0.52" stop-color="currentColor" stop-opacity="0.95" />
-                          <stop offset="1" stop-color="currentColor" stop-opacity="0.35" />
-                        </linearGradient>
-                      </defs>
-                      <path class="pipeline-connector-shadow" d="M 4 36 C 35 36, 94 36, 124 36" />
-                      <path class="pipeline-connector-path" :class="`is-${connectorStatus(index)}`" :d="`M 4 36 C 35 36, 94 36, 124 36`" :style="{ stroke: `url(#connector-gradient-${index})` }" />
-                      <path class="pipeline-connector-head" d="M 116 28 L 126 36 L 116 44" />
-                      <circle v-if="connectorStatus(index) === 'running'" class="pipeline-connector-particle" r="3"><animateMotion dur="1.15s" repeatCount="indefinite" path="M 4 36 C 35 36, 94 36, 124 36" /></circle>
-                      <circle v-if="connectorStatus(index) === 'running'" class="pipeline-connector-particle is-delayed" r="2"><animateMotion dur="1.15s" begin="-.56s" repeatCount="indefinite" path="M 4 36 C 35 36, 94 36, 124 36" /></circle>
-                    </svg>
-                  </div>
                 </template>
               </div>
             </div>
@@ -849,16 +932,21 @@ onUnmounted(() => {
   position: relative;
   display: flex;
   align-items: center;
+  gap: 56px;
   width: max-content;
   min-width: 100%;
   min-height: 880px;
-  padding: 76px 84px;
+  padding: 56px 32px;
 }
 
 .workflow-connections { position: absolute; inset: 0 auto auto 0; z-index: 1; overflow: visible; pointer-events: none; }
 .workflow-connection { color: color-mix(in srgb, var(--sb-accent-solid) 70%, white); }
 .workflow-connection-line, .workflow-connection-halo { fill: none; stroke-linecap: round; }
 .workflow-connection-line { stroke: currentColor; stroke-width: 2; stroke-dasharray: 7 7; animation: workflow-dash 1.5s linear infinite; }
+.workflow-arrow.is-idle, .workflow-arrow.is-running { fill: color-mix(in srgb, var(--sb-accent-solid) 70%, white); }
+.workflow-arrow.is-success { fill: #22c55e; }
+.workflow-arrow.is-error { fill: #f43f5e; }
+.workflow-arrow.is-preview { fill: var(--sb-accent-solid); }
 .workflow-connection-halo { stroke: currentColor; stroke-width: 10; opacity: .1; filter: url(#workflow-line-glow); }
 .workflow-connection.is-success { color: #22c55e; }
 .workflow-connection.is-success .workflow-connection-line { stroke-dasharray: none; animation: none; }
@@ -866,6 +954,7 @@ onUnmounted(() => {
 .workflow-connection.is-error .workflow-connection-line { stroke-dasharray: 4 6; }
 .workflow-connection-particle { fill: currentColor; filter: drop-shadow(0 0 7px currentColor); }
 .workflow-connection-particle.is-delayed { opacity: .55; }
+.workflow-connection-preview { fill: none; stroke: var(--sb-accent-solid); stroke-width: 2.5; stroke-linecap: round; stroke-dasharray: 6 6; opacity: .82; filter: drop-shadow(0 0 5px color-mix(in srgb, var(--sb-accent-solid) 42%, transparent)); animation: workflow-dash 0.8s linear infinite; }
 @keyframes workflow-dash { to { stroke-dashoffset: -28; } }
 
 .pipeline-canvas-empty {
@@ -878,12 +967,12 @@ onUnmounted(() => {
 
 .pipeline-node-card {
   position: relative;
-  flex: 0 0 340px;
-  min-height: 342px;
+  flex: 0 0 240px;
+  min-height: 240px;
   overflow: hidden;
-  padding: 21px;
+  padding: 12px;
   border: 1px solid color-mix(in srgb, var(--sb-border) 90%, transparent);
-  border-radius: 20px;
+  border-radius: 16px;
   background: linear-gradient(145deg, color-mix(in srgb, var(--sb-bg-panel) 98%, white), var(--sb-bg-panel));
   box-shadow: 0 20px 44px color-mix(in srgb, #000 10%, transparent), inset 0 1px 0 color-mix(in srgb, white 24%, transparent);
   transition: border-color 220ms ease, box-shadow 220ms ease, transform 220ms ease;
@@ -891,7 +980,6 @@ onUnmounted(() => {
 
 .pipeline-node-card:hover,
 .pipeline-node-card.is-current {
-  transform: translateY(-3px);
   border-color: color-mix(in srgb, var(--sb-accent-solid) 62%, var(--sb-border));
   box-shadow: 0 18px 36px color-mix(in srgb, var(--sb-accent-solid) 13%, transparent);
 }
@@ -932,7 +1020,7 @@ onUnmounted(() => {
   border: 0;
   outline: 0;
   color: var(--sb-text-primary);
-  font-size: 16px;
+  font-size: 14px;
   font-weight: 680;
   background: transparent;
 }
@@ -943,45 +1031,40 @@ onUnmounted(() => {
 .pipeline-node-card.is-success .pipeline-node-status-dot { background: #22c55e; }
 .pipeline-node-card.is-error .pipeline-node-status-dot { background: #f43f5e; }
 
-.pipeline-node-actions { display: flex; justify-content: flex-end; gap: 3px; margin-top: 19px; padding-bottom: 3px; border-bottom: 1px solid color-mix(in srgb, var(--sb-border) 75%, transparent); }
-.pipeline-field-links { display: grid; gap: 7px; margin-top: 8px; }
+.pipeline-node-actions { display: flex; justify-content: flex-end; gap: 3px; margin-top: 12px; padding-bottom: 3px; border-bottom: 1px solid color-mix(in srgb, var(--sb-border) 75%, transparent); }
+.pipeline-field-links { display: grid; gap: 6px; margin-top: 7px; }
 .pipeline-field-group { display: grid; gap: 5px; }
 .pipeline-field-group-label { color: var(--sb-text-faint); font-size: 9px; letter-spacing: 0.04em; text-transform: uppercase; }
-.pipeline-field-chip, .pipeline-result-source { display: flex; align-items: center; justify-content: space-between; gap: 6px; min-height: 25px; padding: 4px 7px; border: 1px dashed color-mix(in srgb, var(--sb-accent-solid) 42%, var(--sb-border)); border-radius: 7px; color: var(--sb-text-secondary); font-size: 10px; text-align: left; background: color-mix(in srgb, var(--sb-accent-solid) 6%, transparent); }
-.pipeline-field-chip:hover, .pipeline-result-source:hover { border-color: var(--sb-accent-solid); color: var(--sb-text-primary); cursor: grab; }
+.pipeline-field-chip, .pipeline-result-source { display: flex; align-items: center; justify-content: space-between; gap: 6px; min-height: 24px; padding: 3px 7px; border: 1px dashed color-mix(in srgb, var(--sb-accent-solid) 42%, var(--sb-border)); border-radius: 7px; color: var(--sb-text-secondary); font-size: 10px; text-align: left; background: color-mix(in srgb, var(--sb-accent-solid) 6%, transparent); }
+.pipeline-field-chip:hover, .pipeline-result-source:hover { border-color: var(--sb-accent-solid); color: var(--sb-text-primary); }
 .pipeline-result-source { border-color: color-mix(in srgb, #22c55e 42%, var(--sb-border)); color: color-mix(in srgb, #22c55e 75%, var(--sb-text-secondary)); }
-.pipeline-param-drop { display: grid; grid-template-columns: 74px minmax(0, 1fr) 7px; align-items: center; gap: 5px; min-height: 30px; padding: 3px 5px; border: 1px dashed color-mix(in srgb, var(--sb-border) 80%, transparent); border-radius: 7px; }
-.pipeline-param-drop:hover { border-color: color-mix(in srgb, var(--sb-accent-solid) 70%, var(--sb-border)); background: color-mix(in srgb, var(--sb-accent-solid) 6%, transparent); }
+.pipeline-result-source small { margin-left: 4px; color: var(--sb-text-faint); font-size: 8px; font-weight: 400; }
+.pipeline-result-source:disabled { cursor: default; opacity: .52; }
+.pipeline-result-source .pipeline-port { display: grid; width: 18px; height: 18px; flex: 0 0 18px; aspect-ratio: 1; place-items: center; border: 1px solid color-mix(in srgb, currentColor 42%, transparent); border-radius: 50%; font-size: 12px; line-height: 1; opacity: .35; }
+.pipeline-result-source .pipeline-port::after { content: '+'; }
+.pipeline-result-source:hover .pipeline-port, .pipeline-result-source.is-connection-source .pipeline-port { opacity: 1; }
+.pipeline-param-drop { display: grid; grid-template-columns: 66px minmax(0, 1fr) 20px; align-items: center; gap: 5px; min-height: 28px; padding: 3px 5px; border: 1px dashed color-mix(in srgb, var(--sb-border) 80%, transparent); border-radius: 7px; }
+.pipeline-param-drop:hover, .pipeline-param-drop.is-connection-target { border-color: color-mix(in srgb, var(--sb-accent-solid) 70%, var(--sb-border)); background: color-mix(in srgb, var(--sb-accent-solid) 6%, transparent); }
+.pipeline-param-drop.is-connection-target { cursor: crosshair; box-shadow: 0 0 0 2px color-mix(in srgb, var(--sb-accent-solid) 12%, transparent); }
 .pipeline-param-drop-label { overflow: hidden; color: var(--sb-text-muted); font-size: 9px; text-overflow: ellipsis; white-space: nowrap; }
 .pipeline-fixed-param { min-width: 0; height: 23px; padding: 0 5px; border: 1px solid color-mix(in srgb, var(--sb-border) 70%, transparent); border-radius: 5px; outline: none; color: var(--sb-text-secondary); font-size: 9px; background: color-mix(in srgb, var(--sb-bg-panel) 80%, transparent); }
 .pipeline-fixed-param:focus { border-color: var(--sb-accent-solid); }
 .pipeline-port { width: 6px; height: 6px; flex: 0 0 6px; border: 1px solid currentColor; border-radius: 999px; background: var(--sb-bg-panel); }
-.pipeline-port.is-target { color: var(--sb-accent-solid); }
+.pipeline-port-button { display: grid; width: 18px; height: 18px; flex: 0 0 18px; aspect-ratio: 1; place-items: center; border: 1px solid color-mix(in srgb, currentColor 42%, transparent); border-radius: 50%; color: currentColor; font-size: 12px; line-height: 1; opacity: .35; transition: 150ms ease; }
+.pipeline-field-chip:hover .pipeline-port-button, .pipeline-result-source:hover .pipeline-port-button, .pipeline-param-drop.is-connection-target .pipeline-port-button, .pipeline-node-card.is-connection-source .pipeline-port-button { opacity: 1; transform: scale(1.06); }
+.pipeline-port-button:hover { border-color: var(--sb-accent-solid); color: var(--sb-accent-solid); background: color-mix(in srgb, var(--sb-accent-solid) 12%, transparent); }
+.pipeline-port-button.is-target { color: var(--sb-accent-solid); }
+.pipeline-result-source.is-connection-source { border-color: #22c55e; box-shadow: 0 0 0 3px color-mix(in srgb, #22c55e 16%, transparent); }
 .pipeline-mappings { min-height: 32px; margin-top: 10px; padding-top: 10px; border-top: 1px solid color-mix(in srgb, var(--sb-border) 70%, transparent); }
 .pipeline-mapping-row { display: grid; grid-template-columns: 58px minmax(0, 1fr) 78px 22px; gap: 4px; align-items: center; margin-bottom: 5px; }
 .pipeline-mapping-source, .pipeline-mapping-path, .pipeline-mapping-target { min-width: 0; height: 25px; padding: 0 5px; font-size: 9px; }
 .pipeline-add-mapping { color: var(--sb-accent-solid); font-size: 10px; }
 .pipeline-add-mapping:hover { text-decoration: underline; }
 
-.pipeline-connector { display: grid; width: 132px; height: 72px; flex: 0 0 132px; place-items: center; color: var(--sb-text-faint); }
-.pipeline-connector-svg { width: 100%; height: 100%; overflow: visible; }
-.pipeline-connector-shadow { fill: none; stroke: color-mix(in srgb, var(--sb-text-faint) 22%, transparent); stroke-width: 5; stroke-linecap: round; }
-.pipeline-connector-path { fill: none; stroke: color-mix(in srgb, var(--sb-text-faint) 36%, transparent); stroke-width: 2; stroke-linecap: round; stroke-dasharray: 6 7; }
-.pipeline-connector-path.is-running { stroke-dasharray: 5 5; animation: connector-dash 1s linear infinite; }
-.pipeline-connector-path.is-success { stroke: #22c55e; stroke-dasharray: none; }
-.pipeline-connector-path.is-error { stroke: #f43f5e; stroke-dasharray: 4 5; }
-.pipeline-connector-head { fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
-.pipeline-connector.is-running { color: var(--sb-accent-solid); }
-.pipeline-connector.is-success { color: #22c55e; }
-.pipeline-connector.is-error { color: #f43f5e; }
-.pipeline-connector-particle { fill: color-mix(in srgb, var(--sb-accent-solid) 88%, white); filter: drop-shadow(0 0 7px color-mix(in srgb, var(--sb-accent-solid) 90%, transparent)); }
-.pipeline-connector-particle.is-delayed { opacity: 0.7; }
-
-@keyframes connector-dash { to { stroke-dashoffset: -20; } }
 @keyframes pipeline-pulse { 50% { opacity: 0.48; transform: scale(0.72); } }
 @keyframes pipeline-glow { 50% { transform: translateX(18px); opacity: 0.55; } }
 
 @media (prefers-reduced-motion: reduce) {
-  .pipeline-node-card, .pipeline-node-glow, .pipeline-connector-path, .pipeline-node-status-dot { animation: none !important; transition: none; }
+  .pipeline-node-card, .pipeline-node-glow, .pipeline-node-status-dot, .workflow-connection-preview { animation: none !important; transition: none; }
 }
 </style>
