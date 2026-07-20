@@ -158,15 +158,81 @@ function assertSafeFile(root: string, relativePath: string): string {
   return fullPath
 }
 
+function stripJsComments(content: string): string {
+  let result = ''
+  let state: 'code' | 'single' | 'double' | 'template' | 'line' | 'block' = 'code'
+
+  for (let index = 0; index < content.length; index += 1) {
+    const char = content[index]
+    const next = content[index + 1]
+
+    if (state === 'line') {
+      if (char === '\n' || char === '\r') {
+        state = 'code'
+        result += char
+      } else {
+        result += ' '
+      }
+      continue
+    }
+
+    if (state === 'block') {
+      if (char === '*' && next === '/') {
+        state = 'code'
+        result += '  '
+        index += 1
+      } else if (char === '\n' || char === '\r') {
+        result += char
+      } else {
+        result += ' '
+      }
+      continue
+    }
+
+    if (state === 'single' || state === 'double' || state === 'template') {
+      result += char
+      if (char === '\\' && next !== undefined) {
+        result += next
+        index += 1
+      } else if (
+        (state === 'single' && char === "'") ||
+        (state === 'double' && char === '"') ||
+        (state === 'template' && char === '`')
+      ) {
+        state = 'code'
+      }
+      continue
+    }
+
+    if (char === '/' && next === '/') {
+      state = 'line'
+      result += '  '
+      index += 1
+    } else if (char === '/' && next === '*') {
+      state = 'block'
+      result += '  '
+      index += 1
+    } else {
+      result += char
+      if (char === "'") state = 'single'
+      else if (char === '"') state = 'double'
+      else if (char === '`') state = 'template'
+    }
+  }
+
+  return result
+}
+
 function extractJsSpecifiers(content: string): string[] {
   const specifiers = new Set<string>()
+  const code = stripJsComments(content)
   const patterns = [
     /\b(?:import|export)\s+(?:[^'";]+?\s+from\s+)?['"]([^'"]+)['"]/g,
     /\bimport\s*\(\s*['"]([^'"]+)['"]\s*\)/g,
     /\brequire\s*\(\s*['"]([^'"]+)['"]\s*\)/g
   ]
   for (const pattern of patterns) {
-    for (const match of content.matchAll(pattern)) specifiers.add(match[1])
+    for (const match of code.matchAll(pattern)) specifiers.add(match[1])
   }
   return [...specifiers]
 }
