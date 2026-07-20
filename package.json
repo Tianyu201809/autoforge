@@ -24,6 +24,7 @@
   "dependencies": {
     "adm-zip": "^0.6.0",
     "dompurify": "^3.4.12",
+    "gsap": "^3.15.0",
     "lucide-vue-next": "^0.469.0",
     "markdown-it": "^14.3.0",
     "node-cron": "^3.0.3",

@@ -19,7 +19,7 @@ import ToastHost from './components/ToastHost.vue'
 import ConfirmDialogHost from './components/ConfirmDialogHost.vue'
 import PromptDialogHost from './components/PromptDialogHost.vue'
 import ScratchpadPanel from './components/ScratchpadPanel.vue'
-import PipelinePanel from './components/PipelinePanel.vue'
+import PipelineWorkspace from './components/PipelineWorkspace.vue'
 import { askConfirm } from './composables/useConfirmDialog'
 import { useScratchpad } from './composables/useScratchpad'
 import { useToast } from './composables/useToast'
@@ -374,9 +374,18 @@ onUnmounted(() => {
 </script>
 
 <template>
-  <div class="flex flex-col h-full">
-    <TitleBar :breadcrumb="breadcrumb" />
-    <div class="flex flex-1 min-h-0">
+  <div class="flex h-full min-h-0 flex-col">
+    <PipelineWorkspace
+      v-if="showPipelines"
+      :open="showPipelines"
+      :scripts="scripts"
+      class="min-h-0 flex-1"
+      @close="showPipelines = false"
+      @refresh="refresh()"
+    />
+    <template v-else>
+      <TitleBar :breadcrumb="breadcrumb" />
+      <div class="flex flex-1 min-h-0">
       <Sidebar
         :nav-items="navItems"
         :categories="categories"
@@ -399,7 +408,6 @@ onUnmounted(() => {
       />
       <DevGuidePanel :open="showDevGuide" @close="closeDevGuide" @imported="onExampleImported" />
       <ExecutionHistoryPanel :open="showExecutionHistory" @close="closeExecutionHistory" />
-      <PipelinePanel :open="showPipelines" :scripts="scripts" @close="showPipelines = false" @refresh="refresh()" />
       <SettingsPanel
         :open="showSettings"
         @close="closeSettings"
@@ -480,7 +488,8 @@ onUnmounted(() => {
           />
         </div>
       </div>
-    <StatusBar :running-count="stats.running" />
+      <StatusBar :running-count="stats.running" />
+    </template>
     <RunResultModal
       :open="runResultModalOpen"
       :script="runResultModalScript"
