@@ -1030,7 +1030,6 @@ onUnmounted(() => {
               </div>
             </div>
           </div>
-          <div v-if="error" class="rounded-lg bg-rose-500/10 border border-rose-500/20 px-3 py-2 text-[12px] text-rose-400">{{ error }}</div>
           <footer class="pipeline-editor-footer flex items-center justify-end gap-2"><button class="h-8 px-3 rounded-lg sb-btn-ghost text-[12px]" @click="attemptLeave('close')">关闭</button><button class="h-8 px-3 rounded-lg sb-btn-ghost text-[12px] flex items-center gap-1.5" :disabled="saving" @click="save"><Save class="w-3.5 h-3.5" />{{ saving ? '保存中' : '保存' }}</button><button v-if="session?.status === 'running'" class="h-8 px-3 rounded-lg bg-rose-500/10 text-rose-400 text-[12px]" @click="stop">停止</button><button v-else class="h-8 px-3 rounded-lg sb-btn-accent text-[12px] flex items-center gap-1.5" @click="run"><Play class="w-3.5 h-3.5" />运行流水线</button></footer>
         </main>
         <aside v-if="draft" ref="rightSidebarRef" class="workflow-inspector" :class="[rightCollapsed && 'is-collapsed', resizingPanel === 'right' && 'is-resizing']" :style="rightSidebarStyle">
@@ -1109,6 +1108,7 @@ onUnmounted(() => {
         <div v-else class="flex-1 flex items-center justify-center text-[12px] sb-text-faint">请选择或新建流水线</div>
       </div>
       <section v-if="draft" class="pipeline-runtime-drawer" :class="runtimeDrawerOpen && 'is-open'">
+        <div v-if="error" class="pipeline-runtime-alert">{{ error }}</div>
         <button class="pipeline-runtime-toggle" @click="runtimeDrawerOpen = !runtimeDrawerOpen">
           <span><span class="pipeline-runtime-dot" :class="session?.status === 'running' && 'is-running'"></span><strong>运行监控</strong><small>{{ session ? `上次运行：${session.status}` : '查看节点状态与运行日志' }}</small></span>
           <span class="pipeline-runtime-toggle-action">{{ runtimeDrawerOpen ? '收起' : '展开' }}⌃</span>
@@ -1176,7 +1176,7 @@ onUnmounted(() => {
 .workflow-pane-heading { display: flex; align-items: center; justify-content: space-between; margin-bottom: 8px; color: var(--sb-text-primary); font-size: 11px; font-weight: 650; }
 .workflow-pane-count { min-width: 19px; padding: 2px 6px; border-radius: 99px; color: var(--sb-accent-solid); font-size: 9px; text-align: center; background: color-mix(in srgb, var(--sb-accent-solid) 12%, transparent); }
 .workflow-library { display: flex; min-height: 0; flex: 1; flex-direction: column; padding-top: 14px; border-top: 1px solid var(--sb-border-subtle); }
-.workflow-library-search { width: 100%; height: 30px; margin-bottom: 8px; padding: 0 9px; font-size: 11px; }
+.workflow-library-search { width: 100%; height: 30px; margin-bottom: 8px; padding: 0 9px; font-size: 11px; border: 1px solid var(--sb-border); border-radius: 8px; background: color-mix(in srgb, var(--sb-bg-panel) 92%, transparent); color: var(--sb-text-primary); }
 .workflow-library-list { display: grid; align-content: start; grid-auto-rows: minmax(34px, max-content); min-height: 0; flex: 1; gap: 4px; overflow-y: auto; }
 .workflow-library-item { display: flex; align-items: center; width: 100%; min-height: 34px; padding: 5px 7px; border: 1px solid transparent; border-radius: 8px; color: var(--sb-text-secondary); font-size: 10px; text-align: left; transition: 150ms ease; }
 .workflow-library-item:hover { border-color: color-mix(in srgb, var(--sb-accent-solid) 40%, var(--sb-border)); color: var(--sb-text-primary); background: color-mix(in srgb, var(--sb-accent-solid) 8%, transparent); }
@@ -1213,6 +1213,7 @@ onUnmounted(() => {
 .workflow-inspector-empty { color: var(--sb-text-faint); font-size: 10px; }
 .workflow-inspector-empty--large { display: grid; flex: 1; place-items: center; padding: 20px; text-align: center; }
 .pipeline-runtime-drawer { position: absolute; z-index: 4; right: 330px; bottom: 0; left: 250px; border-top: 1px solid var(--sb-border-subtle); background: color-mix(in srgb, var(--sb-bg-panel) 96%, transparent); box-shadow: 0 -10px 28px color-mix(in srgb, #000 5%, transparent); }
+.pipeline-runtime-alert { padding: 9px 18px; border-bottom: 1px solid color-mix(in srgb, #f43f5e 24%, var(--sb-border-subtle)); color: #f43f5e; font-size: 11px; line-height: 1.45; background: color-mix(in srgb, #f43f5e 8%, var(--sb-bg-panel)); }
 .pipeline-runtime-toggle { display: flex; width: 100%; min-height: 42px; align-items: center; justify-content: space-between; padding: 0 18px; color: var(--sb-text-muted); text-align: left; }
 .pipeline-runtime-toggle:hover { color: var(--sb-text-primary); background: color-mix(in srgb, var(--sb-accent-solid) 5%, transparent); }
 .pipeline-runtime-toggle > span:first-child { display: inline-flex; align-items: center; gap: 9px; }
