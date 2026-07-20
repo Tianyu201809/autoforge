@@ -224,6 +224,11 @@ const autoforge = {
       const handler = (_event: IpcRendererEvent, session: import('../shared/types/script').PipelineSession): void => callback(session)
       ipcRenderer.on(IPC.EVENT_PIPELINE_SESSION, handler)
       return () => ipcRenderer.removeListener(IPC.EVENT_PIPELINE_SESSION, handler)
+    },
+    onLog: (callback: (line: import('../shared/types/script').PipelineLogLine) => void): (() => void) => {
+      const handler = (_event: IpcRendererEvent, line: import('../shared/types/script').PipelineLogLine): void => callback(line)
+      ipcRenderer.on(IPC.EVENT_PIPELINE_LOG, handler)
+      return () => ipcRenderer.removeListener(IPC.EVENT_PIPELINE_LOG, handler)
     }
   },
   history: {

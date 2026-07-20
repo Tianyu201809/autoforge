@@ -128,6 +128,7 @@ export const IPC = {
 
   EVENT_SESSION: 'event:session',
   EVENT_PIPELINE_SESSION: 'event:pipeline-session',
+  EVENT_PIPELINE_LOG: 'event:pipeline-log',
 
   EVENT_LIFECYCLE: 'event:lifecycle',
 

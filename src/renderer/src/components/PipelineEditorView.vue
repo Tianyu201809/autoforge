@@ -2,7 +2,7 @@
 import { computed, nextTick, onMounted, onUnmounted, ref, watch } from 'vue'
 import { ArrowDown, ArrowLeft, ArrowUp, Check, ChevronLeft, ChevronRight, Play, Plus, Save, Trash2, Workflow, X } from 'lucide-vue-next'
 import { gsap } from 'gsap'
-import type { EnvironmentProfile, PipelineMeta, PipelineNode, PipelineSession, ScriptMeta } from '../../../shared/types/script'
+import type { EnvironmentProfile, LogLine, PipelineLogLine, PipelineMeta, PipelineNode, PipelineSession, ScriptMeta } from '../../../shared/types/script'
 import { askConfirm } from '../composables/useConfirmDialog'
 import { resolveScriptIcon } from '../lib/script-icon-map'
 
@@ -14,9 +14,12 @@ const draft = ref<PipelineMeta | null>(props.pipeline ? cloneForIpc(props.pipeli
 const lastSavedSnapshot = ref('')
 const runtimeValues = ref<Record<string, string>>({})
 const runtimeConfig = ref<Record<string, string>>({})
+const persistedRuntimeValues = ref<Record<string, Record<string, string>>>({})
+const persistedRuntimeConfig = ref<Record<string, Record<string, string>>>({})
 const currentEnvId = ref('default')
 const environments = ref<EnvironmentProfile[]>([])
 const session = ref<PipelineSession | null>(null)
+const pipelineLogs = ref<PipelineLogLine[]>([])
 const saving = ref(false)
 const error = ref('')
 const search = ref('')
@@ -157,12 +160,51 @@ function resetDraft(pipeline: PipelineMeta | null): void {
   panOffsetY.value = 0
   draft.value = pipeline ? cloneForIpc(pipeline) : blankDraft()
   lastSavedSnapshot.value = JSON.stringify(draft.value)
-  runtimeValues.value = {}
-  runtimeConfig.value = {}
+  persistedRuntimeValues.value = cloneForIpc(draft.value.paramsByEnv ?? {})
+  persistedRuntimeConfig.value = cloneForIpc(draft.value.configByEnv ?? {})
+  syncRuntimeValuesForEnvironment()
   session.value = props.initialSession ?? null
+  if (session.value) hydrateSessionLogs(session.value)
   error.value = ''
   selectedNodeId.value = draft.value.nodes[0]?.id ?? null
   void nextTick(() => centerCanvasView('auto', 'start'))
+}
+
+function syncRuntimeValuesForEnvironment(envId = currentEnvId.value): void {
+  runtimeValues.value = cloneForIpc(persistedRuntimeValues.value[envId] ?? {})
+  runtimeConfig.value = cloneForIpc(persistedRuntimeConfig.value[envId] ?? {})
+}
+
+function hydrateSessionLogs(next: PipelineSession): void {
+  const hydrated = next.nodes.flatMap((node) => (node.logs ?? []).map((line) => ({
+    ...line,
+    pipelineSessionId: next.id,
+    nodeId: node.nodeId,
+    scriptSessionId: line.sessionId
+  })))
+  if (!hydrated.length) return
+  const existing = pipelineLogs.value.filter((line) => line.pipelineSessionId !== next.id)
+  pipelineLogs.value = [...existing, ...hydrated]
+}
+
+function mergePipelineLog(line: PipelineLogLine): void {
+  const key = `${line.pipelineSessionId}:${line.nodeId}:${line.ts}:${line.sessionId}:${line.level}:${line.message}`
+  if (pipelineLogs.value.some((item) => `${item.pipelineSessionId}:${item.nodeId}:${item.ts}:${item.sessionId}:${item.level}:${item.message}` === key)) return
+  pipelineLogs.value = [...pipelineLogs.value, line].slice(-2000)
+}
+
+const activePipelineLogs = computed(() => pipelineLogs.value.filter((line) => line.pipelineSessionId === session.value?.id))
+
+function pipelineLogTime(ts: string): string {
+  return new Date(ts).toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit', second: '2-digit' })
+}
+
+function pipelineLogClass(level: LogLine['level']): string {
+  return level === 'ERROR' ? 'text-rose-400' : level === 'WARN' ? 'text-amber-400' : 'sb-text-secondary'
+}
+
+function pipelineNodeName(nodeId: string): string {
+  return draft.value?.nodes.find((node) => node.id === nodeId)?.name ?? nodeId
 }
 
 const isDirty = computed(() => Boolean(draft.value && JSON.stringify(draft.value) !== lastSavedSnapshot.value))
@@ -170,6 +212,7 @@ const isDirty = computed(() => Boolean(draft.value && JSON.stringify(draft.value
 async function loadEnvironment(): Promise<void> {
   environments.value = await window.autoforge.env.list()
   currentEnvId.value = environments.value.find((item) => item.isDefault)?.id ?? environments.value[0]?.id ?? 'default'
+  syncRuntimeValuesForEnvironment()
 }
 
 async function attemptLeave(target: 'back' | 'close'): Promise<void> {
@@ -197,6 +240,7 @@ function addNode(scriptId: string): void {
     scriptId,
     name: script.name,
     order: draft.value.nodes.length,
+    paramValues: {},
     inputMappings: []
   }
   draft.value.nodes.push(node)
@@ -559,15 +603,25 @@ async function run(): Promise<void> {
     if (!draft.value?.id) return
   }
   try {
-    await window.autoforge.pipelines.setValues(draft.value.id, currentEnvId.value, {
+    runtimeDrawerOpen.value = true
+    const saved = await window.autoforge.pipelines.setValues(draft.value.id, currentEnvId.value, {
       config: cloneForIpc(runtimeConfig.value),
       params: cloneForIpc(runtimeValues.value)
     })
-    session.value = await window.autoforge.pipelines.start(
+    persistedRuntimeValues.value = cloneForIpc(saved.paramsByEnv ?? {})
+    persistedRuntimeConfig.value = cloneForIpc(saved.configByEnv ?? {})
+    const started = await window.autoforge.pipelines.start(
       draft.value.id,
       currentEnvId.value,
       cloneForIpc(runtimeValues.value)
     )
+    session.value = started
+    hydrateSessionLogs(started)
+    const latest = await window.autoforge.pipelines.getSession(started.id)
+    if (latest) {
+      session.value = latest
+      hydrateSessionLogs(latest)
+    }
   } catch (err) {
     error.value = err instanceof Error ? err.message : String(err)
   }
@@ -594,6 +648,7 @@ async function stop(): Promise<void> {
 }
 
 let offSession: (() => void) | undefined
+let offPipelineLog: (() => void) | undefined
 let offResize: (() => void) | undefined
 watch(() => props.open, (open) => {
   if (open) {
@@ -605,7 +660,13 @@ watch(() => props.pipeline, (pipeline) => {
   if (props.open) resetDraft(pipeline)
 })
 watch(() => props.initialSession, (next) => {
-  if (next && next.pipelineId === draft.value?.id) session.value = next
+  if (next && next.pipelineId === draft.value?.id) {
+    session.value = next
+    hydrateSessionLogs(next)
+  }
+})
+watch(currentEnvId, (envId, previousEnvId) => {
+  if (envId !== previousEnvId) syncRuntimeValuesForEnvironment(envId)
 })
 watch(() => JSON.stringify(draft.value?.nodes), () => void nextTick(measureConnections))
 watch(canvasScale, () => void nextTick(measureConnections))
@@ -633,10 +694,15 @@ onMounted(() => {
     void nextTick(() => nameInputRef.value?.focus())
   }
   offSession = window.autoforge.pipelines.onSession((next) => {
-    if (next.id === session.value?.id) {
+    if (next.pipelineId === draft.value?.id && (!session.value || next.id === session.value.id || next.startedAt >= session.value.startedAt)) {
       session.value = next
+      if (next.status === 'running') runtimeDrawerOpen.value = true
+      hydrateSessionLogs(next)
       void nextTick(measureConnections)
     }
+  })
+  offPipelineLog = window.autoforge.pipelines.onLog((line) => {
+    mergePipelineLog(line)
   })
   const handleResize = (): void => {
     if (canvasRef.value) canvasSize.value = { width: canvasRef.value.clientWidth, height: canvasRef.value.clientHeight }
@@ -653,6 +719,7 @@ onUnmounted(() => {
   document.body.style.userSelect = ''
   gsap.killTweensOf([canvasRef.value, leftSidebarRef.value, rightSidebarRef.value])
   offSession?.()
+  offPipelineLog?.()
   offResize?.()
 })
 </script>
@@ -866,6 +933,17 @@ onUnmounted(() => {
             <div v-if="session" class="pipeline-runtime-steps"><div v-for="node in session.nodes" :key="node.nodeId" class="pipeline-runtime-step"><Check v-if="node.status === 'success'" class="h-3.5 w-3.5 text-emerald-400" /><span v-else class="pipeline-runtime-step-dot"></span><span>{{ draft.nodes.find((item) => item.id === node.nodeId)?.name }}</span><small>{{ node.status }}</small></div></div>
             <span v-else class="pipeline-runtime-empty">运行后会在这里显示每个节点的状态</span>
           </div>
+          <div v-if="session" class="pipeline-runtime-log-wrap">
+            <div class="pipeline-runtime-heading"><strong>脚本运行日志</strong><span class="pipeline-runtime-log-count">{{ activePipelineLogs.length }}</span></div>
+            <div v-if="activePipelineLogs.length" class="pipeline-runtime-logs">
+              <p v-for="(log, index) in activePipelineLogs" :key="`${log.ts}-${index}`" class="pipeline-runtime-log-line">
+                <span class="pipeline-runtime-log-time">{{ pipelineLogTime(log.ts) }}</span>
+                <span class="pipeline-runtime-log-node">{{ pipelineNodeName(log.nodeId) }}</span>
+                <span :class="pipelineLogClass(log.level)">{{ log.message }}</span>
+              </p>
+            </div>
+            <span v-else class="pipeline-runtime-empty">等待脚本输出日志</span>
+          </div>
         </div>
       </section>
   </div>
@@ -958,6 +1036,13 @@ onUnmounted(() => {
 .pipeline-runtime-step { display: flex; align-items: center; gap: 7px; color: var(--sb-text-muted); font-size: 10px; }
 .pipeline-runtime-step small { margin-left: auto; color: var(--sb-text-faint); font-size: 9px; }
 .pipeline-runtime-step-dot { width: 8px; height: 8px; border: 1px solid var(--sb-border); border-radius: 99px; }
+.pipeline-runtime-log-wrap { grid-column: 1 / -1; min-width: 0; padding-top: 12px; border-top: 1px solid var(--sb-border-subtle); }
+.pipeline-runtime-log-count { min-width: 18px; padding: 2px 5px; border-radius: 99px; color: var(--sb-text-faint); font-size: 9px; font-weight: 500; text-align: center; background: color-mix(in srgb, var(--sb-text-faint) 10%, transparent); }
+.pipeline-runtime-logs { max-height: 150px; margin-top: 8px; padding: 7px 9px; overflow-y: auto; border: 1px solid var(--sb-border-subtle); border-radius: 8px; background: color-mix(in srgb, var(--sb-bg-inset) 72%, transparent); font-family: ui-monospace, SFMono-Regular, Consolas, monospace; }
+.pipeline-runtime-log-line { display: grid; grid-template-columns: 62px 92px minmax(0, 1fr); gap: 7px; margin: 0; padding: 2px 0; color: var(--sb-text-secondary); font-size: 10px; line-height: 1.45; }
+.pipeline-runtime-log-time, .pipeline-runtime-log-node { color: var(--sb-text-faint); white-space: nowrap; }
+.pipeline-runtime-log-node { overflow: hidden; text-overflow: ellipsis; }
+@media (max-width: 900px) { .pipeline-runtime-body { grid-template-columns: 1fr; } .pipeline-runtime-log-wrap { grid-column: auto; } }
 .pipeline-editor-footer { display: none; }
 
 .pipeline-canvas-hint {

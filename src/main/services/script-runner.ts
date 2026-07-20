@@ -36,6 +36,8 @@ import { resolvePythonExecutable } from './python-resolver'
 interface ActiveSession {
   session: RunSession
   abortController: AbortController
+  onLog?: (line: LogLine) => void
+  onSession?: (session: RunSession) => void
   childProcess?: ChildProcess
   runTimeoutHandle?: ReturnType<typeof setTimeout>
 }
@@ -44,6 +46,8 @@ interface ScriptStartOptions {
   trigger?: ExecutionTrigger
   input?: unknown
   envOverrides?: Record<string, string>
+  onLog?: (line: LogLine) => void
+  onSession?: (session: RunSession) => void
 }
 
 export class ScriptRunnerService {
@@ -115,7 +119,12 @@ export class ScriptRunnerService {
     }
 
     const abortController = new AbortController()
-    this.sessions.set(session.id, { session, abortController })
+    this.sessions.set(session.id, {
+      session,
+      abortController,
+      onLog: options?.onLog,
+      onSession: options?.onSession
+    })
     executionHistory.recordStart({
       sessionId: session.id,
       scriptId: script.id,
@@ -136,9 +145,10 @@ export class ScriptRunnerService {
     envId?: string,
     runtimeParams?: Record<string, string>,
     input?: unknown,
-    envOverrides?: Record<string, string>
+    envOverrides?: Record<string, string>,
+    options?: Pick<ScriptStartOptions, 'onLog' | 'onSession' | 'trigger'>
   ): Promise<RunSession> {
-    const session = await this.start(scriptId, envId, runtimeParams, { input, envOverrides })
+    const session = await this.start(scriptId, envId, runtimeParams, { input, envOverrides, ...options })
     if (session.status !== 'running') return session
     return new Promise((resolve) => {
       this.waiters.set(session.id, resolve)
@@ -394,6 +404,7 @@ export class ScriptRunnerService {
 
   private pushLogLine(sessionId: string, level: LogLine['level'], message: string): void {
     const line = createLog(sessionId, level, message)
+    this.sessions.get(sessionId)?.onLog?.(line)
     logBus.emitLog(line)
     broadcastToRenderers(IPC.EVENT_LOG, line)
   }
@@ -466,6 +477,7 @@ export class ScriptRunnerService {
   }
 
   private broadcastSession(session: RunSession): void {
+    this.sessions.get(session.id)?.onSession?.(session)
     logBus.emitSession(session)
     broadcastToRenderers(IPC.EVENT_SESSION, session)
   }

@@ -140,7 +140,11 @@ export interface PipelineMeta {
 export interface PipelineNodeSession {
   nodeId: string
   scriptId: string
+  scriptSessionId?: string
   status: SessionStatus
+  phase?: ScriptLifecyclePhase
+  runProgress?: ScriptRunProgress
+  logs?: LogLine[]
   result?: unknown
   errorMessage?: string
   startedAt: string
@@ -165,6 +169,12 @@ export interface LogLine {
   ts: string
   level: LogLevel
   message: string
+}
+
+export interface PipelineLogLine extends LogLine {
+  pipelineSessionId: string
+  nodeId: string
+  scriptSessionId: string
 }
 
 export interface AppWindowConfig {

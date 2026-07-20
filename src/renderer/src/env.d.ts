@@ -31,7 +31,7 @@ import type {
   CategoryItem,
   SystemMemoryInfo
 } from '../../shared/types/script'
-import type { PipelineMeta, PipelineNode, PipelineSession } from '../../shared/types/script'
+import type { PipelineLogLine, PipelineMeta, PipelineNode, PipelineSession } from '../../shared/types/script'
 import type { ScriptIcon, ScriptLifecycleEvent } from '../../shared/script-contract'
 
 export interface ScriptListResponse {
@@ -175,6 +175,7 @@ export interface AutoforgeApi {
     listSessions: () => Promise<PipelineSession[]>
     getSession: (sessionId: string) => Promise<PipelineSession | undefined>
     onSession: (callback: (session: PipelineSession) => void) => () => void
+    onLog: (callback: (line: PipelineLogLine) => void) => () => void
   }
   history: {
     query: (options?: ExecutionHistoryQuery) => Promise<ExecutionDaySummary[]>

@@ -5,6 +5,7 @@ import type {
   PipelineMeta,
   PipelineNode,
   PipelineNodeSession,
+  PipelineLogLine,
   PipelineSession,
   ScriptMeta
 } from '../../shared/types/script'
@@ -116,7 +117,17 @@ export class PipelineRunnerService {
         const params = this.resolveNodeParams(pipeline, node, script, runtimeParams, session.envId)
         const env = this.resolveNodeValues(pipeline, node, script.envSchema.map((field) => field.key), runtimeParams, 'env', session.envId)
         const mappedParams = this.applyMappings(node, previousResult, runtimeParams, params)
-        const childPromise = this.scriptRunner.startAndWait(script.id, session.envId, mappedParams, previousResult, env)
+        const childPromise = this.scriptRunner.startAndWait(script.id, session.envId, mappedParams, previousResult, env, {
+          onLog: (line) => this.handleChildLog(session, nodeSession, line),
+          onSession: (childSession) => {
+            nodeSession.scriptSessionId = childSession.id
+            nodeSession.status = childSession.status
+            nodeSession.phase = childSession.phase
+            nodeSession.runProgress = childSession.runProgress
+            nodeSession.result = childSession.result
+            this.broadcast(session)
+          }
+        })
         const active = this.sessions.get(session.id)
         active!.childSessionId = this.scriptRunner.getActiveSessionForScript(script.id)?.id
         const child = await childPromise
@@ -181,11 +192,17 @@ export class PipelineRunnerService {
     runtimeParams: Record<string, string>,
     envId?: string
   ): Record<string, string> {
-    const inheritedEnvId = script.defaultEnvId ?? envId
+    const pipelineValues = this.resolveNodeValues(
+      pipeline,
+      node,
+      script.paramSchema.map((field) => field.key),
+      runtimeParams,
+      'params',
+      envId
+    )
     return {
-      ...scriptStore.resolveParamsForScript(script, inheritedEnvId),
       ...(node.paramValues ?? {}),
-      ...this.resolveNodeValues(pipeline, node, script.paramSchema.map((field) => field.key), runtimeParams, 'params', envId)
+      ...pipelineValues
     }
   }
 
@@ -231,5 +248,16 @@ export class PipelineRunnerService {
 
   private broadcast(session: PipelineSession): void {
     broadcastToRenderers(IPC.EVENT_PIPELINE_SESSION, session)
+  }
+
+  private handleChildLog(session: PipelineSession, nodeSession: PipelineNodeSession, line: import('../../shared/types/script').LogLine): void {
+    nodeSession.logs = [...(nodeSession.logs ?? []), line]
+    const pipelineLine: PipelineLogLine = {
+      ...line,
+      pipelineSessionId: session.id,
+      nodeId: nodeSession.nodeId,
+      scriptSessionId: line.sessionId
+    }
+    broadcastToRenderers(IPC.EVENT_PIPELINE_LOG, pipelineLine)
   }
 }

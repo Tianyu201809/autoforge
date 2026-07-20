@@ -84,10 +84,15 @@ export class PipelineStore {
   }
 
   private refreshSchemas(pipeline: PipelineMeta): PipelineMeta {
+    const nodes = pipeline.nodes.map((node) => ({
+      ...node,
+      paramValues: { ...(node.paramValues ?? {}) }
+    }))
     return {
       ...pipeline,
-      envSchema: aggregateSchema(pipeline.nodes, 'env') as EnvVarDefinition[],
-      paramSchema: aggregateSchema(pipeline.nodes, 'params') as ParamDefinition[]
+      nodes,
+      envSchema: aggregateSchema(nodes, 'env') as EnvVarDefinition[],
+      paramSchema: aggregateSchema(nodes, 'params') as ParamDefinition[]
     }
   }
 
@@ -102,7 +107,12 @@ export class PipelineStore {
   }
 
   private normalizeNodes(nodes: PipelineNode[]): PipelineNode[] {
-    return nodes.map((node, index) => ({ ...node, id: node.id || randomUUID(), order: index }))
+    return nodes.map((node, index) => ({
+      ...node,
+      id: node.id || randomUUID(),
+      order: index,
+      paramValues: { ...(node.paramValues ?? {}) }
+    }))
   }
 
   private validateNodes(nodes: PipelineNode[]): void {
