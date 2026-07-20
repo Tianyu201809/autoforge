@@ -115,9 +115,15 @@ export class PipelineRunnerService {
         this.broadcast(session)
 
         const params = this.resolveNodeParams(pipeline, node, script, runtimeParams, session.envId)
-        const env = this.resolveNodeValues(pipeline, node, script.envSchema.map((field) => field.key), runtimeParams, 'env', session.envId)
+        const pipelineEnv = this.resolveNodeValues(pipeline, node, script.envSchema.map((field) => field.key), runtimeParams, 'env', session.envId)
+        const resolvedEnv = {
+          ...scriptStore.resolveEnvForPipeline(script, session.envId),
+          ...pipelineEnv
+        }
         const mappedParams = this.applyMappings(node, previousResult, runtimeParams, params)
-        const childPromise = this.scriptRunner.startAndWait(script.id, session.envId, mappedParams, previousResult, env, {
+        const childPromise = this.scriptRunner.startAndWait(script.id, session.envId, undefined, previousResult, undefined, {
+          resolvedParams: mappedParams,
+          resolvedEnv,
           onLog: (line) => this.handleChildLog(session, nodeSession, line),
           onSession: (childSession) => {
             nodeSession.scriptSessionId = childSession.id
@@ -259,5 +265,6 @@ export class PipelineRunnerService {
       scriptSessionId: line.sessionId
     }
     broadcastToRenderers(IPC.EVENT_PIPELINE_LOG, pipelineLine)
+    this.broadcast(session)
   }
 }

@@ -138,6 +138,20 @@ export class ScriptStore {
     return resolved
   }
 
+  resolveEnvForPipeline(script: ScriptMeta, envId?: string): Record<string, string> {
+    const resolvedEnvId = envId ?? this.getDefaultEnvironment().id
+    const profile = this.getEnvironment(resolvedEnvId)
+    const resolved: Record<string, string> = {}
+    for (const def of script.envSchema) {
+      const defaultVal = defaultSchemaValue(def)
+      if (defaultVal) resolved[def.key] = defaultVal
+    }
+    for (const [key, value] of Object.entries(profile?.variables ?? {})) {
+      if (value !== undefined && value !== '') resolved[key] = value
+    }
+    return resolved
+  }
+
   setScriptEnvConfig(scriptId: string, envId: string, values: Record<string, string>): ScriptMeta | null {
     const repos = this.ensureInitialized()
     const script = repos.scripts.getById(scriptId)

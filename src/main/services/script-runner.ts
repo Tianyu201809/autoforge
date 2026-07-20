@@ -46,6 +46,8 @@ interface ScriptStartOptions {
   trigger?: ExecutionTrigger
   input?: unknown
   envOverrides?: Record<string, string>
+  resolvedEnv?: Record<string, string>
+  resolvedParams?: Record<string, string>
   onLog?: (line: LogLine) => void
   onSession?: (session: RunSession) => void
 }
@@ -93,21 +95,27 @@ export class ScriptRunnerService {
     }
 
     const resolvedEnvId = envId ?? script.defaultEnvId ?? scriptStore.getDefaultEnvironment().id
-    const env = {
-      ...scriptStore.resolveEnvForScript(script, resolvedEnvId),
-      ...(options?.envOverrides ?? {})
-    }
+    const env = options?.resolvedEnv
+      ? { ...options.resolvedEnv }
+      : {
+          ...scriptStore.resolveEnvForScript(script, resolvedEnvId),
+          ...(options?.envOverrides ?? {})
+        }
     const envError = scriptStore.validateEnvForScript(script, env)
     if (envError) {
       throw new Error(envError)
     }
 
-    const params = scriptStore.resolveParamsForScript(script, resolvedEnvId, runtimeParams)
+    const params = options?.resolvedParams
+      ? { ...options.resolvedParams }
+      : scriptStore.resolveParamsForScript(script, resolvedEnvId, runtimeParams)
     const paramsError = scriptStore.validateParamsForScript(script, params)
     if (paramsError) {
       throw new Error(paramsError)
     }
-    scriptStore.setScriptParams(scriptId, resolvedEnvId, params)
+    if (!options?.resolvedParams) {
+      scriptStore.setScriptParams(scriptId, resolvedEnvId, params)
+    }
 
     const session: RunSession = {
       id: randomUUID(),
@@ -146,7 +154,7 @@ export class ScriptRunnerService {
     runtimeParams?: Record<string, string>,
     input?: unknown,
     envOverrides?: Record<string, string>,
-    options?: Pick<ScriptStartOptions, 'onLog' | 'onSession' | 'trigger'>
+    options?: Pick<ScriptStartOptions, 'onLog' | 'onSession' | 'trigger' | 'resolvedEnv' | 'resolvedParams'>
   ): Promise<RunSession> {
     const session = await this.start(scriptId, envId, runtimeParams, { input, envOverrides, ...options })
     if (session.status !== 'running') return session

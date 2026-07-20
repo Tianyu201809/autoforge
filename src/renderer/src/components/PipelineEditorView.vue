@@ -3,8 +3,12 @@ import { computed, nextTick, onMounted, onUnmounted, ref, watch } from 'vue'
 import { ArrowDown, ArrowLeft, ArrowUp, Check, ChevronLeft, ChevronRight, Play, Plus, Save, Trash2, Workflow, X } from 'lucide-vue-next'
 import { gsap } from 'gsap'
 import type { EnvironmentProfile, LogLine, PipelineLogLine, PipelineMeta, PipelineNode, PipelineSession, ScriptMeta } from '../../../shared/types/script'
+import type { EnvVarDefinition, ParamDefinition } from '../../../shared/script-contract'
+import { parseParamAttachments } from '../../../shared/param-attachments'
+import { parseCheckboxValue } from '../../../shared/param-choices'
 import { askConfirm } from '../composables/useConfirmDialog'
 import { resolveScriptIcon } from '../lib/script-icon-map'
+import SchemaValueField from './SchemaValueField.vue'
 
 const props = defineProps<{ open: boolean; scripts: ScriptMeta[]; pipeline: PipelineMeta | null; initialSession?: PipelineSession | null }>()
 const emit = defineEmits<{ close: []; back: []; saved: [pipeline: PipelineMeta]; deleted: [] }>()
@@ -16,6 +20,8 @@ const runtimeValues = ref<Record<string, string>>({})
 const runtimeConfig = ref<Record<string, string>>({})
 const persistedRuntimeValues = ref<Record<string, Record<string, string>>>({})
 const persistedRuntimeConfig = ref<Record<string, Record<string, string>>>({})
+const runtimeValueDrafts = ref<Record<string, Record<string, string>>>({})
+const runtimeConfigDrafts = ref<Record<string, Record<string, string>>>({})
 const currentEnvId = ref('default')
 const environments = ref<EnvironmentProfile[]>([])
 const session = ref<PipelineSession | null>(null)
@@ -41,6 +47,8 @@ const showGrid = ref(true)
 const leftCollapsed = ref(false)
 const rightCollapsed = ref(false)
 const runtimeDrawerOpen = ref(false)
+type InspectorTab = 'params' | 'config'
+const inspectorTab = ref<InspectorTab>('params')
 const dragSource = ref<{ source: 'previous-result' | 'pipeline-input'; sourcePath?: string } | null>(null)
 interface ConnectionDraft {
   sourceNodeId: string
@@ -162,17 +170,20 @@ function resetDraft(pipeline: PipelineMeta | null): void {
   lastSavedSnapshot.value = JSON.stringify(draft.value)
   persistedRuntimeValues.value = cloneForIpc(draft.value.paramsByEnv ?? {})
   persistedRuntimeConfig.value = cloneForIpc(draft.value.configByEnv ?? {})
+  runtimeValueDrafts.value = cloneForIpc(persistedRuntimeValues.value)
+  runtimeConfigDrafts.value = cloneForIpc(persistedRuntimeConfig.value)
   syncRuntimeValuesForEnvironment()
   session.value = props.initialSession ?? null
   if (session.value) hydrateSessionLogs(session.value)
+  inspectorTab.value = 'params'
   error.value = ''
   selectedNodeId.value = draft.value.nodes[0]?.id ?? null
   void nextTick(() => centerCanvasView('auto', 'start'))
 }
 
 function syncRuntimeValuesForEnvironment(envId = currentEnvId.value): void {
-  runtimeValues.value = cloneForIpc(persistedRuntimeValues.value[envId] ?? {})
-  runtimeConfig.value = cloneForIpc(persistedRuntimeConfig.value[envId] ?? {})
+  runtimeValues.value = cloneForIpc(runtimeValueDrafts.value[envId] ?? persistedRuntimeValues.value[envId] ?? {})
+  runtimeConfig.value = cloneForIpc(runtimeConfigDrafts.value[envId] ?? persistedRuntimeConfig.value[envId] ?? {})
 }
 
 function hydrateSessionLogs(next: PipelineSession): void {
@@ -207,7 +218,37 @@ function pipelineNodeName(nodeId: string): string {
   return draft.value?.nodes.find((node) => node.id === nodeId)?.name ?? nodeId
 }
 
-const isDirty = computed(() => Boolean(draft.value && JSON.stringify(draft.value) !== lastSavedSnapshot.value))
+function sameValues(left: Record<string, string>, right: Record<string, string>): boolean {
+  const leftEntries = Object.entries(left).sort(([leftKey], [rightKey]) => leftKey.localeCompare(rightKey))
+  const rightEntries = Object.entries(right).sort(([leftKey], [rightKey]) => leftKey.localeCompare(rightKey))
+  return JSON.stringify(leftEntries) === JSON.stringify(rightEntries)
+}
+
+const runtimeDirty = computed(() => {
+  const valueDrafts = {
+    ...runtimeValueDrafts.value,
+    [currentEnvId.value]: runtimeValues.value
+  }
+  const configDrafts = {
+    ...runtimeConfigDrafts.value,
+    [currentEnvId.value]: runtimeConfig.value
+  }
+  const envIds = new Set([
+    ...Object.keys(persistedRuntimeValues.value),
+    ...Object.keys(persistedRuntimeConfig.value),
+    ...Object.keys(valueDrafts),
+    ...Object.keys(configDrafts)
+  ])
+  return Array.from(envIds).some((envId) => (
+    !sameValues(valueDrafts[envId] ?? {}, persistedRuntimeValues.value[envId] ?? {})
+    || !sameValues(configDrafts[envId] ?? {}, persistedRuntimeConfig.value[envId] ?? {})
+  ))
+})
+
+const isDirty = computed(() => Boolean(
+  draft.value
+  && (JSON.stringify(draft.value) !== lastSavedSnapshot.value || runtimeDirty.value)
+))
 
 async function loadEnvironment(): Promise<void> {
   environments.value = await window.autoforge.env.list()
@@ -436,16 +477,58 @@ function nodeParamFields(node: PipelineNode) {
   return scriptFor(node)?.paramSchema ?? []
 }
 
+function nodeEnvFields(node: PipelineNode) {
+  return scriptFor(node)?.envSchema ?? []
+}
+
+type PipelineSchemaField = ParamDefinition | EnvVarDefinition
+
+function pipelineFieldKey(node: PipelineNode, fieldKey: string): string {
+  return `${node.id}.${fieldKey}`
+}
+
+function pipelineAttachmentKey(node: PipelineNode, fieldKey: string, scope: 'fixed' | 'params' | 'config'): string {
+  return ['pipeline', draft.value?.id || 'draft', node.id, scope, fieldKey]
+    .map((segment) => segment.replace(/[^A-Za-z0-9_.-]/g, '_'))
+    .join('__')
+}
+
+function cleanupRemovedAttachments(previousValue: string, nextValue: string): void {
+  const nextPaths = new Set(parseParamAttachments(nextValue).map((item) => item.path))
+  for (const item of parseParamAttachments(previousValue)) {
+    if (!nextPaths.has(item.path)) void window.autoforge.scripts.removeAttachment(item.path)
+  }
+}
+
 function fixedParamValue(node: PipelineNode, key: string): string {
   return node.paramValues?.[key] ?? ''
 }
 
-function setFixedParamValue(node: PipelineNode, key: string, value: string): void {
+function setFixedParamValue(node: PipelineNode, key: string, value: string, field?: PipelineSchemaField): void {
+  if (field?.type === 'attachment') cleanupRemovedAttachments(fixedParamValue(node, key), value)
   node.paramValues = { ...(node.paramValues ?? {}), [key]: value }
 }
 
-function onFixedParamInput(event: Event, node: PipelineNode, key: string): void {
-  setFixedParamValue(node, key, (event.target as HTMLInputElement).value)
+function setRuntimeValue(kind: 'params' | 'config', node: PipelineNode, field: PipelineSchemaField, value: string): void {
+  const key = pipelineFieldKey(node, field.key)
+  const target = kind === 'params' ? runtimeValues : runtimeConfig
+  if (field.type === 'attachment') cleanupRemovedAttachments(target.value[key] ?? '', value)
+  target.value = { ...target.value, [key]: value }
+}
+
+function fixedParamSummary(node: PipelineNode, field: ParamDefinition): string {
+  const value = fixedParamValue(node, field.key)
+  if (!value) return field.default ? `默认：${field.default}` : '未设置'
+  if (field.type === 'attachment') return `${parseParamAttachments(value).length} 个附件`
+  if (field.type === 'checkbox') {
+    const selected = parseCheckboxValue(value)
+    return selected.map((item) => field.options?.find((option) => option.value === item)?.label ?? item).join('、') || '未选择'
+  }
+  if (field.type === 'boolean') return value === 'true' ? '已开启' : '已关闭'
+  if (field.type === 'select' || field.type === 'radio') {
+    return field.options?.find((option) => option.value === value)?.label ?? value
+  }
+  return value
 }
 
 function removeMapping(node: PipelineNode, index: number): void {
@@ -575,6 +658,42 @@ const aggregateParams = computed(() => {
   return node ? (scriptFor(node)?.paramSchema ?? []).map((field) => ({ ...field, key: `${node.id}.${field.key}`, label: field.label })) : []
 })
 
+async function persistRuntimeDrafts(meta: PipelineMeta): Promise<PipelineMeta> {
+  runtimeValueDrafts.value = {
+    ...runtimeValueDrafts.value,
+    [currentEnvId.value]: cloneForIpc(runtimeValues.value)
+  }
+  runtimeConfigDrafts.value = {
+    ...runtimeConfigDrafts.value,
+    [currentEnvId.value]: cloneForIpc(runtimeConfig.value)
+  }
+
+  let saved = meta
+  const envIds = new Set([
+    ...Object.keys(runtimeValueDrafts.value),
+    ...Object.keys(runtimeConfigDrafts.value)
+  ])
+  for (const envId of envIds) {
+    const params = runtimeValueDrafts.value[envId] ?? {}
+    const config = runtimeConfigDrafts.value[envId] ?? {}
+    if (
+      sameValues(params, persistedRuntimeValues.value[envId] ?? {})
+      && sameValues(config, persistedRuntimeConfig.value[envId] ?? {})
+    ) continue
+    saved = await window.autoforge.pipelines.setValues(meta.id, envId, {
+      params: cloneForIpc(params),
+      config: cloneForIpc(config)
+    })
+  }
+
+  persistedRuntimeValues.value = cloneForIpc(saved.paramsByEnv ?? {})
+  persistedRuntimeConfig.value = cloneForIpc(saved.configByEnv ?? {})
+  runtimeValueDrafts.value = cloneForIpc(persistedRuntimeValues.value)
+  runtimeConfigDrafts.value = cloneForIpc(persistedRuntimeConfig.value)
+  syncRuntimeValuesForEnvironment()
+  return saved
+}
+
 async function save(): Promise<void> {
   if (!draft.value || !draft.value.name.trim() || !draft.value.nodes.length) {
     error.value = '请填写流水线名称并至少添加一个脚本节点'
@@ -584,9 +703,11 @@ async function save(): Promise<void> {
   error.value = ''
   try {
     const payload = { name: draft.value.name, description: draft.value.description, nodes: cloneForIpc(draft.value.nodes) }
-    const saved = draft.value.id
+    const savedMeta = draft.value.id
       ? await window.autoforge.pipelines.update(draft.value.id, payload)
       : await window.autoforge.pipelines.create(payload)
+    draft.value = cloneForIpc(savedMeta)
+    const saved = await persistRuntimeDrafts(savedMeta)
     draft.value = cloneForIpc(saved)
     lastSavedSnapshot.value = JSON.stringify(draft.value)
     emit('saved', saved)
@@ -602,6 +723,7 @@ async function run(): Promise<void> {
     await save()
     if (!draft.value?.id) return
   }
+  error.value = ''
   try {
     runtimeDrawerOpen.value = true
     const saved = await window.autoforge.pipelines.setValues(draft.value.id, currentEnvId.value, {
@@ -610,6 +732,14 @@ async function run(): Promise<void> {
     })
     persistedRuntimeValues.value = cloneForIpc(saved.paramsByEnv ?? {})
     persistedRuntimeConfig.value = cloneForIpc(saved.configByEnv ?? {})
+    runtimeValueDrafts.value = {
+      ...runtimeValueDrafts.value,
+      [currentEnvId.value]: cloneForIpc(runtimeValues.value)
+    }
+    runtimeConfigDrafts.value = {
+      ...runtimeConfigDrafts.value,
+      [currentEnvId.value]: cloneForIpc(runtimeConfig.value)
+    }
     const started = await window.autoforge.pipelines.start(
       draft.value.id,
       currentEnvId.value,
@@ -666,7 +796,18 @@ watch(() => props.initialSession, (next) => {
   }
 })
 watch(currentEnvId, (envId, previousEnvId) => {
-  if (envId !== previousEnvId) syncRuntimeValuesForEnvironment(envId)
+  if (envId === previousEnvId) return
+  if (previousEnvId) {
+    runtimeValueDrafts.value = {
+      ...runtimeValueDrafts.value,
+      [previousEnvId]: cloneForIpc(runtimeValues.value)
+    }
+    runtimeConfigDrafts.value = {
+      ...runtimeConfigDrafts.value,
+      [previousEnvId]: cloneForIpc(runtimeConfig.value)
+    }
+  }
+  syncRuntimeValuesForEnvironment(envId)
 })
 watch(() => JSON.stringify(draft.value?.nodes), () => void nextTick(measureConnections))
 watch(canvasScale, () => void nextTick(measureConnections))
@@ -696,7 +837,13 @@ onMounted(() => {
   offSession = window.autoforge.pipelines.onSession((next) => {
     if (next.pipelineId === draft.value?.id && (!session.value || next.id === session.value.id || next.startedAt >= session.value.startedAt)) {
       session.value = next
-      if (next.status === 'running') runtimeDrawerOpen.value = true
+      if (next.status === 'running') {
+        runtimeDrawerOpen.value = true
+      }
+      if (next.status === 'error') {
+        error.value = next.errorMessage ?? '流水线执行失败'
+        runtimeDrawerOpen.value = true
+      }
       hydrateSessionLogs(next)
       void nextTick(measureConnections)
     }
@@ -855,7 +1002,7 @@ onUnmounted(() => {
                           @drop="dropFieldMapping($event, node, field.key)"
                         >
                           <span class="pipeline-param-drop-label">{{ field.label }}</span>
-                          <input :value="fixedParamValue(node, field.key)" class="pipeline-fixed-param" :placeholder="`固定值 · ${field.key}`" @input="onFixedParamInput($event, node, field.key)" />
+                          <span class="pipeline-fixed-param-value" :title="fixedParamSummary(node, field)">{{ fixedParamSummary(node, field) }}</span>
                           <button class="pipeline-port-button is-target" type="button" aria-label="连接到此输入字段" @click.stop="finishConnection(node, field.key)">＋</button>
                         </div>
                       </div>
@@ -883,23 +1030,7 @@ onUnmounted(() => {
               </div>
             </div>
           </div>
-          <div v-if="false" class="rounded-xl border sb-border-subtle sb-bg-inset p-4">
-            <div class="flex items-center justify-between mb-3"><h3 class="text-[12px] font-semibold sb-text-primary">执行节点</h3><span class="text-[11px] sb-text-faint">按顺序执行</span></div>
-            <div v-if="!draft.nodes.length" class="py-8 text-center text-[12px] sb-text-faint">从右侧选择脚本添加节点</div>
-            <div v-for="(node, index) in draft.nodes" :key="node.id" class="rounded-xl border sb-border-subtle sb-bg-panel p-3 mb-2">
-              <div class="flex items-center gap-2"><span class="w-6 h-6 rounded-full bg-[var(--sb-accent-solid)]/15 text-[var(--sb-accent-solid)] flex items-center justify-center text-[11px] font-semibold">{{ index + 1 }}</span><input v-model="node.name" class="flex-1 bg-transparent text-[13px] font-medium sb-text-primary outline-none" /><span class="text-[10px] sb-text-faint">{{ scriptFor(node)?.name }}</span><button class="sb-icon-btn" @click="moveNode(index, -1)"><ArrowUp class="w-3.5 h-3.5" /></button><button class="sb-icon-btn" @click="moveNode(index, 1)"><ArrowDown class="w-3.5 h-3.5" /></button><button class="sb-icon-btn text-rose-400" @click="removeNode(index)"><Trash2 class="w-3.5 h-3.5" /></button></div>
-              <div class="mt-3 pl-8 space-y-2">
-                <div v-for="(mapping, mappingIndex) in node.inputMappings" :key="mappingIndex" class="grid grid-cols-[120px_1fr_140px_28px] gap-2 items-center"><select v-model="mapping.source" class="sb-input rounded-md text-[11px] h-7 px-2"><option value="previous-result">上一步结果</option><option value="pipeline-input">流水线输入</option></select><input v-model="mapping.sourcePath" class="sb-input rounded-md text-[11px] h-7 px-2" placeholder="字段路径" /><input v-model="mapping.targetParam" class="sb-input rounded-md text-[11px] h-7 px-2" placeholder="目标参数 key" /><button class="sb-icon-btn" @click="removeMapping(node, mappingIndex)"><X class="w-3.5 h-3.5" /></button></div>
-                <button class="text-[11px] text-[var(--sb-accent-solid)] hover:underline" @click="addMapping(node)">+添加输入映射</button>
-              </div>
-            </div>
-          </div>
-          <div v-if="false" class="grid grid-cols-2 gap-4">
-            <div class="rounded-xl border sb-border-subtle p-4"><div class="flex items-center justify-between mb-3"><h3 class="text-[12px] font-semibold sb-text-primary">流水线输入参数</h3><select v-model="currentEnvId" class="sb-input h-7 rounded-md text-[11px] px-2"><option v-for="environment in environments" :key="environment.id" :value="environment.id">{{ environment.name }}</option></select></div><p class="text-[10px] sb-text-faint mb-3">仅首个脚本的参数作为流水线输入</p><div v-if="!aggregateParams.length" class="text-[11px] sb-text-faint">首个脚本没有声明参数</div><label v-for="field in aggregateParams" :key="field.key" class="block mb-3"><span class="block text-[11px] sb-text-muted mb-1">{{ field.label }}</span><input v-model="runtimeValues[field.key]" class="sb-input w-full h-8 rounded-md text-[12px] px-2" :placeholder="field.key" /></label><h3 v-if="draft.envSchema.length" class="text-[12px] font-semibold sb-text-primary mt-5 mb-3">全部节点环境配置</h3><p v-if="draft.envSchema.length" class="text-[10px] sb-text-faint mb-3">当前环境会统一应用到所有脚本节点</p><label v-for="field in draft.envSchema" :key="field.key" class="block mb-3"><span class="block text-[11px] sb-text-muted mb-1">{{ field.label }}</span><input v-model="runtimeConfig[field.key]" class="sb-input w-full h-8 rounded-md text-[12px] px-2" :placeholder="field.key" /></label></div>
-            <div class="rounded-xl border sb-border-subtle p-4"><h3 class="text-[12px] font-semibold sb-text-primary mb-3">可用脚本</h3><p class="text-[10px] sb-text-faint mb-2">点击添加，或拖到画布末尾</p><input v-model="search" class="sb-input w-full h-8 rounded-md text-[12px] px-2 mb-2" placeholder="搜索脚本" /><div class="max-h-48 overflow-y-auto space-y-1"><button v-for="script in filteredScripts" :key="script.id" draggable="true" class="w-full text-left px-2.5 py-2 rounded-md sb-text-muted hover:sb-bg-hover text-[12px] flex items-center justify-between" @click="addNode(script.id)" @dragstart="onScriptDragStart($event, script.id)"><span>{{ script.name }}</span><Plus class="w-3.5 h-3.5" /></button></div></div>
-          </div>
           <div v-if="error" class="rounded-lg bg-rose-500/10 border border-rose-500/20 px-3 py-2 text-[12px] text-rose-400">{{ error }}</div>
-          <div v-if="false && session" class="rounded-xl border sb-border-subtle p-4"><div class="flex items-center justify-between mb-3"><h3 class="text-[12px] font-semibold sb-text-primary">运行状态</h3><span class="text-[11px]">{{ session.status }}</span></div><div class="space-y-1.5"><div v-for="node in session.nodes" :key="node.nodeId" class="flex items-center gap-2 text-[11px] sb-text-muted"><Check v-if="node.status === 'success'" class="w-3.5 h-3.5 text-emerald-400" /><span v-else class="w-3.5 h-3.5 rounded-full border sb-border-subtle"></span>{{ draft.nodes.find((item) => item.id === node.nodeId)?.name }}</div></div></div>
           <footer class="pipeline-editor-footer flex items-center justify-end gap-2"><button class="h-8 px-3 rounded-lg sb-btn-ghost text-[12px]" @click="attemptLeave('close')">关闭</button><button class="h-8 px-3 rounded-lg sb-btn-ghost text-[12px] flex items-center gap-1.5" :disabled="saving" @click="save"><Save class="w-3.5 h-3.5" />{{ saving ? '保存中' : '保存' }}</button><button v-if="session?.status === 'running'" class="h-8 px-3 rounded-lg bg-rose-500/10 text-rose-400 text-[12px]" @click="stop">停止</button><button v-else class="h-8 px-3 rounded-lg sb-btn-accent text-[12px] flex items-center gap-1.5" @click="run"><Play class="w-3.5 h-3.5" />运行流水线</button></footer>
         </main>
         <aside v-if="draft" ref="rightSidebarRef" class="workflow-inspector" :class="[rightCollapsed && 'is-collapsed', resizingPanel === 'right' && 'is-resizing']" :style="rightSidebarStyle">
@@ -909,7 +1040,68 @@ onUnmounted(() => {
           <div v-if="!rightCollapsed && selectedNode" class="workflow-inspector-body">
             <div class="workflow-inspector-node"><span class="pipeline-node-index">{{ selectedNode.order + 1 }}</span><div><strong>{{ selectedNode.name }}</strong><small>{{ scriptFor(selectedNode)?.name }}</small></div></div>
             <label class="workflow-field-label">节点名称<input v-model="selectedNode.name" class="sb-input workflow-inspector-input" /></label>
-            <div class="workflow-inspector-section"><div class="workflow-section-title">固定参数</div><div v-if="!nodeParamFields(selectedNode).length" class="workflow-inspector-empty">该脚本没有参数</div><label v-for="field in nodeParamFields(selectedNode)" :key="field.key" class="workflow-field-label">{{ field.label }}<input :value="fixedParamValue(selectedNode, field.key)" class="sb-input workflow-inspector-input" :placeholder="`固定值 · ${field.key}`" @input="onFixedParamInput($event, selectedNode, field.key)" /></label></div>
+            <div class="workflow-inspector-context">
+              <span>当前环境</span>
+              <select v-model="currentEnvId" class="sb-input workflow-inspector-env" :disabled="session?.status === 'running'">
+                <option v-for="environment in environments" :key="environment.id" :value="environment.id">{{ environment.name }}</option>
+              </select>
+            </div>
+            <div class="workflow-inspector-tabs" role="tablist" aria-label="节点属性">
+              <button type="button" :class="inspectorTab === 'params' && 'is-active'" @click="inspectorTab = 'params'">参数</button>
+              <button type="button" :class="inspectorTab === 'config' && 'is-active'" @click="inspectorTab = 'config'">配置</button>
+            </div>
+            <div v-if="inspectorTab === 'params'" class="workflow-inspector-tab-panel">
+              <div class="workflow-inspector-section">
+                <div class="workflow-section-title"><span>固定参数</span><small>所有环境通用</small></div>
+                <div v-if="!nodeParamFields(selectedNode).length" class="workflow-inspector-empty">该脚本没有参数</div>
+                <SchemaValueField
+                  v-for="field in nodeParamFields(selectedNode)"
+                  :key="`fixed-${field.key}`"
+                  class="workflow-schema-field"
+                  :def="field"
+                  :model-value="fixedParamValue(selectedNode, field.key)"
+                  :script-id="selectedNode.scriptId"
+                  :attachment-storage-key="pipelineAttachmentKey(selectedNode, field.key, 'fixed')"
+                  :show-key="false"
+                  show-clear
+                  @update:model-value="setFixedParamValue(selectedNode, field.key, $event, field)"
+                />
+              </div>
+              <div class="workflow-inspector-section">
+                <div class="workflow-section-title"><span>运行参数</span><small>当前环境</small></div>
+                <div v-if="!nodeParamFields(selectedNode).length" class="workflow-inspector-empty">该脚本没有参数</div>
+                <SchemaValueField
+                  v-for="field in nodeParamFields(selectedNode)"
+                  :key="`runtime-${field.key}`"
+                  class="workflow-schema-field"
+                  :def="field"
+                  :model-value="runtimeValues[pipelineFieldKey(selectedNode, field.key)] ?? ''"
+                  :script-id="selectedNode.scriptId"
+                  :attachment-storage-key="pipelineAttachmentKey(selectedNode, field.key, 'params')"
+                  :show-key="false"
+                  show-clear
+                  @update:model-value="setRuntimeValue('params', selectedNode, field, $event)"
+                />
+              </div>
+            </div>
+            <div v-else class="workflow-inspector-tab-panel">
+              <div class="workflow-inspector-section">
+                <div class="workflow-section-title"><span>环境配置</span><small>当前环境</small></div>
+                <div v-if="!nodeEnvFields(selectedNode).length" class="workflow-inspector-empty">该脚本没有环境配置</div>
+                <SchemaValueField
+                  v-for="field in nodeEnvFields(selectedNode)"
+                  :key="field.key"
+                  class="workflow-schema-field"
+                  :def="field"
+                  :model-value="runtimeConfig[pipelineFieldKey(selectedNode, field.key)] ?? ''"
+                  :script-id="selectedNode.scriptId"
+                  :attachment-storage-key="pipelineAttachmentKey(selectedNode, field.key, 'config')"
+                  :show-key="false"
+                  show-clear
+                  @update:model-value="setRuntimeValue('config', selectedNode, field, $event)"
+                />
+              </div>
+            </div>
             <div class="workflow-inspector-section"><div class="workflow-section-title">输入映射 <span>{{ selectedNode.inputMappings?.length ?? 0 }}</span></div><div v-for="(mapping, mappingIndex) in selectedNode.inputMappings" :key="mappingIndex" class="workflow-inspector-mapping"><select v-model="mapping.source" class="sb-input"><option value="previous-result">上一步结果</option><option value="pipeline-input">流水线输入</option></select><input v-model="mapping.sourcePath" class="sb-input" placeholder="字段路径" /><select v-model="mapping.targetParam" class="sb-input"><option v-for="field in nodeParamFields(selectedNode)" :key="field.key" :value="field.key">{{ field.label }}</option></select><button class="sb-icon-btn text-rose-400" @click="removeMapping(selectedNode, mappingIndex)"><X class="w-3.5 h-3.5" /></button></div><button class="workflow-add-mapping" @click="addMapping(selectedNode)">+ 添加映射</button></div>
           </div>
           <div v-else-if="!rightCollapsed" class="workflow-inspector-empty workflow-inspector-empty--large">点击画布中的节点查看属性</div>
@@ -918,31 +1110,28 @@ onUnmounted(() => {
       </div>
       <section v-if="draft" class="pipeline-runtime-drawer" :class="runtimeDrawerOpen && 'is-open'">
         <button class="pipeline-runtime-toggle" @click="runtimeDrawerOpen = !runtimeDrawerOpen">
-          <span><span class="pipeline-runtime-dot" :class="session?.status === 'running' && 'is-running'"></span><strong>运行与输入</strong><small>{{ session ? `上次运行：${session.status}` : '设置运行参数和环境' }}</small></span>
+          <span><span class="pipeline-runtime-dot" :class="session?.status === 'running' && 'is-running'"></span><strong>运行监控</strong><small>{{ session ? `上次运行：${session.status}` : '查看节点状态与运行日志' }}</small></span>
           <span class="pipeline-runtime-toggle-action">{{ runtimeDrawerOpen ? '收起' : '展开' }}⌃</span>
         </button>
         <div v-if="runtimeDrawerOpen" class="pipeline-runtime-body">
-          <div class="pipeline-runtime-column">
-            <div class="pipeline-runtime-heading"><strong>流水线输入</strong><select v-model="currentEnvId" class="sb-input pipeline-runtime-env"><option v-for="environment in environments" :key="environment.id" :value="environment.id">{{ environment.name }}</option></select></div>
-            <p>仅首个脚本的参数作为流水线输入</p>
-            <label v-for="field in aggregateParams" :key="field.key" class="pipeline-runtime-field"><span>{{ field.label }}</span><input v-model="runtimeValues[field.key]" class="sb-input" :placeholder="field.key" /></label>
-            <span v-if="!aggregateParams.length" class="pipeline-runtime-empty">首个脚本没有声明参数</span>
-          </div>
-          <div class="pipeline-runtime-column">
-            <div class="pipeline-runtime-heading"><strong>运行状态</strong><span class="pipeline-runtime-status">{{ session?.status ?? 'idle' }}</span></div>
-            <div v-if="session" class="pipeline-runtime-steps"><div v-for="node in session.nodes" :key="node.nodeId" class="pipeline-runtime-step"><Check v-if="node.status === 'success'" class="h-3.5 w-3.5 text-emerald-400" /><span v-else class="pipeline-runtime-step-dot"></span><span>{{ draft.nodes.find((item) => item.id === node.nodeId)?.name }}</span><small>{{ node.status }}</small></div></div>
-            <span v-else class="pipeline-runtime-empty">运行后会在这里显示每个节点的状态</span>
-          </div>
-          <div v-if="session" class="pipeline-runtime-log-wrap">
-            <div class="pipeline-runtime-heading"><strong>脚本运行日志</strong><span class="pipeline-runtime-log-count">{{ activePipelineLogs.length }}</span></div>
-            <div v-if="activePipelineLogs.length" class="pipeline-runtime-logs">
-              <p v-for="(log, index) in activePipelineLogs" :key="`${log.ts}-${index}`" class="pipeline-runtime-log-line">
-                <span class="pipeline-runtime-log-time">{{ pipelineLogTime(log.ts) }}</span>
-                <span class="pipeline-runtime-log-node">{{ pipelineNodeName(log.nodeId) }}</span>
-                <span :class="pipelineLogClass(log.level)">{{ log.message }}</span>
-              </p>
+          <div class="pipeline-runtime-status-grid">
+            <div class="pipeline-runtime-column">
+              <div class="pipeline-runtime-heading"><strong>运行状态</strong><span class="pipeline-runtime-status">{{ session?.status ?? 'idle' }}</span></div>
+              <p v-if="session?.status === 'error'" class="pipeline-runtime-error">{{ session.errorMessage || '流水线执行失败' }}</p>
+              <div v-if="session" class="pipeline-runtime-steps"><div v-for="node in session.nodes" :key="node.nodeId" class="pipeline-runtime-step"><Check v-if="node.status === 'success'" class="h-3.5 w-3.5 text-emerald-400" /><span v-else class="pipeline-runtime-step-dot"></span><span>{{ draft.nodes.find((item) => item.id === node.nodeId)?.name }}</span><small>{{ node.status }}</small></div></div>
+              <span v-else class="pipeline-runtime-empty">运行后会在这里显示每个节点的状态</span>
             </div>
-            <span v-else class="pipeline-runtime-empty">等待脚本输出日志</span>
+            <div class="pipeline-runtime-log-wrap">
+              <div class="pipeline-runtime-heading"><strong>脚本运行日志</strong><span class="pipeline-runtime-log-count">{{ activePipelineLogs.length }}</span></div>
+              <div v-if="activePipelineLogs.length" class="pipeline-runtime-logs">
+                <p v-for="(log, index) in activePipelineLogs" :key="`${log.ts}-${index}`" class="pipeline-runtime-log-line">
+                  <span class="pipeline-runtime-log-time">{{ pipelineLogTime(log.ts) }}</span>
+                  <span class="pipeline-runtime-log-node">{{ pipelineNodeName(log.nodeId) }}</span>
+                  <span :class="pipelineLogClass(log.level)">{{ log.message }}</span>
+                </p>
+              </div>
+              <span v-else class="pipeline-runtime-empty">等待脚本输出日志</span>
+            </div>
           </div>
         </div>
       </section>
@@ -1005,9 +1194,18 @@ onUnmounted(() => {
 .workflow-inspector-node small { display: block; margin-top: 3px; color: var(--sb-text-faint); font-size: 10px; }
 .workflow-field-label { display: grid; gap: 7px; color: var(--sb-text-muted); font-size: 10px; }
 .workflow-inspector-input { width: 100%; height: 31px; padding: 0 9px; font-size: 11px; }
+.workflow-inspector-context { display: flex; align-items: center; justify-content: space-between; gap: 9px; color: var(--sb-text-faint); font-size: 10px; }
+.workflow-inspector-env { min-width: 0; height: 29px; flex: 1; padding: 0 8px; font-size: 10px; }
+.workflow-inspector-tabs { display: grid; grid-template-columns: 1fr 1fr; gap: 4px; padding: 4px; border: 1px solid var(--sb-border-subtle); border-radius: 10px; background: color-mix(in srgb, var(--sb-bg-inset) 74%, transparent); }
+.workflow-inspector-tabs button { min-height: 29px; border-radius: 7px; color: var(--sb-text-muted); font-size: 10px; transition: 150ms ease; }
+.workflow-inspector-tabs button:hover { color: var(--sb-text-primary); }
+.workflow-inspector-tabs button.is-active { color: var(--sb-accent-solid); background: color-mix(in srgb, var(--sb-accent-solid) 12%, var(--sb-bg-panel)); box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--sb-accent-solid) 26%, transparent); }
+.workflow-inspector-tab-panel { display: grid; gap: 12px; }
 .workflow-inspector-section { display: grid; gap: 10px; padding-top: 15px; border-top: 1px solid var(--sb-border-subtle); }
+.workflow-schema-field { min-width: 0; padding: 10px; border: 1px solid var(--sb-border-subtle); border-radius: 9px; background: color-mix(in srgb, var(--sb-bg-inset) 52%, transparent); }
 .workflow-section-title { display: flex; justify-content: space-between; color: var(--sb-text-primary); font-size: 11px; font-weight: 650; }
 .workflow-section-title span { color: var(--sb-text-faint); font-size: 10px; font-weight: 400; }
+.workflow-section-title small { color: var(--sb-text-faint); font-size: 9px; font-weight: 400; }
 .workflow-inspector-mapping { display: grid; grid-template-columns: 1fr 1fr 1fr 26px; gap: 5px; align-items: center; }
 .workflow-inspector-mapping .sb-input { min-width: 0; height: 28px; padding: 0 5px; font-size: 9px; }
 .workflow-add-mapping { color: var(--sb-accent-solid); font-size: 10px; text-align: left; }
@@ -1023,26 +1221,26 @@ onUnmounted(() => {
 .pipeline-runtime-toggle-action { color: var(--sb-accent-solid); font-size: 10px; }
 .pipeline-runtime-dot { width: 7px; height: 7px; border-radius: 99px; background: var(--sb-text-faint); }
 .pipeline-runtime-dot.is-running { background: var(--sb-accent-solid); box-shadow: 0 0 0 4px color-mix(in srgb, var(--sb-accent-solid) 14%, transparent); animation: pipeline-pulse 1.4s ease-in-out infinite; }
-.pipeline-runtime-body { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 20px; padding: 0 18px 16px; border-top: 1px solid var(--sb-border-subtle); }
+.pipeline-runtime-body { max-height: min(62vh, 560px); padding: 0 18px 16px; overflow-y: auto; border-top: 1px solid var(--sb-border-subtle); }
 .pipeline-runtime-column { min-width: 0; padding-top: 13px; }
 .pipeline-runtime-heading { display: flex; align-items: center; justify-content: space-between; color: var(--sb-text-primary); font-size: 11px; font-weight: 650; }
 .pipeline-runtime-heading > p, .pipeline-runtime-column > p { margin: 5px 0 10px; color: var(--sb-text-faint); font-size: 10px; }
 .pipeline-runtime-env { height: 27px; padding: 0 8px; font-size: 10px; }
 .pipeline-runtime-status { color: var(--sb-text-faint); font-size: 10px; font-weight: 400; }
-.pipeline-runtime-field { display: grid; grid-template-columns: 100px minmax(0, 1fr); align-items: center; gap: 8px; margin-top: 7px; color: var(--sb-text-muted); font-size: 10px; }
-.pipeline-runtime-field .sb-input { height: 27px; padding: 0 8px; font-size: 10px; }
+.pipeline-runtime-status-grid { display: grid; grid-template-columns: minmax(220px, .7fr) minmax(0, 1.3fr); gap: 18px; }
 .pipeline-runtime-empty { display: block; padding: 14px 0; color: var(--sb-text-faint); font-size: 10px; }
 .pipeline-runtime-steps { display: grid; gap: 7px; margin-top: 10px; }
 .pipeline-runtime-step { display: flex; align-items: center; gap: 7px; color: var(--sb-text-muted); font-size: 10px; }
 .pipeline-runtime-step small { margin-left: auto; color: var(--sb-text-faint); font-size: 9px; }
 .pipeline-runtime-step-dot { width: 8px; height: 8px; border: 1px solid var(--sb-border); border-radius: 99px; }
-.pipeline-runtime-log-wrap { grid-column: 1 / -1; min-width: 0; padding-top: 12px; border-top: 1px solid var(--sb-border-subtle); }
+.pipeline-runtime-error { margin: 5px 0 10px; color: #f43f5e; font-size: 10px; line-height: 1.45; }
+.pipeline-runtime-log-wrap { min-width: 0; padding-top: 13px; }
 .pipeline-runtime-log-count { min-width: 18px; padding: 2px 5px; border-radius: 99px; color: var(--sb-text-faint); font-size: 9px; font-weight: 500; text-align: center; background: color-mix(in srgb, var(--sb-text-faint) 10%, transparent); }
 .pipeline-runtime-logs { max-height: 150px; margin-top: 8px; padding: 7px 9px; overflow-y: auto; border: 1px solid var(--sb-border-subtle); border-radius: 8px; background: color-mix(in srgb, var(--sb-bg-inset) 72%, transparent); font-family: ui-monospace, SFMono-Regular, Consolas, monospace; }
 .pipeline-runtime-log-line { display: grid; grid-template-columns: 62px 92px minmax(0, 1fr); gap: 7px; margin: 0; padding: 2px 0; color: var(--sb-text-secondary); font-size: 10px; line-height: 1.45; }
 .pipeline-runtime-log-time, .pipeline-runtime-log-node { color: var(--sb-text-faint); white-space: nowrap; }
 .pipeline-runtime-log-node { overflow: hidden; text-overflow: ellipsis; }
-@media (max-width: 900px) { .pipeline-runtime-body { grid-template-columns: 1fr; } .pipeline-runtime-log-wrap { grid-column: auto; } }
+@media (max-width: 900px) { .pipeline-runtime-status-grid { grid-template-columns: 1fr; } }
 .pipeline-editor-footer { display: none; }
 
 .pipeline-canvas-hint {
@@ -1209,8 +1407,7 @@ onUnmounted(() => {
 .pipeline-param-drop:hover, .pipeline-param-drop.is-connection-target { border-color: color-mix(in srgb, var(--sb-accent-solid) 70%, var(--sb-border)); background: color-mix(in srgb, var(--sb-accent-solid) 6%, transparent); }
 .pipeline-param-drop.is-connection-target { cursor: crosshair; box-shadow: 0 0 0 2px color-mix(in srgb, var(--sb-accent-solid) 12%, transparent); }
 .pipeline-param-drop-label { overflow: hidden; color: var(--sb-text-muted); font-size: 9px; text-overflow: ellipsis; white-space: nowrap; }
-.pipeline-fixed-param { min-width: 0; height: 23px; padding: 0 5px; border: 1px solid color-mix(in srgb, var(--sb-border) 70%, transparent); border-radius: 5px; outline: none; color: var(--sb-text-secondary); font-size: 9px; background: color-mix(in srgb, var(--sb-bg-panel) 80%, transparent); }
-.pipeline-fixed-param:focus { border-color: var(--sb-accent-solid); }
+.pipeline-fixed-param-value { min-width: 0; overflow: hidden; color: var(--sb-text-faint); font-size: 9px; text-overflow: ellipsis; white-space: nowrap; }
 .pipeline-port { width: 6px; height: 6px; flex: 0 0 6px; border: 1px solid currentColor; border-radius: 999px; background: var(--sb-bg-panel); }
 .pipeline-port-button { display: grid; width: 18px; height: 18px; flex: 0 0 18px; aspect-ratio: 1; place-items: center; border: 1px solid color-mix(in srgb, currentColor 42%, transparent); border-radius: 50%; color: currentColor; font-size: 12px; line-height: 1; opacity: .35; transition: 150ms ease; }
 .pipeline-field-chip:hover .pipeline-port-button, .pipeline-result-source:hover .pipeline-port-button, .pipeline-param-drop.is-connection-target .pipeline-port-button, .pipeline-node-card.is-connection-source .pipeline-port-button { opacity: 1; transform: scale(1.06); }
