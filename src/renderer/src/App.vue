@@ -19,6 +19,7 @@ import ToastHost from './components/ToastHost.vue'
 import ConfirmDialogHost from './components/ConfirmDialogHost.vue'
 import PromptDialogHost from './components/PromptDialogHost.vue'
 import ScratchpadPanel from './components/ScratchpadPanel.vue'
+import PipelinePanel from './components/PipelinePanel.vue'
 import { askConfirm } from './composables/useConfirmDialog'
 import { useScratchpad } from './composables/useScratchpad'
 import { useToast } from './composables/useToast'
@@ -95,6 +96,7 @@ const runResultModalSession = computed(() => {
 })
 
 const selectedScriptId = ref<string | null>(null)
+const showPipelines = ref(false)
 const detailVisible = ref(true)
 type DetailPanelTab = 'detail' | 'params' | 'edit' | 'log' | 'config' | 'history' | 'docs'
 const detailInitialTab = ref<DetailPanelTab>('detail')
@@ -194,6 +196,10 @@ function openRunResultModal(scriptId: string, sessionId?: string): void {
   runResultModalSessionId.value =
     sessionId ?? runner.lastSuccessSessionForScript(scriptId)?.id ?? null
   runResultModalOpen.value = true
+}
+
+function openPipelines(): void {
+  showPipelines.value = true
 }
 
 function closeRunResultModal(): void {
@@ -383,6 +389,7 @@ onUnmounted(() => {
         @settings="openSettings"
         @dev-guide="openDevGuide"
         @execution-history="openExecutionHistory"
+        @pipelines="openPipelines"
       />
       <CategoryManagerModal
         :open="showCategoryManager"
@@ -392,6 +399,7 @@ onUnmounted(() => {
       />
       <DevGuidePanel :open="showDevGuide" @close="closeDevGuide" @imported="onExampleImported" />
       <ExecutionHistoryPanel :open="showExecutionHistory" @close="closeExecutionHistory" />
+      <PipelinePanel :open="showPipelines" :scripts="scripts" @close="showPipelines = false" @refresh="refresh()" />
       <SettingsPanel
         :open="showSettings"
         @close="closeSettings"

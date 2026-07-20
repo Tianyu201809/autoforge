@@ -18,7 +18,8 @@ import {
   Star,
   Store,
   Timer,
-  Upload
+  Upload,
+  Workflow
 } from 'lucide-vue-next'
 import type { CategoryItem, NavFilter, NavItem } from '../../../shared/types/script'
 import { useToast } from '../composables/useToast'
@@ -41,6 +42,7 @@ const emit = defineEmits<{
   settings: []
   devGuide: []
   executionHistory: []
+  pipelines: []
 }>()
 
 const navIcons = {
@@ -253,6 +255,14 @@ onUnmounted(() => {
       >
         <BookOpen class="w-4 h-4" :stroke-width="1.5" />
         脚本开发指南
+      </button>
+      <button
+        type="button"
+        class="w-full flex items-center gap-2.5 px-2 py-1.5 rounded-md sb-text-muted hover:sb-text-secondary sb-bg-hover text-[13px] transition-colors"
+        @click="emit('pipelines')"
+      >
+        <Workflow class="w-4 h-4" :stroke-width="1.5" />
+        <span>流水线</span>
       </button>
       <button
         type="button"

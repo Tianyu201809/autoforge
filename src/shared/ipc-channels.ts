@@ -69,6 +69,17 @@ export const IPC = {
 
   RUNNER_GET_SESSION: 'runner:get-session',
 
+  PIPELINES_LIST: 'pipelines:list',
+  PIPELINES_GET: 'pipelines:get',
+  PIPELINES_CREATE: 'pipelines:create',
+  PIPELINES_UPDATE: 'pipelines:update',
+  PIPELINES_DELETE: 'pipelines:delete',
+  PIPELINES_SET_VALUES: 'pipelines:set-values',
+  PIPELINES_START: 'pipelines:start',
+  PIPELINES_STOP: 'pipelines:stop',
+  PIPELINES_LIST_SESSIONS: 'pipelines:list-sessions',
+  PIPELINES_GET_SESSION: 'pipelines:get-session',
+
   HISTORY_QUERY: 'history:query',
   HISTORY_QUERY_PAGE: 'history:query-page',
   HISTORY_FOR_SCRIPT: 'history:for-script',
@@ -116,6 +127,7 @@ export const IPC = {
   EVENT_LOG: 'event:log',
 
   EVENT_SESSION: 'event:session',
+  EVENT_PIPELINE_SESSION: 'event:pipeline-session',
 
   EVENT_LIFECYCLE: 'event:lifecycle',
 

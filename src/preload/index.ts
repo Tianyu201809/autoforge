@@ -205,6 +205,27 @@ const autoforge = {
       return () => ipcRenderer.removeListener(IPC.EVENT_LIFECYCLE, handler)
     }
   },
+  pipelines: {
+    list: (): Promise<import('../shared/types/script').PipelineMeta[]> => ipcRenderer.invoke(IPC.PIPELINES_LIST),
+    get: (id: string): Promise<import('../shared/types/script').PipelineMeta | null> => ipcRenderer.invoke(IPC.PIPELINES_GET, id),
+    create: (input: { name: string; description?: string; nodes: import('../shared/types/script').PipelineNode[] }): Promise<import('../shared/types/script').PipelineMeta> =>
+      ipcRenderer.invoke(IPC.PIPELINES_CREATE, input),
+    update: (id: string, patch: Partial<import('../shared/types/script').PipelineMeta>): Promise<import('../shared/types/script').PipelineMeta> =>
+      ipcRenderer.invoke(IPC.PIPELINES_UPDATE, id, patch),
+    delete: (id: string): Promise<boolean> => ipcRenderer.invoke(IPC.PIPELINES_DELETE, id),
+    setValues: (id: string, envId: string, values: { config?: Record<string, string>; params?: Record<string, string> }): Promise<import('../shared/types/script').PipelineMeta> =>
+      ipcRenderer.invoke(IPC.PIPELINES_SET_VALUES, id, envId, values),
+    start: (id: string, envId?: string, params?: Record<string, string>): Promise<import('../shared/types/script').PipelineSession> =>
+      ipcRenderer.invoke(IPC.PIPELINES_START, id, envId, params),
+    stop: (sessionId: string): Promise<import('../shared/types/script').PipelineSession | null> => ipcRenderer.invoke(IPC.PIPELINES_STOP, sessionId),
+    listSessions: (): Promise<import('../shared/types/script').PipelineSession[]> => ipcRenderer.invoke(IPC.PIPELINES_LIST_SESSIONS),
+    getSession: (sessionId: string): Promise<import('../shared/types/script').PipelineSession | undefined> => ipcRenderer.invoke(IPC.PIPELINES_GET_SESSION, sessionId),
+    onSession: (callback: (session: import('../shared/types/script').PipelineSession) => void): (() => void) => {
+      const handler = (_event: IpcRendererEvent, session: import('../shared/types/script').PipelineSession): void => callback(session)
+      ipcRenderer.on(IPC.EVENT_PIPELINE_SESSION, handler)
+      return () => ipcRenderer.removeListener(IPC.EVENT_PIPELINE_SESSION, handler)
+    }
+  },
   history: {
     query: (options?: ExecutionHistoryQuery): Promise<ExecutionDaySummary[]> =>
       ipcRenderer.invoke(IPC.HISTORY_QUERY, options),

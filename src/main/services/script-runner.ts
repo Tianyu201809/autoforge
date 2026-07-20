@@ -40,8 +40,15 @@ interface ActiveSession {
   runTimeoutHandle?: ReturnType<typeof setTimeout>
 }
 
+interface ScriptStartOptions {
+  trigger?: ExecutionTrigger
+  input?: unknown
+  envOverrides?: Record<string, string>
+}
+
 export class ScriptRunnerService {
   private sessions = new Map<string, ActiveSession>()
+  private waiters = new Map<string, (session: RunSession) => void>()
   private getWindow: () => BrowserWindow | null
   private lifecycle: ScriptLifecycleBus
 
@@ -71,7 +78,7 @@ export class ScriptRunnerService {
     scriptId: string,
     envId?: string,
     runtimeParams?: Record<string, string>,
-    options?: { trigger?: ExecutionTrigger }
+    options?: ScriptStartOptions
   ): Promise<RunSession> {
     const existing = this.getActiveSessionForScript(scriptId)
     if (existing) return existing
@@ -82,7 +89,10 @@ export class ScriptRunnerService {
     }
 
     const resolvedEnvId = envId ?? script.defaultEnvId ?? scriptStore.getDefaultEnvironment().id
-    const env = scriptStore.resolveEnvForScript(script, resolvedEnvId)
+    const env = {
+      ...scriptStore.resolveEnvForScript(script, resolvedEnvId),
+      ...(options?.envOverrides ?? {})
+    }
     const envError = scriptStore.validateEnvForScript(script, env)
     if (envError) {
       throw new Error(envError)
@@ -116,9 +126,23 @@ export class ScriptRunnerService {
     })
     this.broadcastSession(session)
 
-    void this.executePackage(session, script, env, params, abortController)
+    void this.executePackage(session, script, env, params, abortController, options?.input)
 
     return session
+  }
+
+  async startAndWait(
+    scriptId: string,
+    envId?: string,
+    runtimeParams?: Record<string, string>,
+    input?: unknown,
+    envOverrides?: Record<string, string>
+  ): Promise<RunSession> {
+    const session = await this.start(scriptId, envId, runtimeParams, { input, envOverrides })
+    if (session.status !== 'running') return session
+    return new Promise((resolve) => {
+      this.waiters.set(session.id, resolve)
+    })
   }
 
   stopAllForScript(scriptId: string): void {
@@ -148,6 +172,7 @@ export class ScriptRunnerService {
       finishedAt: active.session.finishedAt
     })
     this.broadcastSession(active.session)
+    this.resolveWaiter(active.session)
     return active.session
   }
 
@@ -156,12 +181,13 @@ export class ScriptRunnerService {
     script: ScriptMeta,
     env: Record<string, string>,
     params: Record<string, string>,
-    abortController: AbortController
+    abortController: AbortController,
+    input?: unknown
   ): Promise<void> {
     if (script.language === 'python') {
-      return this.executePythonPackage(session, script, env, params, abortController)
+      return this.executePythonPackage(session, script, env, params, abortController, input)
     }
-    return this.executeJsPackage(session, script, env, params, abortController)
+    return this.executeJsPackage(session, script, env, params, abortController, input)
   }
 
   private async executeJsPackage(
@@ -169,7 +195,8 @@ export class ScriptRunnerService {
     script: ScriptMeta,
     env: Record<string, string>,
     params: Record<string, string>,
-    abortController: AbortController
+    abortController: AbortController,
+    input?: unknown
   ): Promise<void> {
     const log = (level: LogLine['level'], message: string): void => {
       this.pushLog(session.id, level, message)
@@ -208,6 +235,7 @@ export class ScriptRunnerService {
         scriptId: script.id,
         env,
         params,
+        input,
         signal: abortController.signal,
         log,
         stage,
@@ -239,7 +267,8 @@ export class ScriptRunnerService {
     script: ScriptMeta,
     env: Record<string, string>,
     params: Record<string, string>,
-    abortController: AbortController
+    abortController: AbortController,
+    input?: unknown
   ): Promise<void> {
     const log = (level: LogLine['level'], message: string): void => {
       this.pushLog(session.id, level, message)
@@ -267,6 +296,7 @@ export class ScriptRunnerService {
         session.id,
         env,
         params,
+        input,
         {
           log,
           control: (control) => {
@@ -399,6 +429,7 @@ export class ScriptRunnerService {
     })
     this.lifecycle.emit(sessionId, active.session.scriptId, 'completed')
     this.broadcastSession(active.session)
+    this.resolveWaiter(active.session)
   }
 
   private failSession(sessionId: string, message: string): void {
@@ -420,6 +451,14 @@ export class ScriptRunnerService {
     })
     this.lifecycle.emit(sessionId, active.session.scriptId, 'failed', message)
     this.broadcastSession(active.session)
+    this.resolveWaiter(active.session)
+  }
+
+  private resolveWaiter(session: RunSession): void {
+    const resolve = this.waiters.get(session.id)
+    if (!resolve) return
+    this.waiters.delete(session.id)
+    resolve(session)
   }
 
   private updateRecentRun(scriptId: string): void {

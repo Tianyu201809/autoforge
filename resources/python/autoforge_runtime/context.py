@@ -36,6 +36,7 @@ class ScriptContext:
         self.script_id = str(payload.get("scriptId", ""))
         self.env: dict[str, str] = {str(k): str(v) for k, v in (payload.get("env") or {}).items()}
         self.params: dict[str, str] = {str(k): str(v) for k, v in (payload.get("params") or {}).items()}
+        self.input = payload.get("input")
         self.signal = AbortSignal()
         paths = payload.get("paths") or {}
         browser = payload.get("browser") or {}

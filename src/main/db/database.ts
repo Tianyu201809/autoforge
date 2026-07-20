@@ -3,6 +3,7 @@ import { join } from 'path'
 import { MIGRATION_001 } from './migrations/001-initial'
 import { MIGRATION_002 } from './migrations/002-script-imported-at'
 import { MIGRATION_003 } from './migrations/003-script-hub-id'
+import { MIGRATION_004 } from './migrations/004-pipelines'
 import { migrateFromJsonIfNeeded } from './migrate-from-json'
 import { openSqliteDatabase, type SqliteDatabase } from './sqlite-adapter'
 
@@ -78,6 +79,25 @@ function runMigrations(database: SqliteDatabase): void {
     database.exec(MIGRATION_003)
     database.prepare('INSERT INTO schema_migrations (version) VALUES (?)').run(3)
   }
+
+  if (currentVersion < 4) {
+    database.exec(MIGRATION_004)
+    database.prepare('INSERT INTO schema_migrations (version) VALUES (?)').run(4)
+  }
+
+  repairSchemaDrift(database)
+}
+
+function repairSchemaDrift(database: SqliteDatabase): void {
+  const scriptColumns = database.prepare('PRAGMA table_info(scripts)').all() as { name: string }[]
+  if (!scriptColumns.some((column) => column.name === 'hub_script_id')) {
+    database.exec('ALTER TABLE scripts ADD COLUMN hub_script_id TEXT')
+  }
+  database.exec(`
+    CREATE UNIQUE INDEX IF NOT EXISTS idx_scripts_hub_script_id
+      ON scripts(hub_script_id)
+      WHERE hub_script_id IS NOT NULL
+  `)
 }
 
 /** 为已有脚本回填 imported_at（优先工作区目录创建时间） */

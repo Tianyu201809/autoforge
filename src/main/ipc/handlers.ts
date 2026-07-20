@@ -2,7 +2,7 @@ import { app, dialog, ipcMain, shell, type BrowserWindow } from 'electron'
 import { existsSync, statSync } from 'fs'
 import { IPC } from '../../shared/ipc-channels'
 import { MANIFEST_FILENAME } from '../../shared/script-contract'
-import type { AppConfig, AppWindowConfig, EnvironmentProfile, ExecutionHistoryQuery, ScriptIcon, ScriptMeta } from '../../shared/types/script'
+import type { AppConfig, AppWindowConfig, EnvironmentProfile, ExecutionHistoryQuery, PipelineMeta, PipelineNode, ScriptIcon, ScriptMeta } from '../../shared/types/script'
 import { getAppUserDataPath } from '../services/app-data-root'
 import { findCategoryDefinition } from '../services/category-service'
 import { dependencyManager } from '../services/dependency-manager'
@@ -23,6 +23,8 @@ import { scriptRegistry } from '../services/script-registry'
 import { scriptStore } from '../services/script-store'
 import { scriptWorkspace } from '../services/script-workspace'
 import { executionHistory } from '../services/execution-history'
+import { pipelineStore } from '../services/pipeline-store'
+import { PipelineRunnerService } from '../services/pipeline-runner'
 import {
   buildScriptExportPlan,
   describeExportPlan,
@@ -59,10 +61,12 @@ import {
 } from '../services/main-window-mode'
 
 let runner: ScriptRunnerService
+let pipelineRunner: PipelineRunnerService
 let scheduler: SchedulerService
 
 export function registerIpcHandlers(getWindow: () => BrowserWindow | null): void {
   runner = new ScriptRunnerService(getWindow)
+  pipelineRunner = new PipelineRunnerService(getWindow, runner)
   scheduler = new SchedulerService((scriptId) =>
     runner.start(scriptId, undefined, undefined, { trigger: 'scheduled' })
   )
@@ -379,6 +383,31 @@ export function registerIpcHandlers(getWindow: () => BrowserWindow | null): void
   ipcMain.handle(IPC.RUNNER_GET_SESSION, (_event, sessionId: string) => {
     return runner.getSession(sessionId)
   })
+
+  ipcMain.handle(IPC.PIPELINES_LIST, () => pipelineStore.list())
+  ipcMain.handle(IPC.PIPELINES_GET, (_event, id: string) => pipelineStore.get(id) ?? null)
+  ipcMain.handle(
+    IPC.PIPELINES_CREATE,
+    (_event, input: { name: string; description?: string; nodes: PipelineNode[] }) => pipelineStore.create(input)
+  )
+  ipcMain.handle(
+    IPC.PIPELINES_UPDATE,
+    (_event, id: string, patch: Partial<Pick<PipelineMeta, 'name' | 'description' | 'nodes' | 'starred' | 'archived'>>) =>
+      pipelineStore.update(id, patch)
+  )
+  ipcMain.handle(IPC.PIPELINES_DELETE, (_event, id: string) => pipelineStore.delete(id))
+  ipcMain.handle(
+    IPC.PIPELINES_SET_VALUES,
+    (_event, id: string, envId: string, values: { config?: Record<string, string>; params?: Record<string, string> }) =>
+      pipelineStore.setValues(id, envId, values)
+  )
+  ipcMain.handle(
+    IPC.PIPELINES_START,
+    (_event, id: string, envId?: string, params?: Record<string, string>) => pipelineRunner.start(id, envId, params)
+  )
+  ipcMain.handle(IPC.PIPELINES_STOP, (_event, sessionId: string) => pipelineRunner.stop(sessionId))
+  ipcMain.handle(IPC.PIPELINES_LIST_SESSIONS, () => pipelineRunner.listSessions())
+  ipcMain.handle(IPC.PIPELINES_GET_SESSION, (_event, sessionId: string) => pipelineRunner.getSession(sessionId))
 
   ipcMain.handle(IPC.HISTORY_QUERY, (_event, query?: ExecutionHistoryQuery) => {
     return executionHistory.query(query)

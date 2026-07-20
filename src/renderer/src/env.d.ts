@@ -31,6 +31,7 @@ import type {
   CategoryItem,
   SystemMemoryInfo
 } from '../../shared/types/script'
+import type { PipelineMeta, PipelineNode, PipelineSession } from '../../shared/types/script'
 import type { ScriptIcon, ScriptLifecycleEvent } from '../../shared/script-contract'
 
 export interface ScriptListResponse {
@@ -161,6 +162,19 @@ export interface AutoforgeApi {
     onLog: (callback: (line: LogLine) => void) => () => void
     onSession: (callback: (session: RunSession) => void) => () => void
     onLifecycle: (callback: (event: ScriptLifecycleEvent) => void) => () => void
+  }
+  pipelines: {
+    list: () => Promise<PipelineMeta[]>
+    get: (id: string) => Promise<PipelineMeta | null>
+    create: (input: { name: string; description?: string; nodes: PipelineNode[] }) => Promise<PipelineMeta>
+    update: (id: string, patch: Partial<PipelineMeta>) => Promise<PipelineMeta>
+    delete: (id: string) => Promise<boolean>
+    setValues: (id: string, envId: string, values: { config?: Record<string, string>; params?: Record<string, string> }) => Promise<PipelineMeta>
+    start: (id: string, envId?: string, params?: Record<string, string>) => Promise<PipelineSession>
+    stop: (sessionId: string) => Promise<PipelineSession | null>
+    listSessions: () => Promise<PipelineSession[]>
+    getSession: (sessionId: string) => Promise<PipelineSession | undefined>
+    onSession: (callback: (session: PipelineSession) => void) => () => void
   }
   history: {
     query: (options?: ExecutionHistoryQuery) => Promise<ExecutionDaySummary[]>
