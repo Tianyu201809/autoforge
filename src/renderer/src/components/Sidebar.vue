@@ -285,35 +285,35 @@ onUnmounted(() => {
       <div class="flex items-center justify-around gap-0.5 pt-0.5">
         <button
           type="button"
-          class="w-8 h-8 flex items-center justify-center rounded-md sb-text-muted hover:sb-text-secondary sb-bg-hover transition-colors"
+          class="w-8 h-8 flex items-center justify-center rounded-md hover:bg-violet-500/10 transition-colors"
           title="进入 AutoforgeHub"
           @click="openAutoforgeHub"
         >
-          <Store class="w-4 h-4" :stroke-width="1.5" />
+          <Store class="w-4 h-4 text-violet-500" :stroke-width="1.5" />
         </button>
         <button
           type="button"
-          class="w-8 h-8 flex items-center justify-center rounded-md sb-text-muted hover:sb-text-secondary sb-bg-hover transition-colors"
+          class="w-8 h-8 flex items-center justify-center rounded-md hover:bg-emerald-500/10 transition-colors"
           title="脚本开发指南"
           @click="emit('devGuide')"
         >
-          <BookOpen class="w-4 h-4" :stroke-width="1.5" />
+          <BookOpen class="w-4 h-4 text-emerald-500" :stroke-width="1.5" />
         </button>
         <button
           type="button"
-          class="w-8 h-8 flex items-center justify-center rounded-md sb-text-muted hover:sb-text-secondary sb-bg-hover transition-colors"
+          class="w-8 h-8 flex items-center justify-center rounded-md hover:bg-amber-500/10 transition-colors"
           title="执行历史"
           @click="emit('executionHistory')"
         >
-          <History class="w-4 h-4" :stroke-width="1.5" />
+          <History class="w-4 h-4 text-amber-500" :stroke-width="1.5" />
         </button>
         <button
           type="button"
-          class="w-8 h-8 flex items-center justify-center rounded-md sb-text-muted hover:sb-text-secondary sb-bg-hover transition-colors"
+          class="w-8 h-8 flex items-center justify-center rounded-md hover:bg-sky-500/10 transition-colors"
           title="设置"
           @click="emit('settings')"
         >
-          <Settings class="w-4 h-4" :stroke-width="1.5" />
+          <Settings class="w-4 h-4 text-sky-500" :stroke-width="1.5" />
         </button>
       </div>
     </div>
