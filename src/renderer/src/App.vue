@@ -383,6 +383,7 @@ onUnmounted(() => {
         @settings="openSettings"
         @dev-guide="openDevGuide"
         @execution-history="openExecutionHistory"
+        @categories-changed="refresh()"
       />
       <CategoryManagerModal
         :open="showCategoryManager"

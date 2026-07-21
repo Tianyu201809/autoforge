@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed, ref, watch } from 'vue'
-import { FolderTree, Pencil, Trash2, X } from 'lucide-vue-next'
+import { FolderTree, Pencil, Plus, Trash2, X } from 'lucide-vue-next'
 import { CATEGORY_COLOR_PRESETS, getColorPreset } from '../../../shared/category-colors'
 import type { CategoryDefinition } from '../../../shared/types/script'
 import { askConfirm } from '../composables/useConfirmDialog'
@@ -17,6 +17,7 @@ const emit = defineEmits<{
 }>()
 
 const editingId = ref<string | null>(null)
+const formParentId = ref<string | null>(null)
 const formLabel = ref('')
 const formColor = ref('teal')
 const saving = ref(false)
@@ -28,31 +29,55 @@ const editingCategory = computed(() =>
 
 const customCount = computed(() => props.categories.filter((c) => !c.builtIn).length)
 
+const indentedCategories = computed(() => {
+  const byParent = new Map<string | null, typeof props.categories>()
+  for (const cat of props.categories) {
+    const parentId = cat.parentId && props.categories.some((c) => c.id === cat.parentId) ? cat.parentId : null
+    const list = byParent.get(parentId) ?? []
+    list.push(cat)
+    byParent.set(parentId, list)
+  }
+  const result: Array<CategoryDefinition & { depth: number }> = []
+  function walk(parentId: string | null, depth: number): void {
+    const children = (byParent.get(parentId) ?? []).slice().sort((a, b) => a.label.localeCompare(b.label, 'zh-CN'))
+    for (const cat of children) {
+      result.push({ ...cat, depth })
+      walk(cat.id, depth + 1)
+    }
+  }
+  walk(null, 0)
+  return result
+})
+
 watch(
   () => props.open,
   (open) => {
     if (open) {
       editingId.value = null
+      formParentId.value = null
       formLabel.value = ''
       formColor.value = 'teal'
     }
   }
 )
 
-function startCreate(): void {
+function startCreate(parentId: string | null = null): void {
   editingId.value = null
+  formParentId.value = parentId
   formLabel.value = ''
   formColor.value = 'teal'
 }
 
 function startEdit(cat: CategoryDefinition): void {
   editingId.value = cat.id
+  formParentId.value = cat.parentId
   formLabel.value = cat.label
   formColor.value = cat.colorPreset
 }
 
 function cancelEdit(): void {
   editingId.value = null
+  formParentId.value = null
   formLabel.value = ''
   formColor.value = 'teal'
 }
@@ -69,7 +94,7 @@ async function saveForm(): Promise<void> {
       })
       pushToast({ type: 'success', title: '已保存', message: `分类「${label}」已更新` })
     } else {
-      await window.autoforge.categories.create(label, formColor.value)
+      await window.autoforge.categories.create(label, formColor.value, formParentId.value)
       pushToast({ type: 'success', title: '已创建', message: `分类「${label}」已创建` })
     }
     cancelEdit()
@@ -89,7 +114,7 @@ async function deleteCategory(cat: CategoryDefinition): Promise<void> {
   if (cat.builtIn) return
   const confirmed = await askConfirm({
     title: '删除分类',
-    message: `删除「${cat.label}」后，使用该分类的脚本将移至「本地程序」。此操作不可撤销。`,
+    message: `仅当「${cat.label}」没有子分类且没有脚本直接挂在此分类下时可删除。`,
     confirmLabel: '删除',
     variant: 'danger'
   })
@@ -163,7 +188,7 @@ async function deleteCategory(cat: CategoryDefinition): Promise<void> {
 
             <ul class="space-y-1.5">
               <li
-                v-for="cat in categories"
+                v-for="cat in indentedCategories"
                 :key="cat.id"
                 class="flex items-center gap-2.5 px-3 py-2.5 rounded-lg border transition-colors group"
                 :class="
@@ -171,6 +196,7 @@ async function deleteCategory(cat: CategoryDefinition): Promise<void> {
                     ? 'sb-nav-active'
                     : 'sb-bg-surface sb-border-subtle hover:border-[var(--sb-border)]'
                 "
+                :style="{ marginLeft: `${cat.depth * 14}px` }"
               >
                 <span
                   class="w-2.5 h-2.5 rounded-full flex-shrink-0 ring-2 ring-white/10"
@@ -193,6 +219,14 @@ async function deleteCategory(cat: CategoryDefinition): Promise<void> {
                   class="flex items-center gap-0.5 flex-shrink-0 transition-opacity"
                   :class="editingId === cat.id ? 'opacity-100' : 'opacity-0 group-hover:opacity-100'"
                 >
+                  <button
+                    type="button"
+                    class="w-7 h-7 flex items-center justify-center rounded-md sb-text-muted hover:sb-text-primary hover:sb-bg-hover"
+                    title="新建子分类"
+                    @click="startCreate(cat.id)"
+                  >
+                    <Plus class="w-3.5 h-3.5" :stroke-width="1.5" />
+                  </button>
                   <button
                     type="button"
                     class="w-7 h-7 flex items-center justify-center rounded-md sb-text-muted hover:sb-text-primary hover:sb-bg-hover"
@@ -219,7 +253,11 @@ async function deleteCategory(cat: CategoryDefinition): Promise<void> {
           <div class="flex-shrink-0 border-t sb-border-subtle sb-bg-inset/60 px-4 py-4 space-y-3">
             <div class="flex items-center justify-between gap-2">
               <p class="text-[11px] font-medium sb-text-secondary">
-                {{ editingCategory ? `编辑分类 · ${editingCategory.label}` : '新建分类' }}
+                <template v-if="editingCategory">编辑分类 · {{ editingCategory.label }}</template>
+                <template v-else-if="formParentId">
+                  新建子分类 · {{ categories.find((c) => c.id === formParentId)?.label ?? '' }}
+                </template>
+                <template v-else>新建分类</template>
               </p>
               <button
                 v-if="editingCategory"

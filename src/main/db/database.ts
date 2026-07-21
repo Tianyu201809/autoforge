@@ -3,6 +3,7 @@ import { join } from 'path'
 import { MIGRATION_001 } from './migrations/001-initial'
 import { MIGRATION_002 } from './migrations/002-script-imported-at'
 import { MIGRATION_003 } from './migrations/003-script-hub-id'
+import { MIGRATION_004 } from './migrations/004-category-parent-id'
 import { migrateFromJsonIfNeeded } from './migrate-from-json'
 import { openSqliteDatabase, type SqliteDatabase } from './sqlite-adapter'
 
@@ -77,6 +78,11 @@ function runMigrations(database: SqliteDatabase): void {
   if (currentVersion < 3) {
     database.exec(MIGRATION_003)
     database.prepare('INSERT INTO schema_migrations (version) VALUES (?)').run(3)
+  }
+
+  if (currentVersion < 4) {
+    database.exec(MIGRATION_004)
+    database.prepare('INSERT INTO schema_migrations (version) VALUES (?)').run(4)
   }
 }
 

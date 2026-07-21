@@ -14,6 +14,7 @@ import {
   X
 } from 'lucide-vue-next'
 import type { CategoryDefinition, ScriptItem, ScriptListFilter, ScriptSortBy, ScriptSortOrder } from '../../../shared/types/script'
+import { buildCategoryTree } from '../../../shared/category-tree'
 import ScriptCard from './ScriptCard.vue'
 import { useToast } from '../composables/useToast'
 
@@ -30,6 +31,23 @@ const props = defineProps<{
   sortBy: ScriptSortBy
   sortOrder: ScriptSortOrder
 }>()
+
+const indentedFilterCategories = computed(() => {
+  const tree = buildCategoryTree(props.categoryDefinitions)
+  const rows: Array<{ key: string; label: string; depth: number }> = []
+  function walk(nodes: ReturnType<typeof buildCategoryTree<CategoryDefinition>>, depth: number): void {
+    for (const node of nodes) {
+      rows.push({
+        key: node.category.key,
+        label: `${'\u00A0\u00A0'.repeat(depth)}${node.category.label}`,
+        depth
+      })
+      walk(node.children, depth + 1)
+    }
+  }
+  walk(tree, 0)
+  return rows
+})
 
 const emit = defineEmits<{
   select: [script: ScriptItem]
@@ -233,7 +251,13 @@ onUnmounted(() => {
                 @change="patchFilter({ categoryKey: ($event.target as HTMLSelectElement).value || null })"
               >
                 <option value="">全部分类</option>
-                <option v-for="cat in categoryDefinitions" :key="cat.key" :value="cat.key">{{ cat.label }}</option>
+                <option
+                  v-for="cat in indentedFilterCategories"
+                  :key="cat.key"
+                  :value="cat.key"
+                >
+                  {{ cat.label }}
+                </option>
               </select>
             </div>
 

@@ -14,6 +14,7 @@ import {
   type CategoryOverride,
   type StoredCategory
 } from './category-service'
+import { wouldCreateCycle } from '../../shared/category-tree'
 import { getDb } from '../db/database'
 import { createRepositories, type Repositories } from '../db/repositories'
 
@@ -238,19 +239,35 @@ export class ScriptStore {
     return this.ensureInitialized().categories.listCategories()
   }
 
-  addCategory(label: string, colorPreset: string): CategoryDefinition {
+  addCategory(label: string, colorPreset: string, parentId: string | null = null): CategoryDefinition {
     const repos = this.ensureInitialized()
-    const stored = createStoredCategory(label, colorPreset)
+    const definitions = mergeCategoryDefinitions(
+      repos.categories.listCategories(),
+      repos.categories.listOverrides()
+    )
+
+    if (parentId !== null) {
+      const parent = definitions.find((d) => d.id === parentId)
+      if (!parent) throw new Error('父分类不存在')
+    }
+
+    const stored = createStoredCategory(label, colorPreset, parentId)
     repos.categories.insertCategory(stored)
     return mergeCategoryDefinitions(repos.categories.listCategories(), repos.categories.listOverrides()).find(
       (c) => c.id === stored.id
     )!
   }
 
-  updateCategory(id: string, patch: { label?: string; colorPreset?: string }): CategoryDefinition | null {
+  updateCategory(
+    id: string,
+    patch: { label?: string; colorPreset?: string; parentId?: string | null }
+  ): CategoryDefinition | null {
     const repos = this.ensureInitialized()
 
     if (id.startsWith('builtin:')) {
+      if (patch.parentId !== undefined && patch.parentId !== null) {
+        return null
+      }
       const key = id.slice('builtin:'.length)
       const overrides = repos.categories.listOverrides()
       const index = overrides.findIndex((o) => o.key === key)
@@ -266,6 +283,21 @@ export class ScriptStore {
       ) ?? null
     }
 
+    if (patch.parentId !== undefined) {
+      const definitions = mergeCategoryDefinitions(
+        repos.categories.listCategories(),
+        repos.categories.listOverrides()
+      )
+      if (patch.parentId !== null) {
+        const parent = definitions.find((d) => d.id === patch.parentId)
+        if (!parent) return null
+      }
+      const cycleItems = definitions.map((d) => ({ id: d.id, parentId: d.parentId ?? null }))
+      if (wouldCreateCycle(cycleItems, id, patch.parentId)) {
+        throw new Error('不能移动到自己的子分类下')
+      }
+    }
+
     const updated = repos.categories.updateCategory(id, patch)
     if (!updated) return null
     return mergeCategoryDefinitions(repos.categories.listCategories(), repos.categories.listOverrides()).find(
@@ -277,6 +309,14 @@ export class ScriptStore {
     const repos = this.ensureInitialized()
     if (id.startsWith('builtin:')) {
       return { ok: false, error: '内置分类不可删除' }
+    }
+    const existing = repos.categories.listCategories().find((c) => c.id === id)
+    if (!existing) return { ok: false, error: '分类不存在' }
+    if (repos.categories.listChildren(id).length > 0) {
+      return { ok: false, error: '请先删除子分类，并移走该分类下的脚本' }
+    }
+    if (repos.scripts.countByCategory(existing.key) > 0) {
+      return { ok: false, error: '请先删除子分类，并移走该分类下的脚本' }
     }
     const removed = repos.categories.deleteCategory(id)
     if (!removed) return { ok: false, error: '分类不存在' }

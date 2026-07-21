@@ -143,8 +143,11 @@ export interface AutoforgeApi {
   }
   categories: {
     list: () => Promise<CategoryDefinition[]>
-    create: (label: string, colorPreset: string) => Promise<CategoryDefinition>
-    update: (id: string, patch: { label?: string; colorPreset?: string }) => Promise<CategoryDefinition | null>
+    create: (label: string, colorPreset: string, parentId?: string | null) => Promise<CategoryDefinition>
+    update: (
+      id: string,
+      patch: { label?: string; colorPreset?: string; parentId?: string | null }
+    ) => Promise<CategoryDefinition | null>
     delete: (id: string) => Promise<{ ok: true } | { ok: false; error: string }>
   }
   env: {

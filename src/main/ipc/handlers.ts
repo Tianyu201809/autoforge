@@ -294,13 +294,16 @@ export function registerIpcHandlers(getWindow: () => BrowserWindow | null): void
 
   ipcMain.handle(IPC.CATEGORIES_LIST, () => scriptStore.getCategoryDefinitions())
 
-  ipcMain.handle(IPC.CATEGORIES_CREATE, (_event, label: string, colorPreset: string) => {
-    return scriptStore.addCategory(label, colorPreset)
-  })
+  ipcMain.handle(
+    IPC.CATEGORIES_CREATE,
+    (_event, label: string, colorPreset: string, parentId?: string | null) => {
+      return scriptStore.addCategory(label, colorPreset, parentId ?? null)
+    }
+  )
 
   ipcMain.handle(
     IPC.CATEGORIES_UPDATE,
-    (_event, id: string, patch: { label?: string; colorPreset?: string }) => {
+    (_event, id: string, patch: { label?: string; colorPreset?: string; parentId?: string | null }) => {
       const updated = scriptStore.updateCategory(id, patch)
       if (!updated) return null
 
@@ -325,22 +328,6 @@ export function registerIpcHandlers(getWindow: () => BrowserWindow | null): void
   )
 
   ipcMain.handle(IPC.CATEGORIES_DELETE, (_event, id: string) => {
-    const definitions = scriptStore.getCategoryDefinitions()
-    const target = definitions.find((c) => c.id === id)
-    if (!target) return { ok: false, error: '分类不存在' }
-    if (target.builtIn) return { ok: false, error: '内置分类不可删除' }
-
-    const fallback = findCategoryDefinition(definitions, 'local')!
-    for (const script of scriptRegistry.listAll()) {
-      if (script.category !== target.key) continue
-      const manifest = scriptWorkspace.updateManifestMeta(script, {
-        category: 'local',
-        categoryLabel: fallback.label
-      })
-      const metaPatch = scriptWorkspace.manifestToMeta(script.id, manifest, definitions)
-      scriptRegistry.update(script.id, metaPatch)
-    }
-
     const result = scriptStore.deleteCategory(id)
     if (!result.ok) return result
     return { ok: true }

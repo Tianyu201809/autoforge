@@ -165,11 +165,14 @@ const autoforge = {
   },
   categories: {
     list: (): Promise<CategoryDefinition[]> => ipcRenderer.invoke(IPC.CATEGORIES_LIST),
-    create: (label: string, colorPreset: string): Promise<CategoryDefinition> =>
-      ipcRenderer.invoke(IPC.CATEGORIES_CREATE, label, colorPreset),
+    create: (
+      label: string,
+      colorPreset: string,
+      parentId?: string | null
+    ): Promise<CategoryDefinition> => ipcRenderer.invoke(IPC.CATEGORIES_CREATE, label, colorPreset, parentId),
     update: (
       id: string,
-      patch: { label?: string; colorPreset?: string }
+      patch: { label?: string; colorPreset?: string; parentId?: string | null }
     ): Promise<CategoryDefinition | null> => ipcRenderer.invoke(IPC.CATEGORIES_UPDATE, id, patch),
     delete: (id: string): Promise<{ ok: true } | { ok: false; error: string }> =>
       ipcRenderer.invoke(IPC.CATEGORIES_DELETE, id)

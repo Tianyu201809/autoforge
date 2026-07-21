@@ -211,12 +211,19 @@ export function environmentToRow(env: EnvironmentProfile): EnvironmentRow {
   }
 }
 
-export function rowToStoredCategory(row: { id: string; key: string; label: string; color_preset: string }): StoredCategory {
+export function rowToStoredCategory(row: {
+  id: string
+  key: string
+  label: string
+  color_preset: string
+  parent_id?: string | null
+}): StoredCategory {
   return {
     id: row.id,
     key: row.key,
     label: row.label,
-    colorPreset: row.color_preset
+    colorPreset: row.color_preset,
+    parentId: row.parent_id ?? null
   }
 }
 

@@ -1,6 +1,7 @@
 import { computed, onMounted, ref, watch } from 'vue'
 import { matchPinyinQuery } from '../utils/pinyin-match'
 import { useToast } from './useToast'
+import { collectDescendantKeys } from '../../../shared/category-tree'
 import type {
   CategoryDefinition,
   CategoryItem,
@@ -113,7 +114,12 @@ const filteredScripts = computed(() => {
 
   const catKey = activeCategoryKey.value
   if (catKey) {
-    list = list.filter((s) => s.category === catKey)
+    const keys = new Set(collectDescendantKeys(categoryDefinitions.value, catKey))
+    if (keys.size === 0) {
+      list = list.filter((s) => s.category === catKey)
+    } else {
+      list = list.filter((s) => keys.has(s.category))
+    }
   }
 
   const lf = listFilter.value

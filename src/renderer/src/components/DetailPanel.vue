@@ -31,6 +31,7 @@ import ScriptRunProgressPanel from './ScriptRunProgressPanel.vue'
 import { formatScriptRunProgressSummary } from '../../../shared/script-progress'
 import CodeEditor from './CodeEditor.vue'
 import SchemaValueField from './SchemaValueField.vue'
+import CategoryTreeSelect from './CategoryTreeSelect.vue'
 import { MANIFEST_FILENAME } from '../../../shared/script-contract'
 import { extractRunResultOutputDir } from '../../../shared/run-result'
 import { parseParamAttachments } from '../../../shared/param-attachments'
@@ -1111,13 +1112,12 @@ async function handleRename(): Promise<void> {
 
         <div>
           <label class="sb-field-label">分类</label>
-          <select
-            v-model="detailCategory"
-            class="mt-1.5 w-full h-8 px-3 rounded-lg sb-bg-input border sb-border text-[13px] outline-none focus:sb-input disabled:opacity-50"
-            :disabled="detailSaving || !categoryDefinitions?.length"
-          >
-            <option v-for="cat in categoryDefinitions" :key="cat.key" :value="cat.key">{{ cat.label }}</option>
-          </select>
+          <div class="mt-1.5" :class="(detailSaving || !categoryDefinitions?.length) && 'opacity-50 pointer-events-none'">
+            <CategoryTreeSelect
+              v-model="detailCategory"
+              :definitions="categoryDefinitions ?? []"
+            />
+          </div>
         </div>
 
         <div>

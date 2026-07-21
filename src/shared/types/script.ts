@@ -248,6 +248,8 @@ export interface CategoryDefinition {
   key: string
   label: string
   colorPreset: string
+  /** 父分类 id；内置恒为 null；顶层自定义为 null */
+  parentId: string | null
   builtIn?: boolean
   dotColor: string
   badgeColor: string
@@ -262,6 +264,7 @@ export interface CategoryItem {
   name: string
   color: string
   count: number
+  parentId: string | null
 }
 
 export type ScriptStatusFilter = 'all' | 'running' | 'idle' | 'error'

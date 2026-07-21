@@ -6,12 +6,14 @@ import {
   type CategoryColorPreset
 } from '../../shared/category-colors'
 import type { CategoryDefinition, CategoryItem, ScriptMeta } from '../../shared/types/script'
+import { sumRecursiveCounts } from '../../shared/category-tree'
 
 export interface StoredCategory {
   id: string
   key: string
   label: string
   colorPreset: string
+  parentId: string | null
 }
 
 export interface CategoryOverride {
@@ -31,6 +33,7 @@ function builtinDefinitions(overrides: CategoryOverride[] = []): CategoryDefinit
       key,
       label: override?.label ?? def.label,
       colorPreset: presetId,
+      parentId: null,
       builtIn: true,
       ...pickStyle(preset)
     }
@@ -62,6 +65,7 @@ export function mergeCategoryDefinitions(
       key: c.key,
       label: c.label,
       colorPreset: c.colorPreset,
+      parentId: c.parentId ?? null,
       builtIn: false,
       ...pickStyle(preset)
     }
@@ -104,47 +108,71 @@ export function buildCategorySidebarItems(
   scripts: ScriptMeta[],
   definitions: CategoryDefinition[]
 ): CategoryItem[] {
-  const counts = new Map<string, number>()
+  const directCounts = new Map<string, number>()
   for (const script of scripts) {
     if (script.archived) continue
-    counts.set(script.category, (counts.get(script.category) ?? 0) + 1)
+    directCounts.set(script.category, (directCounts.get(script.category) ?? 0) + 1)
   }
+
+  const treeItems = definitions.map((def) => ({
+    id: def.id,
+    key: def.key,
+    parentId: def.parentId ?? null
+  }))
+
+  for (const [key] of directCounts) {
+    if (definitions.some((d) => d.key === key)) continue
+    treeItems.push({
+      id: `orphan:${key}`,
+      key,
+      parentId: null
+    })
+  }
+
+  const totals = sumRecursiveCounts(treeItems, directCounts)
 
   const items: CategoryItem[] = []
   for (const def of definitions) {
-    const count = counts.get(def.key) ?? 0
+    const count = totals.get(def.key) ?? 0
     if (count > 0 || !def.builtIn) {
       items.push({
         id: def.id,
         key: def.key,
         name: def.label,
         color: def.dotColor,
-        count
+        count,
+        parentId: def.parentId ?? null
       })
     }
   }
 
-  for (const [key, count] of counts) {
+  for (const [key, count] of directCounts) {
     if (definitions.some((d) => d.key === key)) continue
     items.push({
       id: `orphan:${key}`,
       key,
       name: key,
       color: getColorPreset('zinc').dotColor,
-      count
+      count: totals.get(key) ?? count,
+      parentId: null
     })
   }
 
   return items.sort((a, b) => b.count - a.count || a.name.localeCompare(b.name, 'zh-CN'))
 }
 
-export function createStoredCategory(label: string, colorPreset: string): StoredCategory {
+export function createStoredCategory(
+  label: string,
+  colorPreset: string,
+  parentId: string | null = null
+): StoredCategory {
   const trimmed = label.trim()
   if (!trimmed) throw new Error('分类名称不能为空')
   return {
     id: randomUUID(),
     key: `custom-${randomUUID().slice(0, 8)}`,
     label: trimmed,
-    colorPreset: getColorPreset(colorPreset) ? colorPreset : 'teal'
+    colorPreset: getColorPreset(colorPreset) ? colorPreset : 'teal',
+    parentId
   }
 }

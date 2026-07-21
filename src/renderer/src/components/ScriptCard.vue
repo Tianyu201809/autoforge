@@ -23,6 +23,7 @@ import {
   Trash2
 } from 'lucide-vue-next'
 import type { CategoryDefinition, ScriptItem } from '../../../shared/types/script'
+import { buildCategoryTree } from '../../../shared/category-tree'
 import { describeCronExpression } from '../../../shared/cron-schedule'
 import { scriptLanguageBadge } from '../../../shared/script-language'
 import { resolveScriptIcon } from '../lib/script-icon-map'
@@ -81,6 +82,20 @@ const languageBadge = computed(() => scriptLanguageBadge(props.script.language))
 const scheduleSummary = computed(() => {
   if (!props.script.schedule?.enabled) return null
   return describeCronExpression(props.script.schedule.expression)
+})
+
+const indentedCategoryOptions = computed(() => {
+  const defs = props.categoryDefinitions ?? []
+  const tree = buildCategoryTree(defs)
+  const rows: Array<{ cat: CategoryDefinition; depth: number }> = []
+  function walk(nodes: ReturnType<typeof buildCategoryTree<CategoryDefinition>>, depth: number): void {
+    for (const node of nodes) {
+      rows.push({ cat: node.category, depth })
+      walk(node.children, depth + 1)
+    }
+  }
+  walk(tree, 0)
+  return rows
 })
 
 const footerMetaFull = computed(() => {
@@ -579,11 +594,12 @@ onUnmounted(() => {
               >
                 <p class="px-3 py-1.5 text-[10px] font-medium sb-text-faint uppercase tracking-wider">选择分类</p>
                 <button
-                  v-for="cat in categoryDefinitions"
+                  v-for="{ cat, depth } in indentedCategoryOptions"
                   :key="cat.key"
                   type="button"
-                  class="w-full flex items-center gap-2 px-3 py-1.5 text-[12px] text-left transition-colors disabled:opacity-50"
+                  class="w-full flex items-center gap-2 py-1.5 text-[12px] text-left transition-colors disabled:opacity-50"
                   :class="script.category === cat.key ? 'sb-text-primary sb-bg-inset' : 'sb-text-muted hover:sb-text-primary hover:sb-bg-hover'"
+                  :style="{ paddingLeft: `${12 + depth * 12}px`, paddingRight: '12px' }"
                   :disabled="savingCategory"
                   @click="applyCategory(cat.key)"
                 >

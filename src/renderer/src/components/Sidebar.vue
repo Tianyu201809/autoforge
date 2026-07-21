@@ -22,6 +22,8 @@ import {
 } from 'lucide-vue-next'
 import type { CategoryItem, NavFilter, NavItem } from '../../../shared/types/script'
 import { useToast } from '../composables/useToast'
+import { askConfirm } from '../composables/useConfirmDialog'
+import CategoryTreeList from './CategoryTreeList.vue'
 
 defineProps<{
   navItems: NavItem[]
@@ -41,6 +43,7 @@ const emit = defineEmits<{
   settings: []
   devGuide: []
   executionHistory: []
+  categoriesChanged: []
 }>()
 
 const navIcons = {
@@ -79,6 +82,60 @@ async function openAutoforgeHub(): Promise<void> {
       message: err instanceof Error ? err.message : '无法打开AutoforgeHub'
     })
   }
+}
+
+async function onCreateChild(item: CategoryItem): Promise<void> {
+  const label = window.prompt(`在「${item.name}」下新建子分类`, '')
+  if (label == null) return
+  const trimmed = label.trim()
+  if (!trimmed) return
+  try {
+    await window.autoforge.categories.create(trimmed, 'teal', item.id)
+    pushToast({ type: 'success', title: '已创建', message: `子分类「${trimmed}」已创建` })
+    emit('categoriesChanged')
+  } catch (err) {
+    pushToast({
+      type: 'error',
+      title: '创建失败',
+      message: err instanceof Error ? err.message : '无法创建子分类'
+    })
+  }
+}
+
+async function onRename(item: CategoryItem): Promise<void> {
+  const label = window.prompt('重命名分类', item.name)
+  if (label == null) return
+  const trimmed = label.trim()
+  if (!trimmed || trimmed === item.name) return
+  try {
+    await window.autoforge.categories.update(item.id, { label: trimmed })
+    pushToast({ type: 'success', title: '已保存', message: `分类已重命名为「${trimmed}」` })
+    emit('categoriesChanged')
+  } catch (err) {
+    pushToast({
+      type: 'error',
+      title: '重命名失败',
+      message: err instanceof Error ? err.message : '无法重命名分类'
+    })
+  }
+}
+
+async function onDelete(item: CategoryItem): Promise<void> {
+  if (item.id.startsWith('builtin:')) return
+  const confirmed = await askConfirm({
+    title: '删除分类',
+    message: `仅当「${item.name}」没有子分类且没有脚本直接挂在此分类下时可删除。`,
+    confirmLabel: '删除',
+    variant: 'danger'
+  })
+  if (!confirmed) return
+  const result = await window.autoforge.categories.delete(item.id)
+  if (!result.ok) {
+    pushToast({ type: 'error', title: '删除失败', message: result.error })
+    return
+  }
+  pushToast({ type: 'success', title: '已删除', message: `分类「${item.name}」已删除` })
+  emit('categoriesChanged')
 }
 
 const sidebarWidth = ref(MAIN_SIDEBAR_DEFAULT_WIDTH)
@@ -203,73 +260,62 @@ onUnmounted(() => {
           <Plus class="w-3.5 h-3.5" :stroke-width="1.5" />
         </button>
       </div>
-      <div class="flex-1 min-h-0 overflow-y-auto overscroll-contain space-y-0.5 -mx-1 px-1">
-        <button
-          v-for="cat in categories"
-          :key="cat.key"
-          type="button"
-          class="w-full flex items-center gap-2 px-2 py-1.5 rounded-md text-[13px] transition-colors text-left"
-          :class="
-            activeCategoryKey === cat.key
-              ? 'sb-category-active sb-text-primary font-medium'
-              : 'sb-text-muted hover:sb-text-secondary sb-bg-hover'
-          "
-          @click="emit('category', cat.key)"
-        >
-          <span
-            class="w-2 h-2 rounded-full shrink-0"
-            :class="[
-              cat.color,
-              activeCategoryKey === cat.key && 'ring-2 ring-[var(--sb-accent-solid)] ring-offset-1 ring-offset-[var(--sb-bg-panel)]'
-            ]"
-          ></span>
-          {{ cat.name }}
-          <span class="ml-auto text-[11px] sb-text-faint">{{ cat.count }}</span>
-        </button>
+      <div class="flex-1 min-h-0 overflow-y-auto overscroll-contain -mx-1 px-1">
+        <CategoryTreeList
+          :items="categories"
+          :active-key="activeCategoryKey ?? null"
+          enable-context-menu
+          @select="(key) => emit('category', key)"
+          @create-child="onCreateChild"
+          @rename="onRename"
+          @delete="onDelete"
+        />
       </div>
     </div>
 
-    <div class="flex-shrink-0 p-3 border-t sb-border-subtle">
+    <div class="flex-shrink-0 p-3 border-t sb-border-subtle space-y-1.5">
       <button
         type="button"
-        class="w-full flex items-center justify-center gap-2 h-8 rounded-lg sb-btn-accent text-[13px] font-medium transition-colors"
+        class="w-full flex items-center justify-center gap-2 h-7 rounded-lg sb-btn-accent text-[12px] font-medium transition-colors"
         @click="emit('import')"
       >
         <Upload class="w-3.5 h-3.5" :stroke-width="1.5" />
         上传脚本
       </button>
-      <button
-        type="button"
-        class="w-full flex items-center gap-2.5 px-2 py-1.5 rounded-md sb-text-muted hover:sb-text-secondary sb-bg-hover text-[13px] transition-colors"
-        @click="openAutoforgeHub"
-      >
-        <Store class="w-4 h-4" :stroke-width="1.5" />
-        <span>进入AutoforgeHub</span>
-      </button>
-      <button
-        type="button"
-        class="w-full flex items-center gap-2.5 px-2 py-1.5 rounded-md sb-text-muted hover:sb-text-secondary sb-bg-hover text-[13px] transition-colors"
-        @click="emit('devGuide')"
-      >
-        <BookOpen class="w-4 h-4" :stroke-width="1.5" />
-        脚本开发指南
-      </button>
-      <button
-        type="button"
-        class="w-full flex items-center gap-2.5 px-2 py-1.5 rounded-md sb-text-muted hover:sb-text-secondary sb-bg-hover text-[13px] transition-colors"
-        @click="emit('executionHistory')"
-      >
-        <History class="w-4 h-4" :stroke-width="1.5" />
-        执行历史
-      </button>
-      <button
-        type="button"
-        class="mt-1 w-full flex items-center gap-2.5 px-2 py-1.5 rounded-md sb-text-muted hover:sb-text-secondary sb-bg-hover text-[13px] transition-colors"
-        @click="emit('settings')"
-      >
-        <Settings class="w-4 h-4" :stroke-width="1.5" />
-        设置
-      </button>
+      <div class="flex items-center justify-around gap-0.5 pt-0.5">
+        <button
+          type="button"
+          class="w-8 h-8 flex items-center justify-center rounded-md sb-text-muted hover:sb-text-secondary sb-bg-hover transition-colors"
+          title="进入 AutoforgeHub"
+          @click="openAutoforgeHub"
+        >
+          <Store class="w-4 h-4" :stroke-width="1.5" />
+        </button>
+        <button
+          type="button"
+          class="w-8 h-8 flex items-center justify-center rounded-md sb-text-muted hover:sb-text-secondary sb-bg-hover transition-colors"
+          title="脚本开发指南"
+          @click="emit('devGuide')"
+        >
+          <BookOpen class="w-4 h-4" :stroke-width="1.5" />
+        </button>
+        <button
+          type="button"
+          class="w-8 h-8 flex items-center justify-center rounded-md sb-text-muted hover:sb-text-secondary sb-bg-hover transition-colors"
+          title="执行历史"
+          @click="emit('executionHistory')"
+        >
+          <History class="w-4 h-4" :stroke-width="1.5" />
+        </button>
+        <button
+          type="button"
+          class="w-8 h-8 flex items-center justify-center rounded-md sb-text-muted hover:sb-text-secondary sb-bg-hover transition-colors"
+          title="设置"
+          @click="emit('settings')"
+        >
+          <Settings class="w-4 h-4" :stroke-width="1.5" />
+        </button>
+      </div>
     </div>
   </aside>
 </template>
