@@ -7,15 +7,15 @@ function isRecord(value: unknown): value is Record<string, unknown> {
   return value !== null && typeof value === 'object' && !Array.isArray(value)
 }
 
-function normalizeParams(value: unknown): Record<string, string> {
+function normalizeStringRecord(value: unknown): Record<string, string> {
   if (!isRecord(value)) return {}
-  const params: Record<string, string> = {}
+  const out: Record<string, string> = {}
   for (const [key, raw] of Object.entries(value)) {
-    if (typeof raw === 'string') params[key] = raw
-    else if (raw == null) params[key] = ''
-    else params[key] = String(raw)
+    if (typeof raw === 'string') out[key] = raw
+    else if (raw == null) out[key] = ''
+    else out[key] = String(raw)
   }
-  return params
+  return out
 }
 
 function normalizeBrowser(value: unknown): ScriptInstanceSlot['browser'] | undefined {
@@ -24,6 +24,10 @@ function normalizeBrowser(value: unknown): ScriptInstanceSlot['browser'] | undef
   return undefined
 }
 
+/**
+ * Normalize + deep-plain slots for storage / IPC.
+ * Vue reactive Proxies cannot be structured-cloned across Electron IPC.
+ */
 export function normalizeInstanceSlots(input: unknown): ScriptInstanceSlot[] {
   if (!Array.isArray(input)) return []
   const slots: ScriptInstanceSlot[] = []
@@ -37,7 +41,8 @@ export function normalizeInstanceSlots(input: unknown): ScriptInstanceSlot[] {
       id,
       name,
       envId,
-      params: normalizeParams(item.params),
+      config: normalizeStringRecord(item.config),
+      params: normalizeStringRecord(item.params),
       browser: normalizeBrowser(item.browser)
     })
   }

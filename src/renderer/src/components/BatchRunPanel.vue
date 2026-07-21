@@ -6,7 +6,7 @@ import type {
   ScriptInstanceSlot,
   ScriptItem
 } from '../../../shared/types/script'
-import { MAX_CONCURRENT_SESSIONS_PER_SCRIPT, MAX_INSTANCE_SLOTS } from '../../../shared/instance-slots'
+import { MAX_CONCURRENT_SESSIONS_PER_SCRIPT, MAX_INSTANCE_SLOTS, normalizeInstanceSlots } from '../../../shared/instance-slots'
 import { defaultSchemaValue } from '../../../shared/schema-values'
 import SchemaValueField from './SchemaValueField.vue'
 import { useToast } from '../composables/useToast'
@@ -31,6 +31,7 @@ const environments = ref<EnvironmentProfile[]>([])
 const selectedIds = ref<string[]>([])
 const editingId = ref<string | null>(null)
 const draft = ref<ScriptInstanceSlot | null>(null)
+const draftTab = ref<'config' | 'params'>('config')
 const saving = ref(false)
 const starting = ref(false)
 
@@ -44,6 +45,7 @@ watch(
     if (!open || !props.script) return
     editingId.value = null
     draft.value = null
+    draftTab.value = 'config'
     selectedIds.value = []
     environments.value = await window.autoforge.env.list()
     slots.value = await window.autoforge.scripts.getInstanceSlots(props.script.id)
@@ -81,40 +83,63 @@ function buildEmptyParams(): Record<string, string> {
   return params
 }
 
+function buildConfigForEnv(envId: string): Record<string, string> {
+  const config: Record<string, string> = {}
+  const saved = props.script?.configByEnv?.[envId] ?? {}
+  for (const def of props.script?.envSchema ?? []) {
+    config[def.key] = saved[def.key] ?? defaultSchemaValue(def)
+  }
+  return config
+}
+
 function startCreate(): void {
   if (!canAdd.value) return
   const id = crypto.randomUUID()
+  const envId = defaultEnvId()
   draft.value = {
     id,
     name: `实例 ${slots.value.length + 1}`,
-    envId: defaultEnvId(),
+    envId,
+    config: buildConfigForEnv(envId),
     params: buildEmptyParams(),
     browser: { headless: props.script?.browser?.headless ?? false }
   }
   editingId.value = id
+  draftTab.value = props.script?.envSchema?.length ? 'config' : 'params'
 }
 
 function startEdit(slot: ScriptInstanceSlot): void {
   editingId.value = slot.id
   draft.value = {
     ...slot,
+    config: { ...(slot.config ?? buildConfigForEnv(slot.envId)) },
     params: { ...slot.params },
     browser: { headless: slot.browser?.headless ?? false }
   }
+  draftTab.value = props.script?.envSchema?.length ? 'config' : 'params'
+}
+
+function onDraftEnvChange(envId: string): void {
+  if (!draft.value) return
+  draft.value.envId = envId
+  draft.value.config = buildConfigForEnv(envId)
 }
 
 function cancelEdit(): void {
   editingId.value = null
   draft.value = null
+  draftTab.value = 'config'
 }
 
 async function persistSlots(next: ScriptInstanceSlot[]): Promise<boolean> {
   if (!props.script) return false
   saving.value = true
   try {
-    await window.autoforge.scripts.setInstanceSlots(props.script.id, next)
-    slots.value = next
-    selectedIds.value = selectedIds.value.filter((id) => next.some((s) => s.id === id))
+    // Electron IPC 使用 structured clone；Vue Proxy 会报 "An object could not be cloned"
+    const plain = normalizeInstanceSlots(next)
+    await window.autoforge.scripts.setInstanceSlots(props.script.id, plain)
+    slots.value = plain
+    selectedIds.value = selectedIds.value.filter((id) => plain.some((s) => s.id === id))
     emit('refresh')
     return true
   } catch (err) {
@@ -141,8 +166,10 @@ async function saveDraft(): Promise<void> {
     return
   }
   const nextSlot: ScriptInstanceSlot = {
-    ...draft.value,
+    id: draft.value.id,
     name,
+    envId: draft.value.envId,
+    config: { ...draft.value.config },
     params: { ...draft.value.params },
     browser: { headless: !!draft.value.browser?.headless }
   }
@@ -187,7 +214,7 @@ async function startSelected(): Promise<void> {
   if (!props.script || !selectedIds.value.length) return
   starting.value = true
   try {
-    const result = await props.runner.startBatch(props.script.id, selectedIds.value)
+    const result = await props.runner.startBatch(props.script.id, [...selectedIds.value])
     if (result.ok) {
       emit('started', result.started.map((s) => s.id))
       emit('refresh')
@@ -315,22 +342,12 @@ async function stopAll(): Promise<void> {
               <div>
                 <label class="text-[10px] sb-text-faint uppercase tracking-wider">运行环境</label>
                 <select
-                  v-model="draft.envId"
+                  :value="draft.envId"
                   class="mt-1 w-full h-8 px-2 rounded-md border sb-border sb-bg-input text-[13px] outline-none focus:sb-input"
+                  @change="onDraftEnvChange(($event.target as HTMLSelectElement).value)"
                 >
                   <option v-for="env in environments" :key="env.id" :value="env.id">{{ env.name }}</option>
                 </select>
-              </div>
-              <div v-if="script.paramSchema?.length" class="space-y-2">
-                <label class="text-[10px] sb-text-faint uppercase tracking-wider">运行参数</label>
-                <SchemaValueField
-                  v-for="def in script.paramSchema"
-                  :key="def.key"
-                  :def="def"
-                  :model-value="draft.params[def.key] ?? ''"
-                  :script-id="script.id"
-                  @update:model-value="draft.params[def.key] = $event"
-                />
               </div>
               <label class="flex items-center gap-2 text-[12px] sb-text-secondary">
                 <input
@@ -341,6 +358,56 @@ async function stopAll(): Promise<void> {
                 />
                 无头模式
               </label>
+
+              <div class="flex gap-1 border-b sb-border-subtle">
+                <button
+                  type="button"
+                  class="px-3 py-1.5 text-[12px] transition-colors"
+                  :class="draftTab === 'config' ? 'font-medium sb-text-primary border-b-2 border-[var(--sb-text-primary)] -mb-px' : 'sb-text-muted hover:sb-text-secondary'"
+                  @click="draftTab = 'config'"
+                >
+                  环境变量
+                </button>
+                <button
+                  type="button"
+                  class="px-3 py-1.5 text-[12px] transition-colors"
+                  :class="draftTab === 'params' ? 'font-medium sb-text-primary border-b-2 border-[var(--sb-text-primary)] -mb-px' : 'sb-text-muted hover:sb-text-secondary'"
+                  @click="draftTab = 'params'"
+                >
+                  运行参数
+                </button>
+              </div>
+
+              <div v-if="draftTab === 'config'" class="space-y-2">
+                <p class="text-[11px] sb-text-faint">仅作用于本实例，不会写回详情页「配置」</p>
+                <template v-if="script.envSchema?.length">
+                  <SchemaValueField
+                    v-for="def in script.envSchema"
+                    :key="`env-${def.key}`"
+                    :def="def"
+                    :model-value="draft.config[def.key] ?? ''"
+                    :script-id="script.id"
+                    :attachment-storage-key="`instance/${draft.id}/env/${def.key}`"
+                    @update:model-value="draft.config[def.key] = $event"
+                  />
+                </template>
+                <p v-else class="text-[12px] sb-text-muted py-2">此脚本未声明环境变量</p>
+              </div>
+              <div v-else class="space-y-2">
+                <template v-if="script.paramSchema?.length">
+                  <SchemaValueField
+                    v-for="def in script.paramSchema"
+                    :key="`param-${def.key}`"
+                    :def="def"
+                    :model-value="draft.params[def.key] ?? ''"
+                    :script-id="script.id"
+                    :attachment-storage-key="`instance/${draft.id}/param/${def.key}`"
+                    @update:model-value="draft.params[def.key] = $event"
+                  />
+                </template>
+                <p v-else class="text-[12px] sb-text-muted py-2">此脚本未定义运行参数</p>
+              </div>
+
               <div class="flex gap-2">
                 <button
                   type="button"

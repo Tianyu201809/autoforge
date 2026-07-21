@@ -372,12 +372,18 @@ export function registerIpcHandlers(getWindow: () => BrowserWindow | null): void
       }
     ) => {
       const plainParams = params ? (JSON.parse(JSON.stringify(params)) as Record<string, string>) : undefined
-      return runner.start(scriptId, envId, plainParams, options)
+      const plainOptions = options
+        ? (JSON.parse(JSON.stringify(options)) as typeof options)
+        : undefined
+      return runner.start(scriptId, envId, plainParams, plainOptions)
     }
   )
 
   ipcMain.handle(IPC.RUNNER_START_BATCH, async (_event, scriptId: string, slotIds: string[]) => {
-    return runner.startBatch(scriptId, slotIds)
+    const plainIds = Array.isArray(slotIds) ? slotIds.map((id) => String(id)) : []
+    const result = await runner.startBatch(scriptId, plainIds)
+    // 回传结果也需可 structured clone（避免 session 上意外挂载不可克隆字段）
+    return JSON.parse(JSON.stringify(result)) as typeof result
   })
 
   ipcMain.handle(IPC.RUNNER_STOP, (_event, sessionId: string) => {

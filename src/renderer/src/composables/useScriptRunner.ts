@@ -97,7 +97,9 @@ export function useScriptRunner(
     slotIds: string[]
   ): Promise<{ ok: boolean; started: RunSession[]; error?: string }> {
     try {
-      const result = await window.autoforge.runner.startBatch(scriptId, slotIds)
+      // Vue reactive Proxy 数组无法经 Electron IPC structured clone
+      const plainIds = slotIds.map((id) => String(id))
+      const result = await window.autoforge.runner.startBatch(scriptId, plainIds)
       await refreshSessions()
       if (!result.ok) {
         showStartFailureToast(scriptId, result.error ?? '批量启动失败', getScriptName)

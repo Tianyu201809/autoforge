@@ -8,10 +8,10 @@
 
 ## 目标
 
-- 每脚本可保存最多 **5** 个实例槽（名称 + envId + params + browser）。
+- 每脚本可保存最多 **5** 个实例槽（名称 + envId + config + params + browser）。
 - 批量面板勾选槽后启动；同一脚本运行中实例总数（含单次运行）**≤ 5**，超出拒绝并提示剩余名额。
 - 保留详情页 ▶ 单次运行；批量为独立入口。
-- 批量启动**不写回** `paramsByEnv`，避免污染单次运行配置。
+- 批量启动**不写回** `paramsByEnv` / `configByEnv`，避免污染单次运行配置。
 - `RunSession` 可关联实例槽，日志页签能区分实例。
 - 可停止单个 session，以及停止该脚本全部 running 实例。
 
@@ -36,6 +36,7 @@ interface ScriptInstanceSlot {
   id: string
   name: string
   envId: string
+  config: Record<string, string>
   params: Record<string, string>
   browser?: { headless?: boolean }
 }
@@ -69,7 +70,7 @@ interface RunSession {
   - `persistParams?: boolean`（默认 `true`，兼容单次；批量传 `false`）
   - `instanceSlotId?: string` / `instanceName?: string`
   - `browserOverride?: { headless?: boolean }`（覆盖脚本默认 browser 配置，仅本 session）
-- 批量路径：用槽的 `envId` / `params` / `browser`，`persistParams: false`。
+- 批量路径：用槽的 `envId` / `config` / `params` / `browser`，`persistParams: false`（亦不写 `configByEnv`）。
 
 ### startBatch
 
@@ -96,7 +97,7 @@ interface RunSession {
 ### 批量面板
 
 - 实例槽列表：勾选、名称、环境/参数摘要、编辑、删除；「添加实例」（满 5 禁用）。
-- 编辑：名称、环境、参数表单（复用现有 Schema 控件）、无头模式。
+- 编辑：名称、环境、环境变量配置、参数表单（复用现有 Schema 控件）、无头模式。
 - 底部：「启动所选」「停止全部」；显示 `running/5`。
 
 ### 日志

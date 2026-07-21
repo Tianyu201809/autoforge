@@ -32,6 +32,8 @@ export interface ScriptInstanceSlot {
   id: string
   name: string
   envId: string
+  /** 该实例的脚本专属 env 配置（对应详情「配置」），不写回 configByEnv */
+  config: Record<string, string>
   params: Record<string, string>
   browser?: { headless?: boolean }
 }

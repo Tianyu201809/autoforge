@@ -49,6 +49,8 @@ export type StartOptions = {
   instanceSlotId?: string
   instanceName?: string
   browserOverride?: { headless?: boolean }
+  /** 覆盖脚本 configByEnv（批量实例用；不写回偏好） */
+  configOverride?: Record<string, string>
 }
 
 export class ScriptRunnerService {
@@ -105,7 +107,7 @@ export class ScriptRunnerService {
     }
 
     const resolvedEnvId = envId ?? script.defaultEnvId ?? scriptStore.getDefaultEnvironment().id
-    const env = scriptStore.resolveEnvForScript(script, resolvedEnvId)
+    const env = scriptStore.resolveEnvForScript(script, resolvedEnvId, options?.configOverride)
     const envError = scriptStore.validateEnvForScript(script, env)
     if (envError) {
       throw new Error(envError)
@@ -177,7 +179,7 @@ export class ScriptRunnerService {
     }
 
     for (const slot of selected) {
-      const env = scriptStore.resolveEnvForScript(script, slot.envId)
+      const env = scriptStore.resolveEnvForScript(script, slot.envId, slot.config)
       const envError = scriptStore.validateEnvForScript(script, env)
       if (envError) {
         return { ok: false, started: [], error: `「${slot.name}」: ${envError}` }
@@ -205,7 +207,8 @@ export class ScriptRunnerService {
         persistParams: false,
         instanceSlotId: slot.id,
         instanceName: slot.name,
-        browserOverride: slot.browser
+        browserOverride: slot.browser,
+        configOverride: slot.config
       })
       started.push(session)
     }

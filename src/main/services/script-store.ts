@@ -121,7 +121,11 @@ export class ScriptStore {
     return this.ensureInitialized().environments.getDefault()
   }
 
-  resolveEnvForScript(script: ScriptMeta, envId?: string): Record<string, string> {
+  resolveEnvForScript(
+    script: ScriptMeta,
+    envId?: string,
+    configOverrides?: Record<string, string>
+  ): Record<string, string> {
     const resolvedEnvId = envId ?? script.defaultEnvId ?? this.getDefaultEnvironment().id
     const profile = this.getEnvironment(resolvedEnvId)
 
@@ -138,6 +142,11 @@ export class ScriptStore {
     const scriptConfig = script.configByEnv?.[resolvedEnvId] ?? {}
     for (const [key, value] of Object.entries(scriptConfig)) {
       if (value !== undefined && value !== '') resolved[key] = value
+    }
+    if (configOverrides) {
+      for (const [key, value] of Object.entries(configOverrides)) {
+        if (value !== undefined) resolved[key] = value
+      }
     }
     return resolved
   }
