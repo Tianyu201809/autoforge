@@ -83,7 +83,7 @@ export class ExecutionHistoryService {
     const days = options.days ?? 30
     const cutoff = new Date(Date.now() - days * 24 * 60 * 60 * 1000).toISOString()
 
-    let list = repos.execution.queryRecords({
+    const list = repos.execution.queryRecords({
       cutoffIso: cutoff,
       scriptId: options.scriptId,
       scriptName: options.scriptName?.trim() || undefined
