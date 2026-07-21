@@ -4,10 +4,10 @@
 
 ### 自动化脚本散落在各处，环境配置重复录入，运行结果难以追溯——Autoforge 把它们收进一个本机桌面工作台。
 
-[![Version](https://img.shields.io/badge/version-1.15.0-blue)](docs/v1.15.0.md)
+[![Version](https://img.shields.io/badge/version-1.20.0-blue)](docs/v1.20.0.md)
 [![License](https://img.shields.io/badge/license-MIT-green)](LICENSE)
 
-[快速开始](#install) · [看示例](#see-it-work) · [脚本开发](#脚本开发) · [版本说明](docs/v1.15.0.md) · [更新日志](docs/CHANGELOG.md)
+[快速开始](#install) · [看示例](#see-it-work) · [脚本开发](#脚本开发) · [版本说明](docs/v1.20.0.md) · [更新日志](docs/CHANGELOG.md)
 
 </div>
 
@@ -264,7 +264,9 @@ Electron 34 · Vue 3 · TypeScript · Tailwind CSS 4 · Playwright Core · sql.j
 
 | 文档 | 内容 |
 |------|------|
-| [v1.15.0 版本说明](docs/v1.15.0.md) | 当前版本：Hub 一键安装到本地 |
+| [v1.20.0 版本说明](docs/v1.20.0.md) | 当前版本：嵌套分类树、多实例批量 |
+| [v1.19.0 版本说明](docs/v1.19.0.md) | AutoforgeHub 入口 |
+| [v1.15.0 版本说明](docs/v1.15.0.md) | Hub 一键安装到本地 |
 | [v1.11.0 版本说明](docs/v1.11.0.md) | 功能弹窗、UI 优化 |
 | [v1.10.0 版本说明](docs/v1.10.0.md) | 数据隔离、运行确认 |
 | [v1.9.0 版本说明](docs/v1.9.0.md) | 功能基线 |
