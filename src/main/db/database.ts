@@ -53,6 +53,17 @@ export function closeDatabase(): void {
   }
 }
 
+function tableHasColumn(database: SqliteDatabase, table: string, column: string): boolean {
+  const rows = database.prepare(`PRAGMA table_info(${table})`).all() as { name?: string }[]
+  return rows.some((row) => row.name === column)
+}
+
+function ensureCategoryParentIdColumn(database: SqliteDatabase): void {
+  if (!tableHasColumn(database, 'categories', 'parent_id')) {
+    database.exec(MIGRATION_004)
+  }
+}
+
 function runMigrations(database: SqliteDatabase): void {
   const hasMigrationsTable = database
     .prepare("SELECT name FROM sqlite_master WHERE type = 'table' AND name = 'schema_migrations'")
@@ -80,8 +91,9 @@ function runMigrations(database: SqliteDatabase): void {
     database.prepare('INSERT INTO schema_migrations (version) VALUES (?)').run(3)
   }
 
+  // v4 may have been recorded without the column (e.g. stale sql.js persist race). Always ensure.
+  ensureCategoryParentIdColumn(database)
   if (currentVersion < 4) {
-    database.exec(MIGRATION_004)
     database.prepare('INSERT INTO schema_migrations (version) VALUES (?)').run(4)
   }
 }
