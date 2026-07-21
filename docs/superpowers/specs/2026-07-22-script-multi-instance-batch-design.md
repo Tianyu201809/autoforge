@@ -84,7 +84,7 @@ interface RunSession {
 
 ### 卡片 / 列表状态
 
-- `ScriptItem` 的「是否运行中」改为可表达数量：例如 `runningCount`，或保留 `status: 'running'` 且另附 `activeSessionCount`。UI 显示「运行中 x/5」。
+- `ScriptItem` 增加 `activeSessionCount: number`；`status === 'running'` 当且仅当 `activeSessionCount > 0`。UI 显示「运行中 x/5」。
 
 ## UI 设计
 
