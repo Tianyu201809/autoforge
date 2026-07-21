@@ -11,6 +11,7 @@ import {
   Minimize2,
   Minus,
   Plus,
+  Square,
   Terminal,
   X
 } from 'lucide-vue-next'
@@ -51,6 +52,7 @@ const emit = defineEmits<{
   close: [sessionId: string]
   closeAll: []
   popout: []
+  stop: [sessionId: string]
 }>()
 
 const displayMode = defineModel<LogConsoleDisplayMode>('displayMode', { default: 'hidden' })
@@ -322,6 +324,11 @@ function closeAllSessions(): void {
   emit('closeAll')
 }
 
+function stopSession(sessionId: string, e?: Event): void {
+  e?.stopPropagation()
+  emit('stop', sessionId)
+}
+
 async function scrollToBottom(): Promise<void> {
   if (!autoScroll.value || !logBodyRef.value) return
   await nextTick()
@@ -483,6 +490,15 @@ onUnmounted(() => {
             <Eraser class="w-3.5 h-3.5" :stroke-width="1.5" />
           </button>
           <button
+            v-if="activeSession?.status === 'running'"
+            type="button"
+            class="w-7 h-7 flex items-center justify-center rounded text-red-400/90 hover:text-red-400 sb-bg-hover transition-colors"
+            title="停止当前实例"
+            @click="stopSession(activeSession.sessionId)"
+          >
+            <Square class="w-3.5 h-3.5" :stroke-width="1.5" />
+          </button>
+          <button
             v-if="isMulti && (sessions?.length ?? 0) > 0"
             type="button"
             class="w-7 h-7 flex items-center justify-center rounded sb-text-muted hover:text-red-400 sb-bg-hover transition-colors"
@@ -584,6 +600,15 @@ onUnmounted(() => {
             class="w-3 h-3 terminal-status-running animate-spin flex-shrink-0"
             :stroke-width="1.5"
           />
+          <button
+            v-if="session.status === 'running'"
+            type="button"
+            class="w-5 h-5 flex items-center justify-center rounded opacity-0 group-hover:opacity-100 text-red-400/90 hover:text-red-400 hover:sb-bg-hover flex-shrink-0 transition-opacity"
+            title="停止此实例"
+            @click="stopSession(session.sessionId, $event)"
+          >
+            <Square class="w-3 h-3" :stroke-width="1.5" />
+          </button>
           <button
             type="button"
             class="w-5 h-5 flex items-center justify-center rounded opacity-0 group-hover:opacity-100 sb-text-faint hover:text-red-400 hover:sb-bg-hover flex-shrink-0 transition-opacity"

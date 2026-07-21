@@ -475,6 +475,7 @@ onUnmounted(() => {
               @clear="handleClearLogs"
               @close="handleCloseTerminal"
               @close-all="handleCloseAllTerminals"
+              @stop="(id) => runner.stop(id).then(() => refresh())"
               @popout="handlePopoutTerminal"
             />
             <div

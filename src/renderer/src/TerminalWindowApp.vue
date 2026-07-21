@@ -15,6 +15,7 @@ const scriptNames = ref<Record<string, string>>({})
 function scriptNameForSession(sessionId: string): string {
   const session = runner.sessions.value.find((s) => s.id === sessionId)
   if (!session) return sessionId.slice(0, 8)
+  if (session.instanceName?.trim()) return session.instanceName.trim()
   return scriptNames.value[session.scriptId] ?? session.scriptId
 }
 
@@ -131,6 +132,7 @@ function handleCloseAll(): void {
         @clear="handleClear"
         @close="handleClose"
         @close-all="handleCloseAll"
+        @stop="(id) => void runner.stop(id)"
       />
     </div>
   </div>

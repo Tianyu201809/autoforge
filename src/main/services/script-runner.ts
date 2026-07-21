@@ -216,16 +216,18 @@ export class ScriptRunnerService {
   }
 
   stopAllForScript(scriptId: string): void {
-    for (const { session } of this.sessions.values()) {
-      if (session.scriptId === scriptId && session.status === 'running') {
-        this.stop(session.id)
-      }
+    const ids = Array.from(this.sessions.values())
+      .filter(({ session }) => session.scriptId === scriptId && session.status === 'running')
+      .map(({ session }) => session.id)
+    for (const id of ids) {
+      this.stop(id)
     }
   }
 
   stop(sessionId: string): RunSession | null {
     const active = this.sessions.get(sessionId)
     if (!active) return null
+    if (active.session.status !== 'running') return active.session
 
     this.setPhase(active.session, 'stopping', '正在停止…')
     active.abortController.abort()
@@ -310,7 +312,8 @@ export class ScriptRunnerService {
           config,
           script.workspacePath,
           log,
-          this.sessions.get(session.id)?.browserForRun ?? script.browser
+          this.sessions.get(session.id)?.browserForRun ?? script.browser,
+          abortController.signal
         )
       }
 
@@ -450,12 +453,16 @@ export class ScriptRunnerService {
   }
 
   private setPhase(session: RunSession, phase: RunSession['phase'], message?: string): void {
+    if (session.status !== 'running' && phase !== 'stopping' && phase !== 'stopped') {
+      return
+    }
     session.phase = phase
     this.lifecycle.emit(session.id, session.scriptId, phase!, message)
     this.broadcastSession(session)
   }
 
   private handleScriptControl(session: RunSession, control: ScriptControlMessage): void {
+    if (session.status !== 'running') return
     session.runProgress = {
       ...applyScriptControl(session.runProgress, control),
       updatedAt: new Date().toISOString()
@@ -485,6 +492,7 @@ export class ScriptRunnerService {
   private completeSession(sessionId: string, result?: unknown): void {
     const active = this.sessions.get(sessionId)
     if (!active) return
+    if (active.session.status !== 'running') return
     this.clearRunTimeout(sessionId)
     active.session.status = 'success'
     active.session.phase = 'completed'
@@ -506,6 +514,7 @@ export class ScriptRunnerService {
   private failSession(sessionId: string, message: string): void {
     const active = this.sessions.get(sessionId)
     if (!active) return
+    if (active.session.status !== 'running') return
     this.clearRunTimeout(sessionId)
     active.session.status = 'error'
     active.session.phase = 'failed'

@@ -1,8 +1,9 @@
 <script setup lang="ts">
 import { computed, ref, watch } from 'vue'
-import { Layers, Pencil, Plus, Trash2, X } from 'lucide-vue-next'
+import { Layers, Pencil, Plus, Square, Trash2, X } from 'lucide-vue-next'
 import type {
   EnvironmentProfile,
+  RunSession,
   ScriptInstanceSlot,
   ScriptItem
 } from '../../../shared/types/script'
@@ -37,7 +38,12 @@ const starting = ref(false)
 
 const editingSlot = computed(() => slots.value.find((s) => s.id === editingId.value) ?? null)
 const canAdd = computed(() => slots.value.length < MAX_INSTANCE_SLOTS)
-const runningCount = computed(() => props.script?.activeSessionCount ?? 0)
+const runningSessions = computed(() => {
+  const scriptId = props.script?.id
+  if (!scriptId) return [] as RunSession[]
+  return props.runner.sessions.value.filter((s) => s.scriptId === scriptId && s.status === 'running')
+})
+const runningCount = computed(() => runningSessions.value.length)
 
 watch(
   () => [props.open, props.script?.id] as const,
@@ -231,9 +237,34 @@ async function startSelected(): Promise<void> {
 
 async function stopAll(): Promise<void> {
   if (!props.script) return
-  await props.runner.stopByScript(props.script.id)
-  emit('refresh')
-  pushToast({ type: 'info', title: '已停止', message: '已停止该脚本全部运行中的实例' })
+  try {
+    await props.runner.stopByScript(props.script.id)
+    emit('refresh')
+    pushToast({ type: 'info', title: '已停止', message: '已停止该脚本全部运行中的实例' })
+  } catch (err) {
+    pushToast({
+      type: 'error',
+      title: '停止失败',
+      message: err instanceof Error ? err.message : '无法停止运行中的实例'
+    })
+  }
+}
+
+async function stopSession(sessionId: string): Promise<void> {
+  try {
+    await props.runner.stop(sessionId)
+    emit('refresh')
+  } catch (err) {
+    pushToast({
+      type: 'error',
+      title: '停止失败',
+      message: err instanceof Error ? err.message : '无法停止该实例'
+    })
+  }
+}
+
+function sessionLabel(session: RunSession): string {
+  return session.instanceName?.trim() || session.id.slice(0, 8)
 }
 </script>
 
@@ -326,6 +357,33 @@ async function stopAll(): Promise<void> {
               </li>
             </ul>
             <p v-else class="text-[12px] sb-text-faint py-6 text-center">还没有实例配置，点击上方添加</p>
+
+            <div v-if="runningSessions.length" class="space-y-1.5 pt-1">
+              <p class="text-[10px] font-medium sb-text-faint uppercase tracking-wider">
+                运行中 {{ runningCount }}/{{ MAX_CONCURRENT_SESSIONS_PER_SCRIPT }}
+              </p>
+              <ul class="space-y-1">
+                <li
+                  v-for="session in runningSessions"
+                  :key="session.id"
+                  class="flex items-center gap-2 px-3 py-2 rounded-lg border border-emerald-500/20 bg-emerald-500/5"
+                >
+                  <div class="flex-1 min-w-0">
+                    <p class="text-[13px] sb-text-primary font-medium truncate">{{ sessionLabel(session) }}</p>
+                    <p class="text-[11px] sb-text-faint truncate">{{ session.id.slice(0, 8) }} · {{ session.phase ?? 'running' }}</p>
+                  </div>
+                  <button
+                    type="button"
+                    class="flex items-center gap-1 h-7 px-2 rounded-md text-[12px] text-red-400/90 hover:text-red-400 hover:bg-red-500/10"
+                    title="停止此实例"
+                    @click="stopSession(session.id)"
+                  >
+                    <Square class="w-3 h-3" :stroke-width="1.5" />
+                    停止
+                  </button>
+                </li>
+              </ul>
+            </div>
 
             <div v-if="draft" class="rounded-lg border sb-border sb-bg-inset/50 p-3 space-y-3">
               <p class="text-[12px] font-medium sb-text-secondary">
