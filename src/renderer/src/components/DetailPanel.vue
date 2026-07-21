@@ -5,6 +5,7 @@ import {
   CheckCircle2,
   ChevronDown,
   FolderOpen,
+  Layers,
   Loader2,
   Package,
   Play,
@@ -177,6 +178,7 @@ const emit = defineEmits<{
   viewLog: []
   'keep-script': [scriptId: string]
   'navigate-tab': [tab: DetailPanelTab]
+  openBatch: []
 }>()
 
 const activeTab = ref<DetailPanelTab>('detail')
@@ -893,10 +895,13 @@ async function updateIcon(icon: ScriptIcon): Promise<void> {
 }
 async function handleRunToggle(): Promise<void> {
   if (isRunning.value) {
-    const sid = activeSessionId.value
+    const sid = viewingSessionId.value ?? activeSessionId.value
     if (!sid) return
     await props.runner.stop(sid)
     emit('refresh')
+    return
+  }
+  if ((props.script.activeSessionCount ?? 0) >= 5) {
     return
   }
   const confirmed = await askConfirm({
@@ -1010,14 +1015,28 @@ async function handleRename(): Promise<void> {
         </button>
         <button
           type="button"
+          class="detail-panel-open-dir"
+          title="批量运行"
+          @click="emit('openBatch')"
+        >
+          <Layers class="detail-panel-open-dir-icon" :stroke-width="1.75" />
+        </button>
+        <button
+          type="button"
           class="detail-panel-run-toggle"
           :class="isRunning ? 'is-running' : 'is-idle'"
-          :title="isRunning ? '停止' : '运行'"
+          :title="isRunning ? '停止当前实例' : (script.activeSessionCount ?? 0) >= 5 ? '已达并发上限 5' : '运行'"
+          :disabled="!isRunning && (script.activeSessionCount ?? 0) >= 5"
           @click="handleRunToggle"
         >
           <Square v-if="isRunning" class="detail-panel-run-toggle-icon detail-panel-run-toggle-icon--stop" :stroke-width="2" />
           <Play v-else class="detail-panel-run-toggle-icon" :stroke-width="2" />
         </button>
+        <span
+          v-if="(script.activeSessionCount ?? 0) > 0"
+          class="text-[10px] font-mono sb-text-muted tabular-nums px-1"
+          :title="`运行中 ${script.activeSessionCount}/5`"
+        >{{ script.activeSessionCount }}/5</span>
         <div class="detail-panel-header-divider" aria-hidden="true" />
         <button
           type="button"

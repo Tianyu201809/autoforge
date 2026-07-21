@@ -267,6 +267,15 @@ export function registerIpcHandlers(getWindow: () => BrowserWindow | null): void
     return enrichScriptItem(updated, runner.listSessions())
   })
 
+  ipcMain.handle(IPC.SCRIPTS_GET_INSTANCE_SLOTS, (_event, id: string) => {
+    return scriptStore.getInstanceSlots(id)
+  })
+
+  ipcMain.handle(IPC.SCRIPTS_SET_INSTANCE_SLOTS, (_event, id: string, slots: unknown) => {
+    const updated = scriptStore.setInstanceSlots(id, slots as import('../../shared/types/script').ScriptInstanceSlot[])
+    return enrichScriptItem(updated, runner.listSessions())
+  })
+
   ipcMain.handle(
     IPC.SCRIPTS_UPDATE_META,
     (_event, id: string, patch: { name?: string; icon?: ScriptIcon; category?: string; categoryLabel?: string; browser?: { headless?: boolean } }) => {
@@ -349,14 +358,34 @@ export function registerIpcHandlers(getWindow: () => BrowserWindow | null): void
 
   ipcMain.handle(
     IPC.RUNNER_START,
-    async (_event, scriptId: string, envId?: string, params?: Record<string, string>) => {
+    async (
+      _event,
+      scriptId: string,
+      envId?: string,
+      params?: Record<string, string>,
+      options?: {
+        trigger?: 'manual' | 'scheduled'
+        persistParams?: boolean
+        instanceSlotId?: string
+        instanceName?: string
+        browserOverride?: { headless?: boolean }
+      }
+    ) => {
       const plainParams = params ? (JSON.parse(JSON.stringify(params)) as Record<string, string>) : undefined
-      return runner.start(scriptId, envId, plainParams)
+      return runner.start(scriptId, envId, plainParams, options)
     }
   )
 
+  ipcMain.handle(IPC.RUNNER_START_BATCH, async (_event, scriptId: string, slotIds: string[]) => {
+    return runner.startBatch(scriptId, slotIds)
+  })
+
   ipcMain.handle(IPC.RUNNER_STOP, (_event, sessionId: string) => {
     return runner.stop(sessionId)
+  })
+
+  ipcMain.handle(IPC.RUNNER_STOP_BY_SCRIPT, (_event, scriptId: string) => {
+    runner.stopAllForScript(scriptId)
   })
 
   ipcMain.handle(IPC.RUNNER_LIST_SESSIONS, () => {

@@ -10,6 +10,7 @@ import {
   Loader2,
   Clock,
   MoreHorizontal,
+  Layers,
   Pencil,
   PencilLine,
   Play,
@@ -49,6 +50,7 @@ const emit = defineEmits<{
   start: []
   stop: []
   restart: []
+  batchRun: []
   toggleStar: []
   edit: []
   archive: []
@@ -500,8 +502,8 @@ onUnmounted(() => {
                 <button
                   type="button"
                   class="w-full flex items-center gap-2 px-3 py-1.5 text-[12px] text-left transition-colors disabled:opacity-40 disabled:pointer-events-none"
-                  :class="script.status === 'running' ? 'sb-text-muted' : 'text-emerald-400/90 hover:text-emerald-400 hover:bg-emerald-500/10'"
-                  :disabled="script.status === 'running'"
+                  :class="(script.activeSessionCount ?? 0) >= 5 ? 'sb-text-muted' : 'text-emerald-400/90 hover:text-emerald-400 hover:bg-emerald-500/10'"
+                  :disabled="(script.activeSessionCount ?? 0) >= 5"
                   @click="emit('start'); closeMenu()"
                 >
                   <Play class="w-3.5 h-3.5" :stroke-width="1.5" />
@@ -510,8 +512,8 @@ onUnmounted(() => {
                 <button
                   type="button"
                   class="w-full flex items-center gap-2 px-3 py-1.5 text-[12px] text-left transition-colors disabled:opacity-40 disabled:pointer-events-none"
-                  :class="script.status === 'running' ? 'text-red-400/90 hover:text-red-400 hover:bg-red-500/10' : 'sb-text-muted'"
-                  :disabled="script.status !== 'running'"
+                  :class="(script.activeSessionCount ?? 0) > 0 ? 'text-red-400/90 hover:text-red-400 hover:bg-red-500/10' : 'sb-text-muted'"
+                  :disabled="(script.activeSessionCount ?? 0) === 0"
                   @click="emit('stop'); closeMenu()"
                 >
                   <Square class="w-3.5 h-3.5" :stroke-width="1.5" />
@@ -520,6 +522,10 @@ onUnmounted(() => {
                 <button type="button" class="w-full flex items-center gap-2 px-3 py-1.5 text-[12px] sb-text-muted hover:sb-text-primary hover:sb-bg-hover text-left" @click="emit('restart'); closeMenu()">
                   <RotateCw class="w-3.5 h-3.5" :stroke-width="1.5" />
                   重启
+                </button>
+                <button type="button" class="w-full flex items-center gap-2 px-3 py-1.5 text-[12px] sb-text-muted hover:sb-text-primary hover:sb-bg-hover text-left" @click="emit('batchRun'); closeMenu()">
+                  <Layers class="w-3.5 h-3.5" :stroke-width="1.5" />
+                  批量运行…
                 </button>
                 <div class="my-1 border-t sb-border-subtle" />
                 <button type="button" class="w-full flex items-center gap-2 px-3 py-1.5 text-[12px] sb-text-muted hover:sb-text-primary hover:sb-bg-hover text-left" @click="emit('edit'); closeMenu()">

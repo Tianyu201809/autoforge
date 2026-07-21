@@ -20,7 +20,7 @@
     "dist:linux": "npm run generate:icons && npm run install:browsers && npm run build && electron-builder --linux",
     "lint": "eslint .",
     "lint:fix": "eslint . --fix",
-    "test:unit": "node --import tsx --test src/shared/category-tree.test.ts"
+    "test:unit": "node --import tsx --test src/shared/category-tree.test.ts src/shared/instance-slots.test.ts"
   },
   "dependencies": {
     "adm-zip": "^0.6.0",

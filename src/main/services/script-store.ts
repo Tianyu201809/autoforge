@@ -5,6 +5,7 @@ import type {
   AppConfig,
   CategoryDefinition,
   EnvironmentProfile,
+  ScriptInstanceSlot,
   ScriptMeta,
   ScriptPreference
 } from '../../shared/types/script'
@@ -15,6 +16,7 @@ import {
   type StoredCategory
 } from './category-service'
 import { wouldCreateCycle } from '../../shared/category-tree'
+import { assertSlotsWritable, normalizeInstanceSlots } from '../../shared/instance-slots'
 import { getDb } from '../db/database'
 import { createRepositories, type Repositories } from '../db/repositories'
 
@@ -66,6 +68,7 @@ export class ScriptStore {
       defaultEnvId: pref.defaultEnvId ?? script.defaultEnvId,
       configByEnv: pref.configByEnv ?? script.configByEnv ?? {},
       paramsByEnv: this.mergeParamsByEnv(pref, script),
+      instanceSlots: pref.instanceSlots ?? script.instanceSlots ?? [],
       paramSchema: script.paramSchema ?? []
     }
   }
@@ -228,6 +231,21 @@ export class ScriptStore {
 
   setPreference(id: string, patch: ScriptPreference): void {
     this.ensureInitialized().scripts.mergePreference(id, patch)
+  }
+
+  getInstanceSlots(scriptId: string): ScriptInstanceSlot[] {
+    const pref = this.getPreference(scriptId)
+    return normalizeInstanceSlots(pref.instanceSlots ?? [])
+  }
+
+  setInstanceSlots(scriptId: string, slots: ScriptInstanceSlot[]): ScriptMeta {
+    const normalized = normalizeInstanceSlots(slots)
+    assertSlotsWritable(normalized)
+    const repos = this.ensureInitialized()
+    const script = repos.scripts.getById(scriptId)
+    if (!script) throw new Error('脚本不存在')
+    repos.scripts.mergePreference(scriptId, { instanceSlots: normalized })
+    return this.applyPreference(script)
   }
 
   getCategoryDefinitions(): CategoryDefinition[] {

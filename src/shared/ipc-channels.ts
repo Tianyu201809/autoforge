@@ -38,8 +38,8 @@ export const IPC = {
   SCRIPTS_SET_PARAMS: 'scripts:set-params',
 
   SCRIPTS_UPDATE_META: 'scripts:update-meta',
-
-
+  SCRIPTS_GET_INSTANCE_SLOTS: 'scripts:get-instance-slots',
+  SCRIPTS_SET_INSTANCE_SLOTS: 'scripts:set-instance-slots',
 
   CATEGORIES_LIST: 'categories:list',
 
@@ -64,6 +64,8 @@ export const IPC = {
   RUNNER_START: 'runner:start',
 
   RUNNER_STOP: 'runner:stop',
+  RUNNER_START_BATCH: 'runner:start-batch',
+  RUNNER_STOP_BY_SCRIPT: 'runner:stop-by-script',
 
   RUNNER_LIST_SESSIONS: 'runner:list-sessions',
 

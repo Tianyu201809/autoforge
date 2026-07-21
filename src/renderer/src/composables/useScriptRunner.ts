@@ -72,10 +72,16 @@ export function useScriptRunner(
   async function start(
     scriptId: string,
     envId?: string,
-    params?: Record<string, string>
+    params?: Record<string, string>,
+    options?: {
+      persistParams?: boolean
+      instanceSlotId?: string
+      instanceName?: string
+      browserOverride?: { headless?: boolean }
+    }
   ): Promise<RunSession | null> {
     try {
-      const session = await window.autoforge.runner.start(scriptId, envId, params)
+      const session = await window.autoforge.runner.start(scriptId, envId, params, options)
       activeSession.value = session
       await refreshSessions()
       return session
@@ -86,15 +92,37 @@ export function useScriptRunner(
     }
   }
 
+  async function startBatch(
+    scriptId: string,
+    slotIds: string[]
+  ): Promise<{ ok: boolean; started: RunSession[]; error?: string }> {
+    try {
+      const result = await window.autoforge.runner.startBatch(scriptId, slotIds)
+      await refreshSessions()
+      if (!result.ok) {
+        showStartFailureToast(scriptId, result.error ?? '批量启动失败', getScriptName)
+      } else if (result.started.length > 0) {
+        activeSession.value = result.started[result.started.length - 1]
+      }
+      return result
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error)
+      showStartFailureToast(scriptId, message, getScriptName)
+      return { ok: false, started: [], error: message }
+    }
+  }
+
+  async function stopByScript(scriptId: string): Promise<void> {
+    await window.autoforge.runner.stopByScript(scriptId)
+    await refreshSessions()
+  }
+
   async function restart(
     scriptId: string,
     envId?: string,
     params?: Record<string, string>
   ): Promise<RunSession | null> {
-    const running = sessions.value.find((s) => s.scriptId === scriptId && s.status === 'running')
-    if (running) {
-      await stop(running.id)
-    }
+    await stopByScript(scriptId)
     return start(scriptId, envId, params)
   }
 
@@ -164,7 +192,9 @@ export function useScriptRunner(
     lifecycleEvents,
     activeSession,
     start,
+    startBatch,
     stop,
+    stopByScript,
     restart,
     refreshSessions,
     logsForSession,

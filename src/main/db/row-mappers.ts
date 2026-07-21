@@ -1,5 +1,6 @@
 import type { AppConfig, CronConfig, EnvironmentProfile, ExecutionRecord, ScriptMeta } from '../../shared/types/script'
 import { resolveScriptLanguage } from '../../shared/script-language'
+import { normalizeInstanceSlots } from '../../shared/instance-slots'
 import type { CategoryOverride, StoredCategory } from '../services/category-service'
 import type { ScriptPreference } from '../../shared/types/script'
 
@@ -55,6 +56,7 @@ export interface ScriptRow {
   config_by_env: string | null
   params_by_env: string | null
   saved_params: string | null
+  instance_slots: string | null
 }
 
 export interface ScriptPreferenceRow {
@@ -67,6 +69,7 @@ export interface ScriptPreferenceRow {
   config_by_env: string
   params_by_env: string
   saved_params: string | null
+  instance_slots: string
 }
 
 export interface EnvironmentRow {
@@ -122,7 +125,8 @@ export function rowToScriptBase(row: ScriptRow): ScriptMeta {
     defaultEnvId: row.default_env_id ?? undefined,
     configByEnv: fromJson(row.config_by_env, {}),
     paramsByEnv: fromJson(row.params_by_env, {}),
-    savedParams: fromJson(row.saved_params, undefined)
+    savedParams: fromJson(row.saved_params, undefined),
+    instanceSlots: normalizeInstanceSlots(fromJson(row.instance_slots, []))
   }
 }
 
@@ -135,7 +139,8 @@ export function rowToPreference(row: ScriptPreferenceRow): ScriptPreference {
     defaultEnvId: row.default_env_id ?? undefined,
     configByEnv: fromJson(row.config_by_env, {}),
     paramsByEnv: fromJson(row.params_by_env, {}),
-    savedParams: fromJson(row.saved_params, undefined)
+    savedParams: fromJson(row.saved_params, undefined),
+    instanceSlots: normalizeInstanceSlots(fromJson(row.instance_slots, []))
   }
 }
 
@@ -149,7 +154,8 @@ export function preferenceToRow(scriptId: string, pref: ScriptPreference): Scrip
     default_env_id: pref.defaultEnvId ?? null,
     config_by_env: JSON.stringify(pref.configByEnv ?? {}),
     params_by_env: JSON.stringify(pref.paramsByEnv ?? {}),
-    saved_params: toJson(pref.savedParams)
+    saved_params: toJson(pref.savedParams),
+    instance_slots: JSON.stringify(normalizeInstanceSlots(pref.instanceSlots ?? []))
   }
 }
 
@@ -188,6 +194,7 @@ export function extractPreferenceFromMeta(meta: Partial<ScriptMeta>): ScriptPref
   if (meta.configByEnv !== undefined) pref.configByEnv = meta.configByEnv
   if (meta.paramsByEnv !== undefined) pref.paramsByEnv = meta.paramsByEnv
   if (meta.savedParams !== undefined) pref.savedParams = meta.savedParams
+  if (meta.instanceSlots !== undefined) pref.instanceSlots = meta.instanceSlots
   return pref
 }
 

@@ -129,6 +129,11 @@ export interface AutoforgeApi {
     installDeps: (id: string) => Promise<DependencyInstallResult>
     setEnvConfig: (id: string, envId: string, values: Record<string, string>) => Promise<ScriptItem | null>
     setParams: (id: string, envId: string, values: Record<string, string>) => Promise<ScriptItem | null>
+    getInstanceSlots: (id: string) => Promise<import('../../shared/types/script').ScriptInstanceSlot[]>
+    setInstanceSlots: (
+      id: string,
+      slots: import('../../shared/types/script').ScriptInstanceSlot[]
+    ) => Promise<ScriptItem>
     updateMeta: (
       id: string,
       patch: { name?: string; icon?: ScriptIcon; category?: string; categoryLabel?: string; browser?: { headless?: boolean } }
@@ -157,8 +162,23 @@ export interface AutoforgeApi {
     delete: (id: string) => Promise<boolean>
   }
   runner: {
-    start: (scriptId: string, envId?: string, params?: Record<string, string>) => Promise<RunSession>
+    start: (
+      scriptId: string,
+      envId?: string,
+      params?: Record<string, string>,
+      options?: {
+        persistParams?: boolean
+        instanceSlotId?: string
+        instanceName?: string
+        browserOverride?: { headless?: boolean }
+      }
+    ) => Promise<RunSession>
+    startBatch: (
+      scriptId: string,
+      slotIds: string[]
+    ) => Promise<{ ok: boolean; started: RunSession[]; error?: string }>
     stop: (sessionId: string) => Promise<RunSession | null>
+    stopByScript: (scriptId: string) => Promise<void>
     listSessions: () => Promise<RunSession[]>
     getSession: (sessionId: string) => Promise<RunSession | undefined>
     onLog: (callback: (line: LogLine) => void) => () => void

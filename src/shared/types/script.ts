@@ -23,6 +23,17 @@ export interface ScriptPreference {
   paramsByEnv?: Record<string, Record<string, string>>
   /** @deprecated 旧版全局参数，读取时会迁移到 paramsByEnv */
   savedParams?: Record<string, string>
+  /** 多实例批量运行预设槽（最多 5） */
+  instanceSlots?: ScriptInstanceSlot[]
+}
+
+/** 脚本多实例批量运行的一个预设槽 */
+export interface ScriptInstanceSlot {
+  id: string
+  name: string
+  envId: string
+  params: Record<string, string>
+  browser?: { headless?: boolean }
 }
 
 /** 环境 Profile — 一组可复用的环境变量 */
@@ -79,6 +90,8 @@ export interface ScriptMeta {
   browser?: {
     headless?: boolean
   }
+  /** 多实例批量运行预设槽（最多 5） */
+  instanceSlots?: ScriptInstanceSlot[]
 }
 
 export interface ScriptItem extends ScriptMeta {
@@ -86,6 +99,8 @@ export interface ScriptItem extends ScriptMeta {
   meta: string
   errorMeta?: string
   activeSessionId?: string
+  /** 当前 running 的 session 数量 */
+  activeSessionCount: number
 }
 
 export interface RunSession {
@@ -103,6 +118,10 @@ export interface RunSession {
   finishedAt?: string
   exitCode?: number
   result?: unknown
+  /** 批量实例槽 id（若有） */
+  instanceSlotId?: string
+  /** 批量实例显示名（若有） */
+  instanceName?: string
 }
 
 export interface LogLine {

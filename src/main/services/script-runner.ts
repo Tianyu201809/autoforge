@@ -32,12 +32,23 @@ import { formatScriptRunProgressSummary } from '../../shared/script-progress'
 import { broadcastToRenderers } from './window-broadcast'
 import { killPythonProcess, runPythonScript } from './python-script-runner'
 import { resolvePythonExecutable } from './python-resolver'
+import { MAX_CONCURRENT_SESSIONS_PER_SCRIPT } from '../../shared/instance-slots'
+import type { ScriptInstanceSlot } from '../../shared/types/script'
 
 interface ActiveSession {
   session: RunSession
   abortController: AbortController
   childProcess?: ChildProcess
   runTimeoutHandle?: ReturnType<typeof setTimeout>
+  browserForRun?: ScriptMeta['browser']
+}
+
+export type StartOptions = {
+  trigger?: ExecutionTrigger
+  persistParams?: boolean
+  instanceSlotId?: string
+  instanceName?: string
+  browserOverride?: { headless?: boolean }
 }
 
 export class ScriptRunnerService {
@@ -67,14 +78,26 @@ export class ScriptRunnerService {
     return undefined
   }
 
+  countRunningSessions(scriptId: string): number {
+    let count = 0
+    for (const { session } of this.sessions.values()) {
+      if (session.scriptId === scriptId && session.status === 'running') count += 1
+    }
+    return count
+  }
+
   async start(
     scriptId: string,
     envId?: string,
     runtimeParams?: Record<string, string>,
-    options?: { trigger?: ExecutionTrigger }
+    options?: StartOptions
   ): Promise<RunSession> {
-    const existing = this.getActiveSessionForScript(scriptId)
-    if (existing) return existing
+    const running = this.countRunningSessions(scriptId)
+    if (running >= MAX_CONCURRENT_SESSIONS_PER_SCRIPT) {
+      throw new Error(
+        `该脚本最多同时运行 ${MAX_CONCURRENT_SESSIONS_PER_SCRIPT} 个实例，当前已满`
+      )
+    }
 
     const script = scriptRegistry.getById(scriptId)
     if (!script) {
@@ -93,7 +116,14 @@ export class ScriptRunnerService {
     if (paramsError) {
       throw new Error(paramsError)
     }
-    scriptStore.setScriptParams(scriptId, resolvedEnvId, params)
+    if (options?.persistParams !== false) {
+      scriptStore.setScriptParams(scriptId, resolvedEnvId, params)
+    }
+
+    const browserForRun: ScriptMeta['browser'] = {
+      ...script.browser,
+      ...options?.browserOverride
+    }
 
     const session: RunSession = {
       id: randomUUID(),
@@ -101,11 +131,13 @@ export class ScriptRunnerService {
       status: 'running',
       envId: resolvedEnvId,
       phase: 'queued',
-      startedAt: new Date().toISOString()
+      startedAt: new Date().toISOString(),
+      instanceSlotId: options?.instanceSlotId,
+      instanceName: options?.instanceName
     }
 
     const abortController = new AbortController()
-    this.sessions.set(session.id, { session, abortController })
+    this.sessions.set(session.id, { session, abortController, browserForRun })
     executionHistory.recordStart({
       sessionId: session.id,
       scriptId: script.id,
@@ -119,6 +151,65 @@ export class ScriptRunnerService {
     void this.executePackage(session, script, env, params, abortController)
 
     return session
+  }
+
+  async startBatch(
+    scriptId: string,
+    slotIds: string[]
+  ): Promise<{ ok: boolean; started: RunSession[]; error?: string }> {
+    if (!slotIds.length) {
+      return { ok: false, started: [], error: '请至少选择一个实例' }
+    }
+
+    const script = scriptRegistry.getById(scriptId)
+    if (!script) {
+      return { ok: false, started: [], error: `脚本不存在: ${scriptId}` }
+    }
+
+    const slots = scriptStore.getInstanceSlots(scriptId)
+    const selected: ScriptInstanceSlot[] = []
+    for (const id of slotIds) {
+      const slot = slots.find((s) => s.id === id)
+      if (!slot) {
+        return { ok: false, started: [], error: `实例配置不存在: ${id}` }
+      }
+      selected.push(slot)
+    }
+
+    for (const slot of selected) {
+      const env = scriptStore.resolveEnvForScript(script, slot.envId)
+      const envError = scriptStore.validateEnvForScript(script, env)
+      if (envError) {
+        return { ok: false, started: [], error: `「${slot.name}」: ${envError}` }
+      }
+      const params = scriptStore.resolveParamsForScript(script, slot.envId, slot.params)
+      const paramsError = scriptStore.validateParamsForScript(script, params)
+      if (paramsError) {
+        return { ok: false, started: [], error: `「${slot.name}」: ${paramsError}` }
+      }
+    }
+
+    const running = this.countRunningSessions(scriptId)
+    const remaining = MAX_CONCURRENT_SESSIONS_PER_SCRIPT - running
+    if (selected.length > remaining) {
+      return {
+        ok: false,
+        started: [],
+        error: `该脚本最多同时运行 ${MAX_CONCURRENT_SESSIONS_PER_SCRIPT} 个实例，还可启动 ${Math.max(0, remaining)} 个`
+      }
+    }
+
+    const started: RunSession[] = []
+    for (const slot of selected) {
+      const session = await this.start(scriptId, slot.envId, slot.params, {
+        persistParams: false,
+        instanceSlotId: slot.id,
+        instanceName: slot.name,
+        browserOverride: slot.browser
+      })
+      started.push(session)
+    }
+    return { ok: true, started }
   }
 
   stopAllForScript(scriptId: string): void {
@@ -212,7 +303,12 @@ export class ScriptRunnerService {
         log,
         stage,
         progress,
-        sdk: createScriptSdk(config, script.workspacePath, log, script.browser)
+        sdk: createScriptSdk(
+          config,
+          script.workspacePath,
+          log,
+          this.sessions.get(session.id)?.browserForRun ?? script.browser
+        )
       }
 
       const result = await runFn(ctx)
@@ -263,7 +359,10 @@ export class ScriptRunnerService {
       this.armRunTimeout(session.id)
 
       const outcome = await runPythonScript(
-        script,
+        {
+          ...script,
+          browser: this.sessions.get(session.id)?.browserForRun ?? script.browser
+        },
         session.id,
         env,
         params,
@@ -463,7 +562,9 @@ export function enrichScriptItem(
   sessions: RunSession[]
 ): import('../../shared/types/script').ScriptItem {
   const scriptSessions = sessions.filter((s) => s.scriptId === meta.id)
-  const active = scriptSessions.find((s) => s.status === 'running')
+  const activeSessions = scriptSessions.filter((s) => s.status === 'running')
+  const active = activeSessions[0]
+  const activeSessionCount = activeSessions.length
   const lastTerminal = [...scriptSessions]
     .filter((s) => s.status === 'success' || s.status === 'error' || s.status === 'stopped')
     .sort((a, b) =>
@@ -474,11 +575,17 @@ export function enrichScriptItem(
   let metaText = meta.recentRunAt ? `最近运行 ${formatRelative(meta.recentRunAt)}` : '尚未运行'
   let errorMeta: string | undefined
 
-  if (active) {
+  if (activeSessionCount > 0 && active) {
     status = 'running'
     const progressSummary = formatScriptRunProgressSummary(active.runProgress)
-    metaText = progressSummary
-      ?? (active.phase ? `${phaseLabel(active.phase)} · ${formatTime(active.startedAt)}` : `运行中 · ${formatTime(active.startedAt)}`)
+    const countLabel =
+      activeSessionCount > 1 ? `运行中 ${activeSessionCount}/${MAX_CONCURRENT_SESSIONS_PER_SCRIPT}` : null
+    metaText =
+      countLabel ??
+      progressSummary ??
+      (active.phase
+        ? `${phaseLabel(active.phase)} · ${formatTime(active.startedAt)}`
+        : `运行中 · ${formatTime(active.startedAt)}`)
   } else if (lastTerminal?.status === 'error') {
     status = 'error'
     errorMeta = `Exit code ${lastTerminal.exitCode ?? 1} · ${formatRelative(lastTerminal.finishedAt ?? lastTerminal.startedAt)}`
@@ -490,7 +597,8 @@ export function enrichScriptItem(
     status,
     meta: metaText,
     errorMeta,
-    activeSessionId: active?.id
+    activeSessionId: active?.id,
+    activeSessionCount
   }
 }
 

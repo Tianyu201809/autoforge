@@ -15,7 +15,7 @@ const SCRIPT_JOIN = `
     s.category_color, s.icon, s.icon_color, s.icon_bg, s.icon_border, s.version,
     s.entry, s.imported_at, s.env_schema, s.param_schema, s.dependencies, s.browser,
     p.starred, p.archived, p.recent_run_at, p.schedule, p.default_env_id,
-    p.config_by_env, p.params_by_env, p.saved_params
+    p.config_by_env, p.params_by_env, p.saved_params, p.instance_slots
   FROM scripts s
   LEFT JOIN script_preferences p ON p.script_id = s.id
 `
@@ -75,6 +75,7 @@ export class ScriptRepository {
       configByEnv,
       paramsByEnv,
       savedParams,
+      instanceSlots,
       ...metaPatch
     } = patch
 
@@ -102,7 +103,8 @@ export class ScriptRepository {
       defaultEnvId,
       configByEnv,
       paramsByEnv,
-      savedParams
+      savedParams,
+      instanceSlots
     })
     if (Object.keys(prefPatch).length > 0) {
       this.mergePreference(id, prefPatch)
@@ -137,10 +139,10 @@ export class ScriptRepository {
       .prepare(
         `INSERT INTO script_preferences (
           script_id, starred, archived, recent_run_at, schedule, default_env_id,
-          config_by_env, params_by_env, saved_params
+          config_by_env, params_by_env, saved_params, instance_slots
         ) VALUES (
           @script_id, @starred, @archived, @recent_run_at, @schedule, @default_env_id,
-          @config_by_env, @params_by_env, @saved_params
+          @config_by_env, @params_by_env, @saved_params, @instance_slots
         )
         ON CONFLICT(script_id) DO UPDATE SET
           starred = excluded.starred,
@@ -150,7 +152,8 @@ export class ScriptRepository {
           default_env_id = excluded.default_env_id,
           config_by_env = excluded.config_by_env,
           params_by_env = excluded.params_by_env,
-          saved_params = excluded.saved_params`
+          saved_params = excluded.saved_params,
+          instance_slots = excluded.instance_slots`
       )
       .run(row)
   }

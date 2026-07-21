@@ -4,6 +4,7 @@ import { MIGRATION_001 } from './migrations/001-initial'
 import { MIGRATION_002 } from './migrations/002-script-imported-at'
 import { MIGRATION_003 } from './migrations/003-script-hub-id'
 import { MIGRATION_004 } from './migrations/004-category-parent-id'
+import { MIGRATION_005 } from './migrations/005-instance-slots'
 import { migrateFromJsonIfNeeded } from './migrate-from-json'
 import { openSqliteDatabase, type SqliteDatabase } from './sqlite-adapter'
 
@@ -95,6 +96,17 @@ function runMigrations(database: SqliteDatabase): void {
   ensureCategoryParentIdColumn(database)
   if (currentVersion < 4) {
     database.prepare('INSERT INTO schema_migrations (version) VALUES (?)').run(4)
+  }
+
+  ensureInstanceSlotsColumn(database)
+  if (currentVersion < 5) {
+    database.prepare('INSERT INTO schema_migrations (version) VALUES (?)').run(5)
+  }
+}
+
+function ensureInstanceSlotsColumn(database: SqliteDatabase): void {
+  if (!tableHasColumn(database, 'script_preferences', 'instance_slots')) {
+    database.exec(MIGRATION_005)
   }
 }
 

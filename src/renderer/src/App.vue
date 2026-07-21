@@ -14,6 +14,7 @@ import SettingsPanel from './components/SettingsPanel.vue'
 import DevGuidePanel from './components/DevGuidePanel.vue'
 import ExecutionHistoryPanel from './components/ExecutionHistoryPanel.vue'
 import CategoryManagerModal from './components/CategoryManagerModal.vue'
+import BatchRunPanel from './components/BatchRunPanel.vue'
 import RunResultModal from './components/RunResultModal.vue'
 import ToastHost from './components/ToastHost.vue'
 import ConfirmDialogHost from './components/ConfirmDialogHost.vue'
@@ -96,6 +97,8 @@ const runResultModalSession = computed(() => {
 
 const selectedScriptId = ref<string | null>(null)
 const detailVisible = ref(true)
+const showBatchRun = ref(false)
+const batchScriptId = ref<string | null>(null)
 type DetailPanelTab = 'detail' | 'params' | 'edit' | 'log' | 'config' | 'history' | 'docs'
 const detailInitialTab = ref<DetailPanelTab>('detail')
 const detailTabRequest = ref(0)
@@ -109,9 +112,32 @@ const selectedScript = computed(
   () => filteredScripts.value.find((s) => s.id === selectedScriptId.value) ?? null
 )
 
+const batchScript = computed(
+  () =>
+    filteredScripts.value.find((s) => s.id === batchScriptId.value) ??
+    scripts.value.find((s) => s.id === batchScriptId.value) ??
+    null
+)
+
+function openBatchRun(scriptId: string): void {
+  batchScriptId.value = scriptId
+  showBatchRun.value = true
+}
+
+function closeBatchRun(): void {
+  showBatchRun.value = false
+  batchScriptId.value = null
+}
+
+function onBatchStarted(sessionIds: string[]): void {
+  for (const id of sessionIds) trackSession(id)
+  openLogConsoleNormal()
+}
+
 function scriptNameForSession(sessionId: string): string {
   const session = runner.sessions.value.find((s) => s.id === sessionId)
   if (!session) return sessionId.slice(0, 8)
+  if (session.instanceName?.trim()) return session.instanceName.trim()
   return filteredScripts.value.find((s) => s.id === session.scriptId)?.name ?? session.scriptId
 }
 
@@ -391,6 +417,14 @@ onUnmounted(() => {
         @close="closeCategoryManager"
         @refresh="refresh()"
       />
+      <BatchRunPanel
+        :open="showBatchRun"
+        :script="batchScript"
+        :runner="runner"
+        @close="closeBatchRun"
+        @refresh="refresh()"
+        @started="onBatchStarted"
+      />
       <DevGuidePanel :open="showDevGuide" @close="closeDevGuide" @imported="onExampleImported" />
       <ExecutionHistoryPanel :open="showExecutionHistory" @close="closeExecutionHistory" />
       <SettingsPanel
@@ -418,6 +452,7 @@ onUnmounted(() => {
               @start="(id) => void handleStart(id)"
               @stop="(id) => runner.stop(id).then(() => refresh())"
               @restart="(id) => runner.restart(id).then(() => refresh())"
+              @batch-run="openBatchRun"
               @toggle-star="(id) => toggleStar(id)"
               @edit="selectScript($event, 'edit')"
               @archive="(id) => toggleArchive(id)"
@@ -470,6 +505,7 @@ onUnmounted(() => {
             @keep-script="selectedScriptId = $event"
             @view-log="openLogConsoleNormal()"
             @navigate-tab="navigateDetailTab"
+            @open-batch="openBatchRun(selectedScript.id)"
           />
         </div>
       </div>

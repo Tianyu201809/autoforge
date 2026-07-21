@@ -25,6 +25,7 @@ import type {
   ScriptExportResult,
   ScriptExportPreview,
   ScriptItem,
+  ScriptInstanceSlot,
   ScriptMeta,
   ScriptStats,
   ScriptWorkspaceFilesInfo,
@@ -156,6 +157,10 @@ const autoforge = {
       ipcRenderer.invoke(IPC.SCRIPTS_SET_ENV_CONFIG, id, envId, values),
     setParams: (id: string, envId: string, values: Record<string, string>): Promise<ScriptItem | null> =>
       ipcRenderer.invoke(IPC.SCRIPTS_SET_PARAMS, id, envId, values),
+    getInstanceSlots: (id: string): Promise<ScriptInstanceSlot[]> =>
+      ipcRenderer.invoke(IPC.SCRIPTS_GET_INSTANCE_SLOTS, id),
+    setInstanceSlots: (id: string, slots: ScriptInstanceSlot[]): Promise<ScriptItem> =>
+      ipcRenderer.invoke(IPC.SCRIPTS_SET_INSTANCE_SLOTS, id, slots),
     updateMeta: (
       id: string,
       patch: { name?: string; icon?: ScriptIcon; category?: string; categoryLabel?: string; browser?: { headless?: boolean } }
@@ -186,9 +191,25 @@ const autoforge = {
     delete: (id: string): Promise<boolean> => ipcRenderer.invoke(IPC.ENV_DELETE, id)
   },
   runner: {
-    start: (scriptId: string, envId?: string, params?: Record<string, string>): Promise<RunSession> =>
-      ipcRenderer.invoke(IPC.RUNNER_START, scriptId, envId, params),
+    start: (
+      scriptId: string,
+      envId?: string,
+      params?: Record<string, string>,
+      options?: {
+        persistParams?: boolean
+        instanceSlotId?: string
+        instanceName?: string
+        browserOverride?: { headless?: boolean }
+      }
+    ): Promise<RunSession> => ipcRenderer.invoke(IPC.RUNNER_START, scriptId, envId, params, options),
+    startBatch: (
+      scriptId: string,
+      slotIds: string[]
+    ): Promise<{ ok: boolean; started: RunSession[]; error?: string }> =>
+      ipcRenderer.invoke(IPC.RUNNER_START_BATCH, scriptId, slotIds),
     stop: (sessionId: string): Promise<RunSession | null> => ipcRenderer.invoke(IPC.RUNNER_STOP, sessionId),
+    stopByScript: (scriptId: string): Promise<void> =>
+      ipcRenderer.invoke(IPC.RUNNER_STOP_BY_SCRIPT, scriptId),
     listSessions: (): Promise<RunSession[]> => ipcRenderer.invoke(IPC.RUNNER_LIST_SESSIONS),
     getSession: (sessionId: string): Promise<RunSession | undefined> =>
       ipcRenderer.invoke(IPC.RUNNER_GET_SESSION, sessionId),

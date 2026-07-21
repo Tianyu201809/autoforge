@@ -56,6 +56,7 @@ const emit = defineEmits<{
   start: [scriptId: string]
   stop: [sessionId: string]
   restart: [scriptId: string]
+  batchRun: [scriptId: string]
   toggleStar: [scriptId: string]
   edit: [script: ScriptItem]
   archive: [scriptId: string]
@@ -342,6 +343,7 @@ onUnmounted(() => {
           @start="emit('start', script.id)"
           @stop="script.activeSessionId && emit('stop', script.activeSessionId)"
           @restart="emit('restart', script.id)"
+          @batch-run="emit('batchRun', script.id)"
           @toggle-star="emit('toggleStar', script.id)"
           @edit="emit('edit', script)"
           @archive="emit('archive', script.id)"
