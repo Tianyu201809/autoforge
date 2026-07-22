@@ -23,6 +23,7 @@ import {
 import type { CategoryItem, NavFilter, NavItem } from '../../../shared/types/script'
 import { useToast } from '../composables/useToast'
 import { askConfirm } from '../composables/useConfirmDialog'
+import { askPrompt } from '../composables/usePromptDialog'
 import CategoryTreeList from './CategoryTreeList.vue'
 
 defineProps<{
@@ -85,7 +86,13 @@ async function openAutoforgeHub(): Promise<void> {
 }
 
 async function onCreateChild(item: CategoryItem): Promise<void> {
-  const label = window.prompt(`在「${item.name}」下新建子分类`, '')
+  const label = await askPrompt({
+    title: '新建子分类',
+    message: `将在「${item.name}」下创建子分类。`,
+    label: '分类名称',
+    placeholder: '请输入分类名称',
+    confirmLabel: '创建'
+  })
   if (label == null) return
   const trimmed = label.trim()
   if (!trimmed) return
@@ -103,7 +110,13 @@ async function onCreateChild(item: CategoryItem): Promise<void> {
 }
 
 async function onRename(item: CategoryItem): Promise<void> {
-  const label = window.prompt('重命名分类', item.name)
+  const label = await askPrompt({
+    title: '重命名分类',
+    label: '分类名称',
+    defaultValue: item.name,
+    placeholder: '请输入分类名称',
+    confirmLabel: '保存'
+  })
   if (label == null) return
   const trimmed = label.trim()
   if (!trimmed || trimmed === item.name) return
