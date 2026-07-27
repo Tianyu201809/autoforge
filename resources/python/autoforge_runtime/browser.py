@@ -36,6 +36,14 @@ class BrowserSdk:
         engine = str(self._config.get("engine", "chromium"))
         launch_kwargs: dict[str, Any] = {"headless": headless}
 
+        launch_args = self._config.get("args")
+        if (
+            isinstance(launch_args, list)
+            and launch_args
+            and all(isinstance(arg, str) for arg in launch_args)
+        ):
+            launch_kwargs["args"] = launch_args
+
         executable_path = self._config.get("executablePath")
         channel = self._config.get("channel")
         if executable_path:

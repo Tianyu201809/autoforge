@@ -4,6 +4,7 @@ import { join } from 'path'
 import type { Browser } from 'playwright-core'
 import { chromium, firefox } from 'playwright-core'
 import type { AppConfig } from '../../shared/types/script'
+import { getBrowserWindowLaunchArgs } from './browser-window-launch'
 
 const BROWSERS_DIR = 'browsers'
 
@@ -238,8 +239,10 @@ export function resolveChromiumLaunchOptions(
 }
 
 async function launchBrowserPlan(plan: BrowserLaunchPlan): Promise<Browser> {
+  const args = getBrowserWindowLaunchArgs(plan.engine, plan.headless)
   const options = {
     headless: plan.headless,
+    ...(args.length > 0 ? { args } : {}),
     ...(plan.executablePath ? { executablePath: plan.executablePath } : {}),
     ...(plan.channel ? { channel: plan.channel } : {})
   }
@@ -319,6 +322,7 @@ export function getBrowserStatus(): {
 export interface PythonBrowserLaunchConfig {
   headless: boolean
   engine: BrowserEngine
+  args: string[]
   executablePath?: string
   channel?: string
   playwrightBrowsersPath: string
@@ -336,12 +340,14 @@ export function resolvePythonBrowserLaunchConfig(
     return {
       headless,
       engine: 'chromium',
+      args: getBrowserWindowLaunchArgs('chromium', headless),
       playwrightBrowsersPath: getPlaywrightBrowsersPath()
     }
   }
   return {
     headless: plan.headless,
     engine: plan.engine,
+    args: getBrowserWindowLaunchArgs(plan.engine, plan.headless),
     executablePath: plan.executablePath,
     channel: plan.channel,
     playwrightBrowsersPath: getPlaywrightBrowsersPath()
