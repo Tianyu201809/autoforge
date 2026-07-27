@@ -15,6 +15,7 @@ import {
 import { pythonDependencyManager } from './python-dependency-manager'
 import { scriptStore } from './script-store'
 import { resolvePythonBrowserLaunchConfig } from './browser-path'
+import { isPythonCancellationExitCode } from './python-process-exit'
 
 export interface PythonRunCallbacks {
   log: (level: LogLine['level'], message: string) => void
@@ -173,6 +174,11 @@ export async function runPythonScript(
       if (stdoutBuffer.trim()) handleLine(stdoutBuffer)
 
       if (callbacks.isAborted()) {
+        finish({ ok: false, aborted: true })
+        return
+      }
+
+      if (isPythonCancellationExitCode(code)) {
         finish({ ok: false, aborted: true })
         return
       }

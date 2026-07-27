@@ -35,7 +35,29 @@ async def _await_with_abort(ctx: ScriptContext, coro):
             except asyncio.CancelledError:
                 pass
             return None
+        if ctx.sdk.browser.disconnected:
+            await asyncio.sleep(0)
+            if task.done() and not task.cancelled() and task.exception() is None:
+                return task.result()
+            ctx.signal._set_aborted()
+            if not task.done():
+                task.cancel()
+                try:
+                    await task
+                except asyncio.CancelledError:
+                    pass
+            elif not task.cancelled():
+                task.exception()
+            return None
         await asyncio.sleep(0.15)
+
+    if ctx.sdk.browser.disconnected:
+        if task.cancelled():
+            ctx.signal._set_aborted()
+            return None
+        if task.exception() is not None:
+            ctx.signal._set_aborted()
+            return None
     return await task
 
 

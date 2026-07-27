@@ -313,7 +313,8 @@ export class ScriptRunnerService {
           script.workspacePath,
           log,
           this.sessions.get(session.id)?.browserForRun ?? script.browser,
-          abortController.signal
+          abortController.signal,
+          () => this.stop(session.id)
         )
       }
 

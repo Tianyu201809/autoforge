@@ -13,6 +13,14 @@ class BrowserSdk:
         self._signal = signal
         self._playwright: Any = None
         self._browser: Any = None
+        self._disconnected = False
+
+    @property
+    def disconnected(self) -> bool:
+        return self._disconnected
+
+    def _handle_disconnected(self, _browser: Any = None) -> None:
+        self._disconnected = True
 
     async def launch(self):
         if self._signal.aborted:
@@ -31,6 +39,7 @@ class BrowserSdk:
 
         pw = await async_playwright().start()
         self._playwright = pw
+        self._disconnected = False
 
         headless = bool(self._config.get("headless", False))
         engine = str(self._config.get("engine", "chromium"))
@@ -63,6 +72,7 @@ class BrowserSdk:
             browser = await pw.chromium.launch(**launch_kwargs)
 
         self._browser = browser
+        browser.on("disconnected", self._handle_disconnected)
         return browser
 
     async def close(self) -> None:
