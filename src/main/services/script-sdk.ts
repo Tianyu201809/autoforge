@@ -4,6 +4,7 @@ import type { ScriptRunContext, ScriptSdkShape } from '../../shared/script-contr
 import type { AppConfig } from '../../shared/types/script'
 import { launchBrowserWithFallback } from './browser-path'
 import { attachBrowserDisconnectHandler } from './browser-lifecycle'
+import { applyBrowserContextDefaults } from './browser-context-defaults'
 
 export function createScriptSdk(
   config: AppConfig,
@@ -22,8 +23,9 @@ export function createScriptSdk(
   return {
     browser: {
       launch: async () => {
-        const { browser } = await launchBrowserWithFallback(config, log, browserOptions)
+        const { browser, plan } = await launchBrowserWithFallback(config, log, browserOptions)
         browserRef = browser
+        applyBrowserContextDefaults(browser, plan.headless)
         if (onBrowserDisconnected) {
           attachBrowserDisconnectHandler(browser, () => {
             browserRef = null

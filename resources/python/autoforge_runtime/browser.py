@@ -7,6 +7,38 @@ if TYPE_CHECKING:
     from autoforge_runtime.context import AbortSignal
 
 
+_VIEWPORT_EMULATION_KEYS = (
+    "viewport",
+    "screen",
+    "is_mobile",
+    "device_scale_factor",
+)
+
+
+def _with_browser_context_defaults(options: dict[str, Any], headless: bool) -> dict[str, Any]:
+    resolved = dict(options)
+    uses_viewport_emulation = any(
+        resolved.get(key) is not None for key in _VIEWPORT_EMULATION_KEYS
+    )
+    if not headless and not uses_viewport_emulation:
+        resolved["viewport"] = None
+    return resolved
+
+
+def _apply_browser_context_defaults(browser: Any, headless: bool) -> None:
+    original_new_context = browser.new_context
+    original_new_page = browser.new_page
+
+    async def new_context(**kwargs):
+        return await original_new_context(**_with_browser_context_defaults(kwargs, headless))
+
+    async def new_page(**kwargs):
+        return await original_new_page(**_with_browser_context_defaults(kwargs, headless))
+
+    browser.new_context = new_context
+    browser.new_page = new_page
+
+
 class BrowserSdk:
     def __init__(self, browser_config: dict, signal: AbortSignal) -> None:
         self._config = browser_config or {}
@@ -72,6 +104,7 @@ class BrowserSdk:
             browser = await pw.chromium.launch(**launch_kwargs)
 
         self._browser = browser
+        _apply_browser_context_defaults(browser, headless)
         browser.on("disconnected", self._handle_disconnected)
         return browser
 
