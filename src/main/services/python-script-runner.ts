@@ -67,6 +67,7 @@ export async function runPythonScript(
   sessionId: string,
   env: Record<string, string>,
   params: Record<string, string>,
+  input: unknown,
   callbacks: PythonRunCallbacks,
   getChild: () => ChildProcess | undefined,
   setChild: (child: ChildProcess | undefined) => void
@@ -90,6 +91,7 @@ export async function runPythonScript(
     scriptId: script.id,
     env,
     params,
+    input,
     browser: browserLaunch,
     paths: {
       userData: getAppUserDataPath(),

@@ -607,6 +607,19 @@ body {
   z-index: 10;
 }
 
+.sidebar-beta-badge {
+  margin-left: auto;
+  padding: 2px 5px;
+  border: 1px solid color-mix(in srgb, var(--sb-accent-solid) 28%, transparent);
+  border-radius: 999px;
+  color: var(--sb-accent-solid);
+  font-size: 9px;
+  font-weight: 650;
+  letter-spacing: 0.04em;
+  line-height: 1.1;
+  background: color-mix(in srgb, var(--sb-accent-solid) 10%, transparent);
+}
+
 .terminal-body {
   background: var(--sb-terminal-bg);
 }

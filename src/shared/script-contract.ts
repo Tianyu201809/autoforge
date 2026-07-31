@@ -147,6 +147,8 @@ export interface ScriptRunContext {
   env: Record<string, string>
   /** 本次运行的业务参数（与 env 分离，来自 params schema + 运行前填写） */
   params: Record<string, string>
+  /** 流水线节点收到的上一步结果；普通脚本运行时为空 */
+  input?: unknown
   signal: AbortSignal
   log: (level: 'INFO' | 'WARN' | 'ERROR', message: string) => void
   /** 报告脚本自定义执行阶段（UI 终端 / 运行状态） */

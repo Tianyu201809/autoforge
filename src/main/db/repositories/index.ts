@@ -4,6 +4,7 @@ import { ConfigRepository } from './config-repository'
 import { EnvironmentRepository } from './environment-repository'
 import { ExecutionRepository } from './execution-repository'
 import { ScriptRepository } from './script-repository'
+import { PipelineRepository } from './pipeline-repository'
 
 export interface Repositories {
   scripts: ScriptRepository
@@ -11,6 +12,7 @@ export interface Repositories {
   categories: CategoryRepository
   config: ConfigRepository
   execution: ExecutionRepository
+  pipelines: PipelineRepository
 }
 
 export function createRepositories(db: SqliteDatabase): Repositories {
@@ -19,6 +21,7 @@ export function createRepositories(db: SqliteDatabase): Repositories {
     environments: new EnvironmentRepository(db),
     categories: new CategoryRepository(db),
     config: new ConfigRepository(db),
-    execution: new ExecutionRepository(db)
+    execution: new ExecutionRepository(db),
+    pipelines: new PipelineRepository(db)
   }
 }

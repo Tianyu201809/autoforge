@@ -20,6 +20,7 @@ import ToastHost from './components/ToastHost.vue'
 import ConfirmDialogHost from './components/ConfirmDialogHost.vue'
 import PromptDialogHost from './components/PromptDialogHost.vue'
 import ScratchpadPanel from './components/ScratchpadPanel.vue'
+import PipelineWorkspace from './components/PipelineWorkspace.vue'
 import { askConfirm } from './composables/useConfirmDialog'
 import { useScratchpad } from './composables/useScratchpad'
 import { useToast } from './composables/useToast'
@@ -96,6 +97,7 @@ const runResultModalSession = computed(() => {
 })
 
 const selectedScriptId = ref<string | null>(null)
+const showPipelines = ref(false)
 const detailVisible = ref(true)
 const showBatchRun = ref(false)
 const batchScriptId = ref<string | null>(null)
@@ -220,6 +222,10 @@ function openRunResultModal(scriptId: string, sessionId?: string): void {
   runResultModalSessionId.value =
     sessionId ?? runner.lastSuccessSessionForScript(scriptId)?.id ?? null
   runResultModalOpen.value = true
+}
+
+function openPipelines(): void {
+  showPipelines.value = true
 }
 
 function closeRunResultModal(): void {
@@ -394,9 +400,18 @@ onUnmounted(() => {
 </script>
 
 <template>
-  <div class="flex flex-col h-full">
-    <TitleBar :breadcrumb="breadcrumb" />
-    <div class="flex flex-1 min-h-0">
+  <div class="flex h-full min-h-0 flex-col">
+    <PipelineWorkspace
+      v-if="showPipelines"
+      :open="showPipelines"
+      :scripts="scripts"
+      class="min-h-0 flex-1"
+      @close="showPipelines = false"
+      @refresh="refresh()"
+    />
+    <template v-else>
+      <TitleBar :breadcrumb="breadcrumb" />
+      <div class="flex flex-1 min-h-0">
       <Sidebar
         :nav-items="navItems"
         :categories="categories"
@@ -410,6 +425,7 @@ onUnmounted(() => {
         @dev-guide="openDevGuide"
         @execution-history="openExecutionHistory"
         @categories-changed="refresh()"
+        @pipelines="openPipelines"
       />
       <CategoryManagerModal
         :open="showCategoryManager"
@@ -510,7 +526,8 @@ onUnmounted(() => {
           />
         </div>
       </div>
-    <StatusBar :running-count="stats.running" />
+      <StatusBar :running-count="stats.running" />
+    </template>
     <RunResultModal
       :open="runResultModalOpen"
       :script="runResultModalScript"

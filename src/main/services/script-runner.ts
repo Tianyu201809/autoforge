@@ -38,6 +38,8 @@ import type { ScriptInstanceSlot } from '../../shared/types/script'
 interface ActiveSession {
   session: RunSession
   abortController: AbortController
+  onLog?: (line: LogLine) => void
+  onSession?: (session: RunSession) => void
   childProcess?: ChildProcess
   runTimeoutHandle?: ReturnType<typeof setTimeout>
   browserForRun?: ScriptMeta['browser']
@@ -51,10 +53,17 @@ export type StartOptions = {
   browserOverride?: { headless?: boolean }
   /** 覆盖脚本 configByEnv（批量实例用；不写回偏好） */
   configOverride?: Record<string, string>
+  input?: unknown
+  envOverrides?: Record<string, string>
+  resolvedEnv?: Record<string, string>
+  resolvedParams?: Record<string, string>
+  onLog?: (line: LogLine) => void
+  onSession?: (session: RunSession) => void
 }
 
 export class ScriptRunnerService {
   private sessions = new Map<string, ActiveSession>()
+  private waiters = new Map<string, (session: RunSession) => void>()
   private getWindow: () => BrowserWindow | null
   private lifecycle: ScriptLifecycleBus
 
@@ -107,18 +116,25 @@ export class ScriptRunnerService {
     }
 
     const resolvedEnvId = envId ?? script.defaultEnvId ?? scriptStore.getDefaultEnvironment().id
-    const env = scriptStore.resolveEnvForScript(script, resolvedEnvId, options?.configOverride)
+    const env = options?.resolvedEnv
+      ? { ...options.resolvedEnv }
+      : {
+          ...scriptStore.resolveEnvForScript(script, resolvedEnvId, options?.configOverride),
+          ...(options?.envOverrides ?? {})
+        }
     const envError = scriptStore.validateEnvForScript(script, env)
     if (envError) {
       throw new Error(envError)
     }
 
-    const params = scriptStore.resolveParamsForScript(script, resolvedEnvId, runtimeParams)
+    const params = options?.resolvedParams
+      ? { ...options.resolvedParams }
+      : scriptStore.resolveParamsForScript(script, resolvedEnvId, runtimeParams)
     const paramsError = scriptStore.validateParamsForScript(script, params)
     if (paramsError) {
       throw new Error(paramsError)
     }
-    if (options?.persistParams !== false) {
+    if (options?.persistParams !== false && !options?.resolvedParams) {
       scriptStore.setScriptParams(scriptId, resolvedEnvId, params)
     }
 
@@ -139,7 +155,13 @@ export class ScriptRunnerService {
     }
 
     const abortController = new AbortController()
-    this.sessions.set(session.id, { session, abortController, browserForRun })
+    this.sessions.set(session.id, {
+      session,
+      abortController,
+      onLog: options?.onLog,
+      onSession: options?.onSession,
+      browserForRun
+    })
     executionHistory.recordStart({
       sessionId: session.id,
       scriptId: script.id,
@@ -150,9 +172,24 @@ export class ScriptRunnerService {
     })
     this.broadcastSession(session)
 
-    void this.executePackage(session, script, env, params, abortController)
+    void this.executePackage(session, script, env, params, abortController, options?.input)
 
     return session
+  }
+
+  async startAndWait(
+    scriptId: string,
+    envId?: string,
+    runtimeParams?: Record<string, string>,
+    input?: unknown,
+    envOverrides?: Record<string, string>,
+    options?: Pick<StartOptions, 'onLog' | 'onSession' | 'trigger' | 'resolvedEnv' | 'resolvedParams'>
+  ): Promise<RunSession> {
+    const session = await this.start(scriptId, envId, runtimeParams, { input, envOverrides, ...options })
+    if (session.status !== 'running') return session
+    return new Promise((resolve) => {
+      this.waiters.set(session.id, resolve)
+    })
   }
 
   async startBatch(
@@ -244,6 +281,7 @@ export class ScriptRunnerService {
       finishedAt: active.session.finishedAt
     })
     this.broadcastSession(active.session)
+    this.resolveWaiter(active.session)
     return active.session
   }
 
@@ -252,12 +290,13 @@ export class ScriptRunnerService {
     script: ScriptMeta,
     env: Record<string, string>,
     params: Record<string, string>,
-    abortController: AbortController
+    abortController: AbortController,
+    input?: unknown
   ): Promise<void> {
     if (script.language === 'python') {
-      return this.executePythonPackage(session, script, env, params, abortController)
+      return this.executePythonPackage(session, script, env, params, abortController, input)
     }
-    return this.executeJsPackage(session, script, env, params, abortController)
+    return this.executeJsPackage(session, script, env, params, abortController, input)
   }
 
   private async executeJsPackage(
@@ -265,7 +304,8 @@ export class ScriptRunnerService {
     script: ScriptMeta,
     env: Record<string, string>,
     params: Record<string, string>,
-    abortController: AbortController
+    abortController: AbortController,
+    input?: unknown
   ): Promise<void> {
     const log = (level: LogLine['level'], message: string): void => {
       this.pushLog(session.id, level, message)
@@ -304,6 +344,7 @@ export class ScriptRunnerService {
         scriptId: script.id,
         env,
         params,
+        input,
         signal: abortController.signal,
         log,
         stage,
@@ -342,7 +383,8 @@ export class ScriptRunnerService {
     script: ScriptMeta,
     env: Record<string, string>,
     params: Record<string, string>,
-    abortController: AbortController
+    abortController: AbortController,
+    input?: unknown
   ): Promise<void> {
     const log = (level: LogLine['level'], message: string): void => {
       this.pushLog(session.id, level, message)
@@ -373,6 +415,7 @@ export class ScriptRunnerService {
         session.id,
         env,
         params,
+        input,
         {
           log,
           control: (control) => {
@@ -474,6 +517,7 @@ export class ScriptRunnerService {
 
   private pushLogLine(sessionId: string, level: LogLine['level'], message: string): void {
     const line = createLog(sessionId, level, message)
+    this.sessions.get(sessionId)?.onLog?.(line)
     logBus.emitLog(line)
     broadcastToRenderers(IPC.EVENT_LOG, line)
   }
@@ -510,6 +554,7 @@ export class ScriptRunnerService {
     })
     this.lifecycle.emit(sessionId, active.session.scriptId, 'completed')
     this.broadcastSession(active.session)
+    this.resolveWaiter(active.session)
   }
 
   private failSession(sessionId: string, message: string): void {
@@ -532,6 +577,14 @@ export class ScriptRunnerService {
     })
     this.lifecycle.emit(sessionId, active.session.scriptId, 'failed', message)
     this.broadcastSession(active.session)
+    this.resolveWaiter(active.session)
+  }
+
+  private resolveWaiter(session: RunSession): void {
+    const resolve = this.waiters.get(session.id)
+    if (!resolve) return
+    this.waiters.delete(session.id)
+    resolve(session)
   }
 
   private updateRecentRun(scriptId: string): void {
@@ -539,6 +592,7 @@ export class ScriptRunnerService {
   }
 
   private broadcastSession(session: RunSession): void {
+    this.sessions.get(session.id)?.onSession?.(session)
     logBus.emitSession(session)
     broadcastToRenderers(IPC.EVENT_SESSION, session)
   }

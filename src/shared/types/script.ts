@@ -126,11 +126,76 @@ export interface RunSession {
   instanceName?: string
 }
 
+export type PipelineStatus = 'running' | 'success' | 'error' | 'stopped'
+
+export interface PipelineInputMapping {
+  source: 'previous-result' | 'pipeline-input'
+  sourcePath?: string
+  targetParam: string
+}
+
+export interface PipelineNode {
+  id: string
+  scriptId: string
+  name: string
+  order: number
+  /** 后续节点的固定参数；映射值运行时覆盖它 */
+  paramValues?: Record<string, string>
+  inputMappings?: PipelineInputMapping[]
+}
+
+export interface PipelineMeta {
+  id: string
+  name: string
+  description: string
+  nodes: PipelineNode[]
+  envSchema: EnvVarDefinition[]
+  paramSchema: ParamDefinition[]
+  configByEnv?: Record<string, Record<string, string>>
+  paramsByEnv?: Record<string, Record<string, string>>
+  starred: boolean
+  archived: boolean
+  recentRunAt?: string
+}
+
+export interface PipelineNodeSession {
+  nodeId: string
+  scriptId: string
+  scriptSessionId?: string
+  status: SessionStatus
+  phase?: ScriptLifecyclePhase
+  runProgress?: ScriptRunProgress
+  logs?: LogLine[]
+  result?: unknown
+  errorMessage?: string
+  startedAt: string
+  finishedAt?: string
+}
+
+export interface PipelineSession {
+  id: string
+  pipelineId: string
+  status: PipelineStatus
+  envId?: string
+  startedAt: string
+  finishedAt?: string
+  result?: unknown
+  errorMessage?: string
+  currentNodeId?: string
+  nodes: PipelineNodeSession[]
+}
+
 export interface LogLine {
   sessionId: string
   ts: string
   level: LogLevel
   message: string
+}
+
+export interface PipelineLogLine extends LogLine {
+  pipelineSessionId: string
+  nodeId: string
+  scriptSessionId: string
 }
 
 export interface AppWindowConfig {
