@@ -1,6 +1,6 @@
 <script setup lang="ts">
-import { computed } from 'vue'
-import { X } from 'lucide-vue-next'
+import { computed, ref } from 'vue'
+import { Eye, EyeOff, X } from 'lucide-vue-next'
 import type { ParamOption, ParamValueType } from '../../../shared/script-contract'
 import { parseParamAttachments } from '../../../shared/param-attachments'
 import { parseCheckboxValue, toggleCheckboxValue } from '../../../shared/param-choices'
@@ -42,6 +42,7 @@ const emit = defineEmits<{
 }>()
 
 const fieldId = computed(() => props.def.key)
+const passwordVisible = ref(false)
 
 function updateValue(value: string): void {
   emit('update:modelValue', value)
@@ -188,14 +189,27 @@ const attachmentKey = computed(() => props.attachmentStorageKey ?? props.def.key
       :placeholder="def.default ? `默认: ${def.default}` : def.required ? '必填' : '可选'"
       @input="updateValue(($event.target as HTMLInputElement).value)"
     />
-    <input
-      v-else
-      :value="modelValue"
-      :type="def.secret ? 'password' : 'text'"
-      class="mt-1 w-full h-8 px-3 rounded-lg sb-bg-input border sb-border text-[13px] outline-none focus:sb-input"
-      :placeholder="def.default ? `默认: ${def.default}` : def.required ? '必填' : '可选'"
-      @input="updateValue(($event.target as HTMLInputElement).value)"
-    />
+    <div v-else class="relative mt-1">
+      <input
+        :value="modelValue"
+        :type="def.secret && !passwordVisible ? 'password' : 'text'"
+        class="w-full h-8 px-3 rounded-lg sb-bg-input border sb-border text-[13px] outline-none focus:sb-input"
+        :class="def.secret && 'pr-9'"
+        :placeholder="def.default ? `默认: ${def.default}` : def.required ? '必填' : '可选'"
+        @input="updateValue(($event.target as HTMLInputElement).value)"
+      />
+      <button
+        v-if="def.secret"
+        type="button"
+        class="absolute right-2 top-1/2 -translate-y-1/2 p-1 sb-text-faint hover:sb-text-secondary transition-colors"
+        :aria-label="passwordVisible ? '隐藏密码' : '显示密码'"
+        :title="passwordVisible ? '隐藏密码' : '显示密码'"
+        @click="passwordVisible = !passwordVisible"
+      >
+        <EyeOff v-if="passwordVisible" class="w-4 h-4" :stroke-width="1.5" />
+        <Eye v-else class="w-4 h-4" :stroke-width="1.5" />
+      </button>
+    </div>
     <p v-if="def.type === 'attachment'" class="mt-1 text-[10px] sb-text-faint">{{ attachmentHint }}</p>
     <p v-if="showKey" class="mt-0.5 text-[10px] sb-text-faint font-mono">{{ def.key }}</p>
   </div>

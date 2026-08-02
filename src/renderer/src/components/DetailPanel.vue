@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, nextTick, onMounted, onUnmounted, ref, toRaw, watch } from 'vue'
+import { computed, nextTick, onMounted, onUnmounted, ref, watch } from 'vue'
 import {
   AlertCircle,
   CheckCircle2,
@@ -199,6 +199,41 @@ const browserHeadless = ref(false)
 const editModeActive = ref(false)
 const openingExternalEditor = ref(false)
 
+interface ParamsSaveRequest {
+  scriptId: string
+  envId: string
+  schema: ScriptItem['paramSchema']
+  before: Record<string, string>
+  values: Record<string, string>
+  snapshot: string
+}
+
+interface ConfigSaveRequest {
+  scriptId: string
+  envId: string
+  schema: ScriptItem['envSchema']
+  before: Record<string, string>
+  values: Record<string, string>
+  cronExpression: string
+  cronEnabled: boolean
+  snapshot: string
+}
+
+let paramsSaveTimer: number | undefined
+let configSaveTimer: number | undefined
+let paramsSavePromise: Promise<void> | undefined
+let configSavePromise: Promise<void> | undefined
+let paramsSaveInFlight = false
+let configSaveInFlight = false
+let paramsSaveQueued = false
+let configSaveQueued = false
+let pendingParamsRequest: ParamsSaveRequest | null = null
+let pendingConfigRequest: ConfigSaveRequest | null = null
+let savedParamsSnapshot = ''
+let savedConfigSnapshot = ''
+let hydratingForm = false
+let skipSelectedEnvWatch = false
+
 const scriptIdRef = computed(() => props.script.id)
 const {
   activeContent,
@@ -363,10 +398,14 @@ async function loadEnvironments(options: { preserveSelection?: boolean } = {}): 
   environments.value = list
   const fallbackEnvId =
     props.script.defaultEnvId ?? list.find((e) => e.isDefault)?.id ?? list[0]?.id ?? ''
-  selectedEnvId.value =
+  const nextEnvId =
     options.preserveSelection && list.some((e) => e.id === previousEnvId)
       ? previousEnvId
       : fallbackEnvId
+  if (selectedEnvId.value !== nextEnvId) {
+    skipSelectedEnvWatch = true
+    selectedEnvId.value = nextEnvId
+  }
   syncEnvVars()
 }
 
@@ -378,6 +417,19 @@ function syncEnvVars(): void {
     vars[def.key] = resolveEnvFieldValue(def.key, def, scriptConfig, profile?.variables).value
   }
   envVars.value = vars
+}
+
+function paramsSnapshot(values: Record<string, string>): string {
+  return JSON.stringify(values)
+}
+
+function configSnapshot(): string {
+  return JSON.stringify({
+    envId: selectedEnvId.value,
+    env: plainEnvVars(),
+    cronExpression: normalizeCronExpression(cronExpression.value),
+    cronEnabled: cronEnabled.value
+  })
 }
 
 function resolvedDefaultEnvId(): string {
@@ -407,22 +459,30 @@ function syncParamVars(): void {
     vars[def.key] = savedParamValue(def)
   }
   paramVars.value = vars
+  savedParamsSnapshot = paramsSnapshot(vars)
 }
 
 function syncDetailDraft(): void {
   detailCategory.value = props.script.category
-  selectedEnvId.value = resolvedDefaultEnvId()
+  const nextEnvId = resolvedDefaultEnvId()
+  if (selectedEnvId.value !== nextEnvId) {
+    skipSelectedEnvWatch = true
+    selectedEnvId.value = nextEnvId
+  }
   syncBrowserHeadless()
   syncParamVars()
   syncEnvVars()
+  savedConfigSnapshot = configSnapshot()
 }
 
 function syncSchemaVarsFromScript(): void {
   if (!selectedEnvId.value) {
+    skipSelectedEnvWatch = true
     selectedEnvId.value = props.script.defaultEnvId ?? ''
   }
   syncParamVars()
   syncEnvVars()
+  savedConfigSnapshot = configSnapshot()
 }
 
 syncSchemaVarsFromScript()
@@ -441,17 +501,15 @@ watch(
 
 const detailDirty = computed(() => {
   if (detailCategory.value !== props.script.category) return true
-  if (selectedEnvId.value !== resolvedDefaultEnvId()) return true
   if (browserHeadless.value !== (props.script.browser?.headless ?? false)) return true
   return false
 })
 
 const paramsDirty = computed(() => {
-  for (const def of props.script.paramSchema) {
-    if ((paramVars.value[def.key] ?? '') !== savedParamValue(def)) return true
-  }
-  return false
+  return paramsSnapshot(plainParamVars()) !== savedParamsSnapshot
 })
+
+const configDirty = computed(() => configSnapshot() !== savedConfigSnapshot)
 
 async function cleanupAttachmentDiff(
   schema: Array<{ key: string; type?: string }>,
@@ -496,10 +554,6 @@ async function saveDetail(): Promise<void> {
       await window.autoforge.scripts.updateMeta(props.script.id, metaPatch)
     }
 
-    if (selectedEnvId.value !== resolvedDefaultEnvId()) {
-      await window.autoforge.scripts.update(props.script.id, { defaultEnvId: selectedEnvId.value })
-    }
-
     emit('refresh')
     showSaveFeedback('success', '已保存', '脚本详情已保存')
   } catch (err) {
@@ -513,49 +567,78 @@ async function saveDetail(): Promise<void> {
   }
 }
 
-async function saveParams(): Promise<void> {
-  if (!paramsDirty.value) return
-  detailSaving.value = true
-  try {
-    const beforeParams = Object.fromEntries(
+function createParamsSaveRequest(): ParamsSaveRequest | null {
+  if (!paramsDirty.value) return null
+  const values = plainParamVars()
+  return {
+    scriptId: props.script.id,
+    envId: selectedEnvId.value,
+    schema: [...props.script.paramSchema],
+    before: Object.fromEntries(
       props.script.paramSchema.map((def) => [def.key, savedParamValue(def)])
-    )
-    const nextParams = plainParamVars()
-    await cleanupAttachmentDiff(props.script.paramSchema, beforeParams, nextParams, 'removed')
-    await window.autoforge.scripts.setParams(props.script.id, selectedEnvId.value, nextParams)
-    emit('refresh')
-    const envName = environments.value.find((e) => e.id === selectedEnvId.value)?.name ?? '当前环境'
-    showSaveFeedback('success', '已保存', `${envName} 的运行参数已保存`)
-  } catch (err) {
-    showSaveFeedback(
-      'error',
-      '保存失败',
-      err instanceof Error ? err.message : '无法保存运行参数'
-    )
+    ),
+    values,
+    snapshot: paramsSnapshot(values)
+  }
+}
+
+async function saveParamsNow(): Promise<void> {
+  if (hydratingForm) return
+  if (paramsSaveInFlight) {
+    paramsSaveQueued = true
+    if (paramsSavePromise) await paramsSavePromise
+    return
+  }
+
+  const request = pendingParamsRequest ?? createParamsSaveRequest()
+  if (!request) return
+  pendingParamsRequest = null
+  paramsSaveInFlight = true
+  const operation = (async () => {
+    try {
+      await cleanupAttachmentDiff(request.schema, request.before, request.values, 'removed')
+      const updated = await window.autoforge.scripts.setParams(request.scriptId, request.envId, request.values)
+      if (!updated) throw new Error('无法保存运行参数')
+      if (
+        request.scriptId === props.script.id &&
+        request.envId === selectedEnvId.value &&
+        paramsSnapshot(plainParamVars()) === request.snapshot
+      ) {
+        savedParamsSnapshot = request.snapshot
+      }
+      emit('refresh')
+      const envName = environments.value.find((env) => env.id === request.envId)?.name ?? '当前环境'
+      showSaveFeedback('success', '已自动保存', `${envName} 的运行参数已保存`)
+    } catch (err) {
+      showSaveFeedback(
+        'error',
+        '保存失败',
+        err instanceof Error ? err.message : '无法保存运行参数'
+      )
+    }
+  })()
+  paramsSavePromise = operation
+  try {
+    await operation
   } finally {
-    detailSaving.value = false
+    paramsSaveInFlight = false
+    paramsSavePromise = undefined
+    if (paramsSaveQueued || pendingParamsRequest) {
+      paramsSaveQueued = false
+      void saveParamsNow()
+    }
   }
 }
 
 async function cancelDetailDraft(): Promise<void> {
   if (!detailDirty.value) return
   detailCategory.value = props.script.category
-  selectedEnvId.value = resolvedDefaultEnvId()
   syncBrowserHeadless()
-}
-
-async function cancelParamsDraft(): Promise<void> {
-  if (!paramsDirty.value) return
-  const beforeParams = Object.fromEntries(
-    props.script.paramSchema.map((def) => [def.key, savedParamValue(def)])
-  )
-  await cleanupAttachmentDiff(props.script.paramSchema, beforeParams, paramVars.value, 'added')
-  syncParamVars()
 }
 
 function plainParamVars(): Record<string, string> {
   return Object.fromEntries(
-    Object.entries(toRaw(paramVars.value)).map(([k, v]) => [k, v ?? ''])
+    Object.entries(paramVars.value).map(([k, v]) => [k, v ?? ''])
   )
 }
 
@@ -567,10 +650,15 @@ function syncScheduleFromScript(): void {
 onMounted(async () => {
   loadPanelWidth()
   loadRunSplitRatio()
-  syncScheduleFromScript()
-  syncViewingSessionId()
-  await Promise.all([loadContent(), loadEnvironments()])
-  syncDetailDraft()
+  hydratingForm = true
+  try {
+    syncScheduleFromScript()
+    syncViewingSessionId()
+    await Promise.all([loadContent(), loadEnvironments()])
+    syncDetailDraft()
+  } finally {
+    hydratingForm = false
+  }
   scrollActiveTabIntoView()
   window.addEventListener('resize', onWindowResize)
 })
@@ -580,6 +668,9 @@ watch(panelWidth, () => {
 })
 
 onUnmounted(() => {
+  if (paramsSaveTimer !== undefined) window.clearTimeout(paramsSaveTimer)
+  if (configSaveTimer !== undefined) window.clearTimeout(configSaveTimer)
+  void flushAutoSaves()
   window.removeEventListener('resize', onWindowResize)
 })
 
@@ -587,6 +678,7 @@ watch(
   () => props.script.id,
   async (newId, oldId) => {
     if (oldId && newId !== oldId) {
+      await flushAutoSaves()
       clearSaveFeedback()
     }
     if (oldId && newId !== oldId && editModeActive.value && manifestDirty.value) {
@@ -612,18 +704,23 @@ watch(
       }
     }
 
-    editModeActive.value = false
-    syncScheduleFromScript()
-    viewingSessionId.value = null
-    runResultSectionExpanded.value = false
-    resetManifestEditor()
-    resetDocs()
-    if (props.initialTab) activeTab.value = props.initialTab
-    await Promise.all([loadContent(), loadEnvironments()])
-    syncDetailDraft()
-    syncViewingSessionId()
-    if (activeTab.value === 'docs') {
-      void loadDocs()
+    hydratingForm = true
+    try {
+      editModeActive.value = false
+      syncScheduleFromScript()
+      viewingSessionId.value = null
+      runResultSectionExpanded.value = false
+      resetManifestEditor()
+      resetDocs()
+      if (props.initialTab) activeTab.value = props.initialTab
+      await Promise.all([loadContent(), loadEnvironments()])
+      syncDetailDraft()
+      syncViewingSessionId()
+      if (activeTab.value === 'docs') {
+        void loadDocs()
+      }
+    } finally {
+      hydratingForm = false
     }
   }
 )
@@ -662,6 +759,12 @@ watch(
 )
 
 watch(selectedEnvId, async (_newId, oldId) => {
+  if (skipSelectedEnvWatch) {
+    skipSelectedEnvWatch = false
+    return
+  }
+  if (hydratingForm) return
+  await flushAutoSaves()
   syncEnvVars()
   if (oldId && paramsDirty.value) {
     const beforeParams = Object.fromEntries(
@@ -673,7 +776,21 @@ watch(selectedEnvId, async (_newId, oldId) => {
     await cleanupAttachmentDiff(props.script.paramSchema, beforeParams, paramVars.value, 'added')
   }
   syncParamVars()
+  scheduleConfigSave()
 })
+
+async function handleEnvironmentChange(event: Event): Promise<void> {
+  const nextId = (event.target as HTMLSelectElement).value
+  if (!nextId || nextId === selectedEnvId.value) return
+  await flushAutoSaves()
+  hydratingForm = true
+  skipSelectedEnvWatch = true
+  selectedEnvId.value = nextId
+  syncEnvVars()
+  syncParamVars()
+  hydratingForm = false
+  scheduleConfigSave()
+}
 
 watch(
   () => props.script.paramsByEnv,
@@ -685,7 +802,27 @@ watch(
 
 watch(
   () => props.script.configByEnv,
-  () => syncEnvVars(),
+  () => {
+    if (hydratingForm || configDirty.value) return
+    syncEnvVars()
+    savedConfigSnapshot = configSnapshot()
+  },
+  { deep: true }
+)
+
+watch(
+  paramVars,
+  () => {
+    if (!hydratingForm && paramsDirty.value) scheduleParamsSave()
+  },
+  { deep: true }
+)
+
+watch(
+  [envVars, cronExpression, cronEnabled],
+  () => {
+    if (!hydratingForm && configDirty.value) scheduleConfigSave()
+  },
   { deep: true }
 )
 
@@ -810,37 +947,135 @@ async function onDocsClick(event: MouseEvent): Promise<void> {
 }
 
 function plainEnvVars(): Record<string, string> {
-  return Object.fromEntries(Object.entries(toRaw(envVars.value)).map(([k, v]) => [k, v ?? '']))
+  return Object.fromEntries(Object.entries(envVars.value).map(([k, v]) => [k, v ?? '']))
 }
 
-async function saveConfig(): Promise<void> {
-  saving.value = true
-  try {
-    const beforeEnv = Object.fromEntries(
+function createConfigSaveRequest(): ConfigSaveRequest | null {
+  if (!configDirty.value) return null
+  const values = plainEnvVars()
+  return {
+    scriptId: props.script.id,
+    envId: selectedEnvId.value,
+    schema: [...props.script.envSchema],
+    before: Object.fromEntries(
       props.script.envSchema.map((def) => [def.key, savedEnvConfigValue(def)])
-    )
-    const plainConfig = plainEnvVars()
-    await cleanupAttachmentDiff(props.script.envSchema, beforeEnv, plainConfig, 'removed')
-    await window.autoforge.scripts.setEnvConfig(props.script.id, selectedEnvId.value, plainConfig)
-    await window.autoforge.scripts.update(props.script.id, {
-      defaultEnvId: selectedEnvId.value,
-      schedule: { expression: cronExpression.value, enabled: cronEnabled.value }
-    })
-    emit('refresh')
-    const envName = environments.value.find((e) => e.id === selectedEnvId.value)?.name ?? '当前环境'
-    showSaveFeedback('success', '已保存', `${envName} 的配置与定时任务已保存`)
-  } catch (err) {
-    showSaveFeedback(
-      'error',
-      '保存失败',
-      err instanceof Error ? err.message : '无法保存配置'
-    )
+    ),
+    values,
+    cronExpression: normalizeCronExpression(cronExpression.value),
+    cronEnabled: cronEnabled.value,
+    snapshot: configSnapshot()
+  }
+}
+
+async function saveConfigNow(): Promise<void> {
+  if (hydratingForm) return
+  if (configSaveInFlight) {
+    configSaveQueued = true
+    if (configSavePromise) await configSavePromise
+    return
+  }
+
+  const request = pendingConfigRequest ?? createConfigSaveRequest()
+  if (!request) return
+  pendingConfigRequest = null
+  configSaveInFlight = true
+  const operation = (async () => {
+    try {
+      await cleanupAttachmentDiff(request.schema, request.before, request.values, 'removed')
+      const updatedConfig = await window.autoforge.scripts.setEnvConfig(
+        request.scriptId,
+        request.envId,
+        request.values
+      )
+      if (!updatedConfig) throw new Error('无法保存配置')
+      const updatedScript = await window.autoforge.scripts.update(request.scriptId, {
+        defaultEnvId: request.envId,
+        schedule: { expression: request.cronExpression, enabled: request.cronEnabled }
+      })
+      if (!updatedScript) throw new Error('无法保存定时任务')
+      if (
+        request.scriptId === props.script.id &&
+        request.envId === selectedEnvId.value &&
+        configSnapshot() === request.snapshot
+      ) {
+        savedConfigSnapshot = request.snapshot
+      }
+      emit('refresh')
+      const envName = environments.value.find((env) => env.id === request.envId)?.name ?? '当前环境'
+      showSaveFeedback('success', '已自动保存', `${envName} 的配置与定时任务已保存`)
+    } catch (err) {
+      showSaveFeedback(
+        'error',
+        '保存失败',
+        err instanceof Error ? err.message : '无法保存配置'
+      )
+    }
+  })()
+  configSavePromise = operation
+  try {
+    await operation
   } finally {
-    saving.value = false
+    configSaveInFlight = false
+    configSavePromise = undefined
+    if (configSaveQueued || pendingConfigRequest) {
+      configSaveQueued = false
+      void saveConfigNow()
+    }
+  }
+}
+
+function scheduleParamsSave(): void {
+  if (hydratingForm) return
+  const request = createParamsSaveRequest()
+  if (!request) return
+  pendingParamsRequest = request
+  if (paramsSaveTimer !== undefined) window.clearTimeout(paramsSaveTimer)
+  paramsSaveTimer = window.setTimeout(() => {
+    paramsSaveTimer = undefined
+    void saveParamsNow()
+  }, 400)
+}
+
+function scheduleConfigSave(): void {
+  if (hydratingForm) return
+  const request = createConfigSaveRequest()
+  if (!request) return
+  pendingConfigRequest = request
+  if (configSaveTimer !== undefined) window.clearTimeout(configSaveTimer)
+  configSaveTimer = window.setTimeout(() => {
+    configSaveTimer = undefined
+    void saveConfigNow()
+  }, 400)
+}
+
+async function flushAutoSaves(): Promise<void> {
+  if (paramsSaveTimer !== undefined) {
+    window.clearTimeout(paramsSaveTimer)
+    paramsSaveTimer = undefined
+  }
+  if (pendingParamsRequest || paramsDirty.value || paramsSaveInFlight) {
+    await saveParamsNow()
+    while (paramsSaveInFlight) {
+      if (paramsSavePromise) await paramsSavePromise
+      else await Promise.resolve()
+    }
+  }
+
+  if (configSaveTimer !== undefined) {
+    window.clearTimeout(configSaveTimer)
+    configSaveTimer = undefined
+  }
+  if (pendingConfigRequest || configDirty.value || configSaveInFlight) {
+    await saveConfigNow()
+    while (configSaveInFlight) {
+      if (configSavePromise) await configSavePromise
+      else await Promise.resolve()
+    }
   }
 }
 
 async function runWithEnv(): Promise<void> {
+  await flushAutoSaves()
   const params = plainParamVars()
   const started = await props.runner.start(props.script.id, selectedEnvId.value, params)
   if (started) {
@@ -1142,8 +1377,9 @@ async function handleRename(): Promise<void> {
         <div>
           <label class="sb-field-label">运行环境</label>
           <select
-            v-model="selectedEnvId"
+            :value="selectedEnvId"
             class="mt-1.5 w-full h-8 px-3 rounded-lg sb-bg-input border sb-border text-[13px] outline-none focus:sb-input"
+            @change="handleEnvironmentChange"
           >
             <option v-for="env in environments" :key="env.id" :value="env.id">{{ env.name }}</option>
           </select>
@@ -1330,28 +1566,6 @@ async function handleRename(): Promise<void> {
         </div>
       </div>
 
-      <div
-        v-if="script.paramSchema.length && (paramsDirty || detailSaving)"
-        class="flex-shrink-0 px-3 py-2 border-t sb-border-subtle flex items-center justify-end gap-1.5"
-      >
-        <button
-          type="button"
-          class="h-7 px-2.5 rounded-md text-[11px] sb-text-muted border sb-border hover:sb-text-secondary hover:sb-bg-hover transition-colors disabled:opacity-40"
-          :disabled="!paramsDirty || detailSaving"
-          @click="cancelParamsDraft"
-        >
-          取消
-        </button>
-        <button
-          type="button"
-          class="h-7 px-2.5 flex items-center gap-1 rounded-md sb-btn-accent text-[11px] font-medium hover:opacity-90 transition-colors disabled:opacity-50"
-          :disabled="!paramsDirty || detailSaving"
-          @click="saveParams"
-        >
-          <Save class="w-3 h-3" :stroke-width="1.5" />
-          {{ detailSaving ? '保存中…' : '保存' }}
-        </button>
-      </div>
     </div>
 
     <!-- 运行历史 -->
@@ -1437,8 +1651,9 @@ async function handleRename(): Promise<void> {
       <div>
         <label class="sb-field-title">运行环境</label>
         <select
-          v-model="selectedEnvId"
+          :value="selectedEnvId"
           class="mt-1 w-full h-8 px-3 rounded-lg sb-bg-input border sb-border text-[13px] outline-none focus:sb-input"
+          @change="handleEnvironmentChange"
         >
           <option v-for="env in environments" :key="env.id" :value="env.id">{{ env.name }}</option>
         </select>
@@ -1473,14 +1688,6 @@ async function handleRename(): Promise<void> {
         </label>
       </div>
 
-      <button
-        type="button"
-        class="w-full h-8 rounded-lg sb-btn-accent text-[13px] font-medium hover:opacity-90 transition-colors disabled:opacity-50"
-        :disabled="saving"
-        @click="saveConfig"
-      >
-        保存配置
-      </button>
     </div>
 
     <!-- 说明 -->
