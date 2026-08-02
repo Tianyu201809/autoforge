@@ -1,7 +1,8 @@
 <script setup lang="ts">
-import { onUnmounted, ref, toRaw, watch } from 'vue'
-import { CheckCircle2, Plus, Settings, Trash2, X, XCircle } from 'lucide-vue-next'
-import type { BrowserStatusInfo, EnvironmentProfile, GlobalDependency, PythonStatusInfo } from '../../../shared/types/script'
+import { computed, onUnmounted, ref, toRaw, watch } from 'vue'
+import { AppWindow, Boxes, CheckCircle2, Code2, Globe2, Plus, ScrollText, Settings, Trash2, X, XCircle } from 'lucide-vue-next'
+import type { Component } from 'vue'
+import type { AppConfig, BrowserStatusInfo, EnvironmentProfile, GlobalDependency, PythonStatusInfo } from '../../../shared/types/script'
 import { DEFAULT_GLOBAL_SHORTCUT } from '../../../shared/accelerator'
 import SkinPicker from './SkinPicker.vue'
 import ShortcutRecorder from './ShortcutRecorder.vue'
@@ -12,6 +13,26 @@ import { useToast } from '../composables/useToast'
 const { pushToast } = useToast()
 
 const props = defineProps<{ open: boolean }>()
+
+type SettingsSectionId = 'overview' | 'window' | 'runtime' | 'tools' | 'logs'
+type SaveState = 'idle' | 'saving' | 'saved' | 'error'
+
+interface SettingsSection {
+  id: SettingsSectionId
+  label: string
+  description: string
+  icon: Component
+}
+
+const SETTINGS_SECTIONS: SettingsSection[] = [
+  { id: 'overview', label: '概览', description: '产品与 Hub', icon: Boxes },
+  { id: 'window', label: '窗口与外观', description: '显示与皮肤', icon: AppWindow },
+  { id: 'runtime', label: '环境与运行', description: 'Profile 与运行时', icon: Globe2 },
+  { id: 'tools', label: '开发工具', description: '编辑器', icon: Code2 },
+  { id: 'logs', label: '日志与数据', description: '日志与目录', icon: ScrollText }
+]
+
+const activeSection = ref<SettingsSectionId>('overview')
 
 const appVersion = window.api.versions.app
 
@@ -32,8 +53,7 @@ const floatingMode = ref(false)
 const globalShortcutEnabled = ref(true)
 const globalShortcut = ref(DEFAULT_GLOBAL_SHORTCUT)
 const globalShortcutRegistered = ref(true)
-const saving = ref(false)
-const saved = ref(false)
+const configSaveState = ref<SaveState>('idle')
 const browserStatus = ref<BrowserStatusInfo | null>(null)
 const pythonStatus = ref<PythonStatusInfo | null>(null)
 const detectingPython = ref(false)
@@ -49,11 +69,18 @@ const environments = ref<EnvironmentProfile[]>([])
 const editingEnv = ref<EnvironmentProfile | null>(null)
 const envVarKey = ref('')
 const envVarValue = ref('')
-const savingEnv = ref(false)
-const envSaved = ref(false)
+const envSaveState = ref<SaveState>('idle')
 
 let offModeChange: (() => void) | undefined
 let syncingFromEvent = false
+let hydrating = false
+let configSaveInFlight = false
+let configSaveQueued = false
+let savedConfigSnapshot = ''
+let envSaveTimer: number | undefined
+let envSaveInFlight = false
+let envSaveQueued = false
+let savedEnvSnapshot = ''
 
 function syncWindowModeFromState(): void {
   if (!props.open || !windowModeReady.value || syncingFromEvent) return
@@ -73,29 +100,36 @@ watch([trayMode, floatingMode, globalShortcutEnabled, globalShortcut], () => {
 
 async function initializeSettings(): Promise<void> {
   if (initialized.value) return
-  const config = await window.autoforge.config.get()
-  autoforgeHubUrl.value = config.hub?.url ?? ''
-  browserPath.value = config.browser?.executablePath ?? ''
-  pythonPath.value = config.python?.executablePath ?? ''
-  pipIndexUrl.value = config.python?.pipIndexUrl ?? ''
-  runTimeoutSeconds.value = config.script?.runTimeoutSeconds ?? 0
-  externalEditorPath.value = config.externalEditor?.executablePath ?? ''
-  logLevel.value = config.logLevel ?? 'INFO'
-  trayMode.value = !!config.window?.trayMode
-  floatingMode.value = !!config.window?.floatingMode
-  globalShortcutEnabled.value = config.window?.globalShortcutEnabled !== false
-  globalShortcut.value = config.window?.globalShortcut?.trim() || DEFAULT_GLOBAL_SHORTCUT
-  browserStatus.value = await window.autoforge.system.browserStatus()
-  pythonStatus.value = await window.autoforge.system.pythonDetect()
-  await loadGlobalPythonDeps()
-  environments.value = await window.autoforge.env.list()
-  editingEnv.value = environments.value.find((e) => e.isDefault) ?? environments.value[0] ?? null
+  hydrating = true
+  try {
+    const config = await window.autoforge.config.get()
+    autoforgeHubUrl.value = config.hub?.url ?? ''
+    browserPath.value = config.browser?.executablePath ?? ''
+    pythonPath.value = config.python?.executablePath ?? ''
+    pipIndexUrl.value = config.python?.pipIndexUrl ?? ''
+    runTimeoutSeconds.value = config.script?.runTimeoutSeconds ?? 0
+    externalEditorPath.value = config.externalEditor?.executablePath ?? ''
+    logLevel.value = config.logLevel ?? 'INFO'
+    trayMode.value = !!config.window?.trayMode
+    floatingMode.value = !!config.window?.floatingMode
+    globalShortcutEnabled.value = config.window?.globalShortcutEnabled !== false
+    globalShortcut.value = config.window?.globalShortcut?.trim() || DEFAULT_GLOBAL_SHORTCUT
+    savedConfigSnapshot = JSON.stringify(buildConfigPatch())
+    browserStatus.value = await window.autoforge.system.browserStatus()
+    pythonStatus.value = await window.autoforge.system.pythonDetect()
+    await loadGlobalPythonDeps()
+    environments.value = await window.autoforge.env.list()
+    editingEnv.value = environments.value.find((e) => e.isDefault) ?? environments.value[0] ?? null
+    savedEnvSnapshot = editingEnv.value ? environmentSnapshot(editingEnv.value) : ''
 
-  const mode = await window.api.getMode()
-  globalShortcutRegistered.value = mode.globalShortcutRegistered
+    const mode = await window.api.getMode()
+    globalShortcutRegistered.value = mode.globalShortcutRegistered
 
-  windowModeReady.value = true
-  initialized.value = true
+    windowModeReady.value = true
+    initialized.value = true
+  } finally {
+    hydrating = false
+  }
 }
 
 watch(
@@ -121,100 +155,188 @@ watch(
   { immediate: true }
 )
 
-onUnmounted(() => {
-  offModeChange?.()
+const saveState = computed<SaveState>(() => {
+  if (configSaveState.value === 'saving' || envSaveState.value === 'saving') return 'saving'
+  if (configSaveState.value === 'error' || envSaveState.value === 'error') return 'error'
+  if (configSaveState.value === 'saved' || envSaveState.value === 'saved') return 'saved'
+  return 'idle'
 })
 
-async function save(): Promise<void> {
-  saving.value = true
-  saved.value = false
+const saveStatusLabel = computed(() => {
+  if (saveState.value === 'saving') return '正在保存…'
+  if (saveState.value === 'error') return '保存失败'
+  if (saveState.value === 'saved') return '已自动保存'
+  return ''
+})
+
+function buildConfigPatch(): Partial<AppConfig> {
+  return {
+    hub: { url: autoforgeHubUrl.value.trim() || undefined },
+    browser: { executablePath: browserPath.value.trim() || undefined },
+    python: {
+      executablePath: pythonPath.value.trim() || undefined,
+      pipIndexUrl: pipIndexUrl.value.trim() || undefined
+    },
+    script: {
+      runTimeoutSeconds: runTimeoutSeconds.value > 0 ? Math.floor(runTimeoutSeconds.value) : undefined
+    },
+    externalEditor: { executablePath: externalEditorPath.value.trim() || undefined },
+    logLevel: logLevel.value
+  }
+}
+
+async function saveConfigNow(): Promise<void> {
+  if (!props.open || !initialized.value || hydrating) return
+  if (configSaveInFlight) {
+    configSaveQueued = true
+    return
+  }
+
+  const patch = buildConfigPatch()
+  const snapshot = JSON.stringify(patch)
+  if (snapshot === savedConfigSnapshot) return
+
+  configSaveInFlight = true
+  configSaveState.value = 'saving'
   try {
-    await window.autoforge.config.set({
-      hub: {
-        url: autoforgeHubUrl.value.trim() || undefined
-      },
-      browser: { executablePath: browserPath.value || undefined },
-      python: {
-        executablePath: pythonPath.value || undefined,
-        pipIndexUrl: pipIndexUrl.value.trim() || undefined
-      },
-      script: {
-        runTimeoutSeconds: runTimeoutSeconds.value > 0 ? Math.floor(runTimeoutSeconds.value) : undefined
-      },
-      externalEditor: { executablePath: externalEditorPath.value || undefined },
-      logLevel: logLevel.value,
-      window: {
-        trayMode: trayMode.value,
-        floatingMode: floatingMode.value,
-        globalShortcutEnabled: globalShortcutEnabled.value,
-        globalShortcut: globalShortcut.value
-      }
-    })
-    // 窗口行为已在勾选时即时生效，保存时仅持久化其余配置
-    saved.value = true
+    await window.autoforge.config.set(patch)
+    savedConfigSnapshot = snapshot
+    configSaveState.value = 'saved'
   } catch (err) {
+    configSaveState.value = 'error'
     pushToast({
       type: 'error',
       title: '保存失败',
       message: err instanceof Error ? err.message : '无法保存设置'
     })
   } finally {
-    saving.value = false
+    configSaveInFlight = false
+    if (configSaveQueued) {
+      configSaveQueued = false
+      void saveConfigNow()
+    }
   }
+}
+
+function handleClose(): void {
+  void saveConfigNow()
+  flushPendingSaves()
+  emit('close')
+}
+
+onUnmounted(() => {
+  flushPendingSaves()
+  offModeChange?.()
+})
+
+function environmentPayload(env: EnvironmentProfile): Partial<EnvironmentProfile> {
+  return {
+    name: env.name,
+    description: env.description,
+    variables: Object.fromEntries(Object.entries(env.variables).map(([key, value]) => [key, value ?? ''])),
+    isDefault: env.isDefault
+  }
+}
+
+function environmentSnapshot(env: EnvironmentProfile): string {
+  return JSON.stringify(environmentPayload(env))
 }
 
 function syncEditingEnv(id?: string): void {
   const targetId = id ?? editingEnv.value?.id
-  if (!targetId) {
-    editingEnv.value = environments.value[0] ?? null
-    return
-  }
-  editingEnv.value = environments.value.find((e) => e.id === targetId) ?? null
+  const next = targetId
+    ? environments.value.find((environment) => environment.id === targetId) ?? null
+    : environments.value[0] ?? null
+  editingEnv.value = next
+  savedEnvSnapshot = next ? environmentSnapshot(next) : ''
 }
 
 function selectEnv(id: string): void {
   if (editingEnv.value?.id !== id) {
-    envSaved.value = false
+    flushEnvironmentSave()
+    syncEditingEnv(id)
+    envSaveState.value = 'idle'
   }
-  syncEditingEnv(id)
 }
 
-async function saveEnv(): Promise<void> {
-  if (!editingEnv.value) return
-  const env = toRaw(editingEnv.value)
+async function saveEnvironmentNow(): Promise<void> {
+  const current = editingEnv.value
+  if (!current || !initialized.value || hydrating) return
+  if (envSaveInFlight) {
+    envSaveQueued = true
+    return
+  }
+
+  const env = toRaw(current)
   const envId = env.id
-  savingEnv.value = true
-  envSaved.value = false
+  const payload = environmentPayload(env)
+  const snapshot = JSON.stringify(payload)
+  if (snapshot === savedEnvSnapshot) return
+
+  envSaveInFlight = true
+  envSaveState.value = 'saving'
   try {
-    // IPC 需要纯 JSON 对象，Vue reactive Proxy 无法 structured clone
-    const updated = await window.autoforge.env.update(envId, {
-      name: env.name,
-      description: env.description,
-      variables: Object.fromEntries(
-        Object.entries(env.variables).map(([k, v]) => [k, v ?? ''])
-      ),
-      isDefault: env.isDefault
-    })
-    if (!updated) {
-      pushToast({ type: 'error', title: '保存失败', message: '无法更新环境配置' })
-      return
-    }
+    const updated = await window.autoforge.env.update(envId, payload)
+    if (!updated) throw new Error('无法更新环境配置')
+    savedEnvSnapshot = snapshot
     environments.value = await window.autoforge.env.list()
-    syncEditingEnv(envId)
+    const latest = editingEnv.value
+    if (latest?.id === envId && environmentSnapshot(latest) === snapshot) {
+      syncEditingEnv(envId)
+    }
     emit('environments-changed')
-    envSaved.value = true
+    envSaveState.value = 'saved'
   } catch (err) {
+    envSaveState.value = 'error'
     pushToast({
       type: 'error',
       title: '保存失败',
       message: err instanceof Error ? err.message : '无法保存环境'
     })
   } finally {
-    savingEnv.value = false
+    envSaveInFlight = false
+    if (envSaveQueued) {
+      envSaveQueued = false
+      void saveEnvironmentNow()
+    }
   }
 }
 
+function scheduleEnvironmentSave(): void {
+  if (!initialized.value || hydrating || !editingEnv.value) return
+  if (envSaveTimer !== undefined) window.clearTimeout(envSaveTimer)
+  envSaveTimer = window.setTimeout(() => {
+    envSaveTimer = undefined
+    void saveEnvironmentNow()
+  }, 400)
+}
+
+function flushEnvironmentSave(): void {
+  if (envSaveTimer !== undefined) {
+    window.clearTimeout(envSaveTimer)
+    envSaveTimer = undefined
+  }
+  if (editingEnv.value && environmentSnapshot(editingEnv.value) !== savedEnvSnapshot) {
+    void saveEnvironmentNow()
+  }
+}
+
+function flushPendingSaves(): void {
+  flushEnvironmentSave()
+}
+
+watch(
+  editingEnv,
+  () => {
+    if (!initialized.value || hydrating || !editingEnv.value) return
+    if (environmentSnapshot(editingEnv.value) === savedEnvSnapshot) return
+    scheduleEnvironmentSave()
+  },
+  { deep: true }
+)
+
 async function createEnv(): Promise<void> {
+  flushEnvironmentSave()
   const env = await window.autoforge.env.create({
     name: `环境 ${environments.value.length + 1}`,
     variables: {},
@@ -223,10 +345,11 @@ async function createEnv(): Promise<void> {
   environments.value = await window.autoforge.env.list()
   syncEditingEnv(env.id)
   emit('environments-changed')
-  envSaved.value = false
+  envSaveState.value = 'saved'
 }
 
 async function deleteEnv(id: string): Promise<void> {
+  flushEnvironmentSave()
   const env = environments.value.find((e) => e.id === id)
   const confirmed = await askConfirm({
     title: '删除环境',
@@ -241,7 +364,7 @@ async function deleteEnv(id: string): Promise<void> {
   environments.value = await window.autoforge.env.list()
   syncEditingEnv()
   emit('environments-changed')
-  envSaved.value = false
+  envSaveState.value = 'saved'
 }
 
 function addEnvVar(): void {
@@ -275,12 +398,7 @@ async function detectPython(): Promise<void> {
   detectingPython.value = true
   try {
     if (pythonPath.value.trim()) {
-      await window.autoforge.config.set({
-        python: {
-          executablePath: pythonPath.value.trim(),
-          pipIndexUrl: pipIndexUrl.value.trim() || undefined
-        }
-      })
+      await saveConfigNow()
     }
     pythonStatus.value = await window.autoforge.system.pythonDetect()
   } finally {
@@ -372,373 +490,627 @@ async function removeGlobalPythonDep(name: string): Promise<void> {
 <template>
   <AppFeatureModal
     :open="open"
-    max-width="2xl"
+    max-width="5xl"
     aria-labelledby="settings-modal-title"
-    @close="emit('close')"
+    @close="handleClose"
   >
-    <div class="flex flex-col h-full min-h-0 overflow-hidden">
-    <div class="relative flex items-center justify-between px-6 py-4 border-b sb-border-subtle flex-shrink-0 settings-modal-header overflow-hidden">
-      <div
-        class="absolute inset-x-0 top-0 h-px pointer-events-none"
-        style="background: linear-gradient(90deg, transparent, color-mix(in srgb, var(--sb-accent-solid) 50%, transparent), transparent)"
-        aria-hidden="true"
-      />
-      <div class="flex items-start gap-3 min-w-0">
-        <div class="w-9 h-9 rounded-lg sb-bg-inset border sb-border-subtle flex items-center justify-center flex-shrink-0">
-          <Settings class="w-4 h-4 text-[var(--sb-accent-solid)]" :stroke-width="1.5" />
-        </div>
-      <div>
-        <h1 id="settings-modal-title" class="text-[15px] font-semibold sb-text-primary tracking-tight">设置</h1>
-        <p class="text-[11px] sb-text-muted mt-0.5">外观、运行环境与环境 Profile</p>
-      </div>
-      </div>
-      <button type="button" class="w-8 h-8 flex items-center justify-center rounded-md sb-text-muted hover:sb-text-secondary sb-bg-hover flex-shrink-0" title="关闭" @click="emit('close')">
-        <X class="w-4 h-4" :stroke-width="1.5" />
-      </button>
-    </div>
-
-    <div class="flex-1 overflow-y-auto min-h-0">
-    <div class="max-w-2xl px-6 py-6 space-y-8">
-      <!-- 产品版本 -->
-      <section class="space-y-3">
-        <h2 class="text-[13px] font-medium sb-text-secondary">产品版本</h2>
-        <div class="rounded-lg border sb-border sb-bg-surface px-4 py-3 flex items-center justify-between gap-4">
+    <div class="settings-modal-shell flex flex-col min-h-0 overflow-hidden">
+      <div class="relative flex items-center justify-between gap-4 px-6 py-4 border-b sb-border-subtle flex-shrink-0 settings-modal-header overflow-hidden">
+        <div
+          class="absolute inset-x-0 top-0 h-px pointer-events-none"
+          style="background: linear-gradient(90deg, transparent, color-mix(in srgb, var(--sb-accent-solid) 50%, transparent), transparent)"
+          aria-hidden="true"
+        />
+        <div class="flex items-start gap-3 min-w-0">
+          <div class="w-9 h-9 rounded-lg sb-bg-inset border sb-border-subtle flex items-center justify-center flex-shrink-0">
+            <Settings class="w-4 h-4 text-[var(--sb-accent-solid)]" :stroke-width="1.5" />
+          </div>
           <div class="min-w-0">
-            <p class="text-[13px] sb-text-secondary">Autoforge</p>
-            <p class="text-[11px] sb-text-faint mt-0.5">本机自动化脚本锻造与管理桌面应用</p>
-          </div>
-          <span class="text-[13px] font-mono sb-text-primary shrink-0">v{{ appVersion }}</span>
-        </div>
-      </section>
-
-      <!-- AutoforgeHub -->
-      <section class="space-y-3">
-        <h2 class="text-[13px] font-medium sb-text-secondary">AutoforgeHub</h2>
-        <p class="text-[11px] sb-text-faint">配置后可从侧边栏直接进入 AutoforgeHub。</p>
-        <div>
-          <label class="text-[12px] sb-text-muted">AutoforgeHub 地址</label>
-          <input
-            v-model="autoforgeHubUrl"
-            type="url"
-            placeholder="如 https://hub.example.com"
-            class="mt-1 w-full h-9 px-3 rounded-lg sb-input border text-[13px] font-mono outline-none"
-          />
-          <p class="mt-1 text-[11px] sb-text-faint">支持 http:// 和 https:// 地址。</p>
-        </div>
-      </section>
-
-      <!-- 窗口行为 -->
-      <section class="space-y-3">
-        <h2 class="text-[13px] font-medium sb-text-secondary">窗口行为</h2>
-        <p class="text-[11px] sb-text-faint">托盘模式适合后台常驻；悬浮球可自由拖动并快速唤起主界面；快捷键可在任意应用中打开主窗口。</p>
-        <div class="rounded-lg border sb-border sb-bg-surface p-4 space-y-3">
-          <label class="flex items-start gap-2 text-[13px] sb-text-secondary cursor-pointer">
-            <input v-model="trayMode" type="checkbox" class="rounded mt-0.5" />
-            <span>
-              托盘模式
-              <span class="block text-[11px] sb-text-faint mt-0.5">关闭窗口时隐藏到系统托盘，程序继续在后台运行</span>
-            </span>
-          </label>
-          <label class="flex items-start gap-2 text-[13px] sb-text-secondary cursor-pointer">
-            <input v-model="floatingMode" type="checkbox" class="rounded mt-0.5" />
-            <span>
-              悬浮球
-              <span class="block text-[11px] sb-text-faint mt-0.5">在桌面显示圆形悬浮球，可拖动到任意位置，点击打开主界面；标题栏也可快速开关</span>
-            </span>
-          </label>
-          <label class="flex items-start gap-2 text-[13px] sb-text-secondary cursor-pointer">
-            <input v-model="globalShortcutEnabled" type="checkbox" class="rounded mt-0.5" />
-            <span>
-              全局快捷键
-              <span class="block text-[11px] sb-text-faint mt-0.5">在任意应用中按下快捷键，快速显示主界面</span>
-            </span>
-          </label>
-          <div v-if="globalShortcutEnabled" class="pl-6 space-y-2">
-            <label class="block text-[12px] sb-text-muted">快捷键组合</label>
-            <ShortcutRecorder v-model="globalShortcut" />
-            <p class="text-[11px] sb-text-faint">点击输入框后按下新的组合键；按 Esc 取消录制</p>
-            <p v-if="!globalShortcutRegistered" class="text-[11px] text-amber-400">
-              当前快捷键无法注册，可能已被其他程序占用，请尝试其他组合
-            </p>
+            <h1 id="settings-modal-title" class="text-[15px] font-semibold sb-text-primary tracking-tight">设置</h1>
+            <p class="text-[11px] sb-text-muted mt-0.5">外观、运行环境与环境 Profile</p>
           </div>
         </div>
-      </section>
-
-      <!-- 外观 -->
-      <section class="space-y-3">
-        <h2 class="text-[13px] font-medium sb-text-secondary">外观皮肤</h2>
-        <p class="text-[11px] sb-text-faint">选择整体配色风格；标题栏太阳 / 月亮图标可在同系列深浅皮肤间快速切换</p>
-        <SkinPicker />
-      </section>
-
-      <!-- 环境 Profile -->
-      <section class="space-y-3">
-        <div class="flex items-center justify-between">
-          <h2 class="text-[13px] font-medium sb-text-secondary">环境 Profile</h2>
-          <button type="button" class="flex items-center gap-1 text-[12px] sb-text-muted hover:sb-text-secondary" @click="createEnv">
-            <Plus class="w-3.5 h-3.5" :stroke-width="1.5" />
-            新建
-          </button>
-        </div>
-        <p class="text-[11px] sb-text-faint">创建开发 / 测试 / 生产等环境，供脚本通过 ctx.env 读取。填写常用片段可使用标题栏「小记」快速填入输入框。</p>
-
-        <div class="flex gap-2 flex-wrap">
+        <div class="flex items-center gap-3 flex-shrink-0">
+          <span v-if="saveStatusLabel" class="settings-save-status" aria-live="polite">
+            <span class="settings-save-status__dot" :class="`is-${saveState}`" aria-hidden="true" />
+            {{ saveStatusLabel }}
+          </span>
           <button
-            v-for="env in environments"
-            :key="env.id"
             type="button"
-            class="px-3 py-1.5 rounded-lg text-[12px] border transition-colors"
-            :class="editingEnv?.id === env.id ? 'sb-bg-inset sb-border sb-text-primary' : 'sb-border sb-text-muted hover:border-[var(--sb-text-faint)]'"
-            @click="selectEnv(env.id)"
+            class="w-8 h-8 flex items-center justify-center rounded-md sb-text-muted hover:sb-text-secondary sb-bg-hover"
+            title="关闭"
+            @click="handleClose"
           >
-            {{ env.name }}
-            <span v-if="env.isDefault" class="sb-text-faint ml-1">(默认)</span>
+            <X class="w-4 h-4" :stroke-width="1.5" />
           </button>
         </div>
+      </div>
 
-        <div v-if="editingEnv" class="rounded-lg border sb-border sb-bg-surface p-4 space-y-3">
-          <div>
-            <label class="text-[12px] sb-text-muted">名称</label>
-            <input v-model="editingEnv.name" class="mt-1 w-full h-9 px-3 rounded-lg sb-input border text-[13px] outline-none" />
-          </div>
-          <label class="flex items-center gap-2 text-[12px] sb-text-muted">
-            <input v-model="editingEnv.isDefault" type="checkbox" class="rounded" />
-            设为默认环境
-          </label>
-
-          <div>
-            <label class="text-[12px] sb-text-muted">环境变量</label>
-            <div class="mt-2 space-y-1.5">
-              <div v-for="(val, key) in editingEnv.variables" :key="key" class="flex items-center gap-2">
-                <span class="text-[12px] font-mono sb-text-muted flex-1 truncate">{{ key }}</span>
-                <span class="text-[12px] sb-text-faint flex-1 truncate">{{ val ? '••••' : '(空)' }}</span>
-                <button type="button" class="sb-text-faint hover:text-red-400" @click="removeEnvVar(String(key))">
-                  <Trash2 class="w-3.5 h-3.5" :stroke-width="1.5" />
-                </button>
-              </div>
-            </div>
-            <div class="mt-2 flex gap-2">
-              <input v-model="envVarKey" placeholder="KEY" class="flex-1 h-8 px-3 rounded-lg sb-input border text-[12px] font-mono outline-none" />
-              <input v-model="envVarValue" placeholder="VALUE" class="flex-1 h-8 px-3 rounded-lg sb-input border text-[12px] outline-none" />
-              <button type="button" class="h-8 px-3 rounded-lg sb-bg-inset sb-text-secondary text-[12px]" @click="addEnvVar">添加</button>
-            </div>
-          </div>
-
-          <div class="flex items-center gap-3">
-            <button
-              type="button"
-              class="h-8 px-4 rounded-lg sb-btn-accent text-[12px] font-medium disabled:opacity-50"
-              :disabled="savingEnv"
-              @click="saveEnv"
-            >
-              {{ savingEnv ? '保存中…' : '保存环境' }}
-            </button>
-            <p v-if="envSaved" class="text-[12px] text-emerald-400">环境已保存</p>
-            <button
-              v-if="environments.length > 1"
-              type="button"
-              class="h-8 px-4 rounded-lg text-red-400 text-[12px] border sb-border"
-              @click="deleteEnv(editingEnv.id)"
-            >
-              删除
-            </button>
-          </div>
-        </div>
-      </section>
-
-      <section class="space-y-3">
-        <h2 class="text-[13px] font-medium sb-text-secondary">外部编辑器</h2>
-        <p class="text-[11px] sb-text-faint">在脚本详情「编辑」页点击「外部编辑器」时，用所选程序打开脚本工作区目录（如 VS Code、Cursor、WebStorm）。</p>
-        <div>
-          <label class="text-[12px] sb-text-muted">编辑器路径</label>
-          <div class="mt-1 flex gap-2">
-            <input
-              v-model="externalEditorPath"
-              placeholder="留空则在首次使用时选择"
-              class="flex-1 min-w-0 h-9 px-3 rounded-lg sb-input border text-[13px] font-mono outline-none"
-            />
-            <button
-              type="button"
-              class="h-9 px-3 rounded-lg text-[12px] sb-text-muted border sb-border hover:sb-text-secondary hover:sb-bg-hover transition-colors flex-shrink-0"
-              @click="browseExternalEditor"
-            >
-              浏览…
-            </button>
-          </div>
-        </div>
-      </section>
-
-      <section class="space-y-3">
-        <h2 class="text-[13px] font-medium sb-text-secondary">浏览器（SDK 使用）</h2>
-        <div v-if="browserStatus" class="rounded-lg border sb-border sb-bg-surface p-3 space-y-2">
-          <div class="flex items-center gap-2 text-[12px]">
-            <CheckCircle2 v-if="browserStatus.bundled" class="w-3.5 h-3.5 text-emerald-400" :stroke-width="1.5" />
-            <XCircle v-else class="w-3.5 h-3.5 text-amber-400" :stroke-width="1.5" />
-            <span :class="browserStatus.bundled ? 'text-emerald-400' : 'text-amber-400'">
-              {{ browserStatus.bundled ? '内置 Chromium 已就绪' : '未检测到内置 Chromium' }}
+      <div class="settings-layout flex-1 min-h-0">
+        <nav class="settings-nav sb-bg-surface" aria-label="设置分类">
+          <button
+            v-for="section in SETTINGS_SECTIONS"
+            :key="section.id"
+            type="button"
+            class="settings-nav-item"
+            :class="{ 'is-active': activeSection === section.id }"
+            :aria-current="activeSection === section.id ? 'page' : undefined"
+            @click="activeSection = section.id"
+          >
+            <component :is="section.icon" class="settings-nav-item__icon" :stroke-width="1.7" aria-hidden="true" />
+            <span class="min-w-0">
+              <span class="settings-nav-item__label">{{ section.label }}</span>
+              <span class="settings-nav-item__description">{{ section.description }}</span>
             </span>
-          </div>
-        </div>
-        <div>
-          <label class="text-[12px] sb-text-muted">浏览器路径（可选）</label>
-          <input v-model="browserPath" placeholder="留空自动检测" class="mt-1 w-full h-9 px-3 rounded-lg sb-input border text-[13px] font-mono outline-none" />
-          <p class="mt-1 text-[11px] sb-text-faint">无头模式请在各脚本的详情面板或 autoforge.json 中单独配置</p>
-        </div>
-      </section>
+          </button>
+        </nav>
 
-      <section class="space-y-3">
-        <h2 class="text-[13px] font-medium sb-text-secondary">Python（脚本执行）</h2>
-        <div v-if="pythonStatus" class="rounded-lg border sb-border sb-bg-surface p-3 space-y-2">
-          <div class="flex items-center gap-2 text-[12px]">
-            <CheckCircle2 v-if="pythonStatus.found" class="w-3.5 h-3.5 text-emerald-400" :stroke-width="1.5" />
-            <XCircle v-else class="w-3.5 h-3.5 text-amber-400" :stroke-width="1.5" />
-            <span :class="pythonStatus.found ? 'text-emerald-400' : 'text-amber-400'">
-              {{
-                pythonStatus.found
-                  ? `Python ${pythonStatus.version} · ${pythonStatus.executable}`
-                  : `未检测到 Python ${pythonStatus.minVersion}+`
-              }}
-            </span>
-          </div>
-          <p v-if="pythonStatus.error && !pythonStatus.found" class="text-[11px] text-amber-400/90">
-            {{ pythonStatus.error }}
-          </p>
-        </div>
-        <div>
-          <label class="text-[12px] sb-text-muted">Python 路径（可选）</label>
-          <div class="mt-1 flex gap-2">
-            <input
-              v-model="pythonPath"
-              placeholder="留空自动检测本机 Python"
-              class="flex-1 min-w-0 h-9 px-3 rounded-lg sb-input border text-[13px] font-mono outline-none"
-            />
-            <button
-              type="button"
-              class="h-9 px-3 rounded-lg text-[12px] sb-text-muted border sb-border hover:sb-text-secondary hover:sb-bg-hover transition-colors flex-shrink-0"
-              @click="browsePython"
-            >
-              浏览…
-            </button>
-            <button
-              type="button"
-              class="h-9 px-3 rounded-lg text-[12px] sb-text-muted border sb-border hover:sb-text-secondary hover:sb-bg-hover transition-colors flex-shrink-0 disabled:opacity-50"
-              :disabled="detectingPython"
-              @click="detectPython"
-            >
-              检测
-            </button>
-          </div>
-          <p class="mt-1 text-[11px] sb-text-faint">Python 脚本在独立子进程中运行，需本机安装 Python 3.9+</p>
-        </div>
-        <div>
-          <label class="text-[12px] sb-text-muted">pip 镜像源（可选）</label>
-          <input
-            v-model="pipIndexUrl"
-            placeholder="如 https://pypi.tuna.tsinghua.edu.cn/simple"
-            class="mt-1 w-full h-9 px-3 rounded-lg sb-input border text-[13px] font-mono outline-none"
-          />
-          <p class="mt-1 text-[11px] sb-text-faint">用于脚本依赖与全局 Python 依赖安装，留空使用 PyPI 默认源</p>
-        </div>
-        <div>
-          <label class="text-[12px] sb-text-muted">运行超时（秒）</label>
-          <input
-            v-model.number="runTimeoutSeconds"
-            type="number"
-            min="0"
-            step="1"
-            placeholder="0 表示不限制"
-            class="mt-1 w-full h-9 px-3 rounded-lg sb-input border text-[13px] outline-none"
-          />
-          <p class="mt-1 text-[11px] sb-text-faint">JS 与 Python 脚本共用；超时后自动停止运行</p>
-        </div>
-        <div class="rounded-lg border sb-border sb-bg-surface p-4 space-y-3">
-          <div class="flex items-center justify-between gap-2">
-            <div>
-              <p class="text-[13px] sb-text-secondary">全局 Python 依赖</p>
-              <p class="text-[11px] sb-text-faint mt-0.5">安装至 userData/runtime-python，所有 Python 脚本共享</p>
-            </div>
-            <button
-              type="button"
-              class="text-[12px] sb-text-muted hover:sb-text-secondary disabled:opacity-50"
-              :disabled="loadingGlobalDeps || installingGlobalDep"
-              @click="loadGlobalPythonDeps"
-            >
-              刷新
-            </button>
-          </div>
-          <div v-if="loadingGlobalDeps" class="text-[12px] sb-text-faint">加载中…</div>
-          <div v-else-if="!globalPythonDeps.length" class="text-[12px] sb-text-faint">尚未安装全局依赖</div>
-          <div v-else class="space-y-1.5">
-            <div
-              v-for="dep in globalPythonDeps"
-              :key="dep.name"
-              class="flex items-center gap-2 text-[12px]"
-            >
-              <span class="font-mono sb-text-secondary flex-1 truncate">{{ dep.name }}</span>
-              <span class="sb-text-faint truncate max-w-[40%]">{{ dep.version }}</span>
-              <button
-                type="button"
-                class="sb-text-faint hover:text-red-400 disabled:opacity-50"
-                :disabled="installingGlobalDep"
-                @click="removeGlobalPythonDep(dep.name)"
-              >
-                <Trash2 class="w-3.5 h-3.5" :stroke-width="1.5" />
-              </button>
-            </div>
-          </div>
-          <div class="flex gap-2">
-            <input
-              v-model="globalDepName"
-              placeholder="包名，如 requests"
-              class="flex-1 h-8 px-3 rounded-lg sb-input border text-[12px] font-mono outline-none"
-            />
-            <input
-              v-model="globalDepVersion"
-              placeholder="版本（可选）"
-              class="flex-1 h-8 px-3 rounded-lg sb-input border text-[12px] font-mono outline-none"
-            />
-            <button
-              type="button"
-              class="h-8 px-3 rounded-lg sb-bg-inset sb-text-secondary text-[12px] disabled:opacity-50"
-              :disabled="installingGlobalDep || !globalDepName.trim()"
-              @click="installGlobalPythonDep"
-            >
-              {{ installingGlobalDep ? '安装中…' : '安装' }}
-            </button>
-          </div>
-        </div>
-      </section>
+        <div class="settings-content overflow-y-auto min-h-0">
+          <div class="settings-content-inner">
+            <template v-if="activeSection === 'overview'">
+              <section class="settings-section space-y-3">
+                <div class="settings-section-heading">
+                  <div>
+                    <p class="settings-eyebrow">概览</p>
+                    <h2 class="settings-section-title">了解 Autoforge</h2>
+                  </div>
+                  <span class="settings-section-index">01</span>
+                </div>
+                <div class="rounded-lg border sb-border sb-bg-surface px-4 py-3 flex items-center justify-between gap-4">
+                  <div class="min-w-0">
+                    <p class="text-[13px] sb-text-secondary">Autoforge</p>
+                    <p class="text-[11px] sb-text-faint mt-0.5">本机自动化脚本锻造与管理桌面应用</p>
+                  </div>
+                  <span class="text-[13px] font-mono sb-text-primary shrink-0">v{{ appVersion }}</span>
+                </div>
+              </section>
 
-      <section class="space-y-3">
-        <h2 class="text-[13px] font-medium sb-text-secondary">日志</h2>
-        <select v-model="logLevel" class="h-9 px-3 rounded-lg sb-input border text-[13px] outline-none">
-          <option value="INFO">INFO</option>
-          <option value="WARN">WARN</option>
-          <option value="ERROR">ERROR</option>
-        </select>
-        <button type="button" class="text-[12px] sb-text-muted hover:sb-text-secondary underline" @click="openUserDataDir">
-          打开数据目录
-        </button>
-      </section>
+              <section class="settings-section space-y-3">
+                <div>
+                  <p class="settings-eyebrow">连接</p>
+                  <h2 class="settings-section-title">AutoforgeHub</h2>
+                </div>
+                <p class="text-[11px] sb-text-faint">配置后可从侧边栏直接进入 AutoforgeHub。</p>
+                <div>
+                  <label class="text-[12px] sb-text-muted">AutoforgeHub 地址</label>
+                  <input
+                    v-model="autoforgeHubUrl"
+                    type="url"
+                    placeholder="如 https://hub.example.com"
+                    class="mt-1 w-full h-9 px-3 rounded-lg sb-input border text-[13px] font-mono outline-none"
+                    @blur="saveConfigNow"
+                  />
+                  <p class="mt-1 text-[11px] sb-text-faint">支持 http:// 和 https:// 地址。</p>
+                </div>
+              </section>
+            </template>
 
-      <button
-        type="button"
-        class="h-9 px-4 rounded-lg sb-btn-accent text-[13px] font-medium disabled:opacity-50"
-        :disabled="saving"
-        @click="save"
-      >
-        {{ saving ? '保存中…' : '保存设置' }}
-      </button>
-      <p v-if="saved" class="text-[12px] text-emerald-400">已保存</p>
-    </div>
-    </div>
+            <template v-else-if="activeSection === 'window'">
+              <section class="settings-section space-y-3">
+                <div class="settings-section-heading">
+                  <div>
+                    <p class="settings-eyebrow">工作台</p>
+                    <h2 class="settings-section-title">窗口行为</h2>
+                  </div>
+                  <span class="settings-section-index">02</span>
+                </div>
+                <p class="text-[11px] sb-text-faint">托盘模式适合后台常驻；悬浮球可自由拖动并快速唤起主界面；快捷键可在任意应用中打开主窗口。</p>
+                <div class="rounded-lg border sb-border sb-bg-surface p-4 space-y-3">
+                  <label class="flex items-start gap-2 text-[13px] sb-text-secondary cursor-pointer">
+                    <input v-model="trayMode" type="checkbox" class="rounded mt-0.5" />
+                    <span>
+                      托盘模式
+                      <span class="block text-[11px] sb-text-faint mt-0.5">关闭窗口时隐藏到系统托盘，程序继续在后台运行</span>
+                    </span>
+                  </label>
+                  <label class="flex items-start gap-2 text-[13px] sb-text-secondary cursor-pointer">
+                    <input v-model="floatingMode" type="checkbox" class="rounded mt-0.5" />
+                    <span>
+                      悬浮球
+                      <span class="block text-[11px] sb-text-faint mt-0.5">在桌面显示圆形悬浮球，可拖动到任意位置，点击打开主界面；标题栏也可快速开关</span>
+                    </span>
+                  </label>
+                  <label class="flex items-start gap-2 text-[13px] sb-text-secondary cursor-pointer">
+                    <input v-model="globalShortcutEnabled" type="checkbox" class="rounded mt-0.5" />
+                    <span>
+                      全局快捷键
+                      <span class="block text-[11px] sb-text-faint mt-0.5">在任意应用中按下快捷键，快速显示主界面</span>
+                    </span>
+                  </label>
+                  <div v-if="globalShortcutEnabled" class="pl-6 space-y-2">
+                    <label class="block text-[12px] sb-text-muted">快捷键组合</label>
+                    <ShortcutRecorder v-model="globalShortcut" />
+                    <p class="text-[11px] sb-text-faint">点击输入框后按下新的组合键；按 Esc 取消录制</p>
+                    <p v-if="!globalShortcutRegistered" class="text-[11px] text-amber-400">
+                      当前快捷键无法注册，可能已被其他程序占用，请尝试其他组合
+                    </p>
+                  </div>
+                </div>
+              </section>
+
+              <section class="settings-section space-y-3">
+                <div>
+                  <p class="settings-eyebrow">氛围</p>
+                  <h2 class="settings-section-title">外观皮肤</h2>
+                </div>
+                <p class="text-[11px] sb-text-faint">选择整体配色风格；标题栏太阳 / 月亮图标可在同系列深浅皮肤间快速切换</p>
+                <SkinPicker />
+              </section>
+            </template>
+
+            <template v-else-if="activeSection === 'runtime'">
+              <section class="settings-section space-y-3">
+                <div class="settings-section-heading">
+                  <div>
+                    <p class="settings-eyebrow">运行时</p>
+                    <h2 class="settings-section-title">环境 Profile</h2>
+                  </div>
+                  <div class="flex items-center gap-3">
+                    <span class="settings-section-index">03</span>
+                    <button type="button" class="flex items-center gap-1 text-[12px] sb-text-muted hover:sb-text-secondary" @click="createEnv">
+                      <Plus class="w-3.5 h-3.5" :stroke-width="1.5" />
+                      新建
+                    </button>
+                  </div>
+                </div>
+                <p class="text-[11px] sb-text-faint">创建开发 / 测试 / 生产等环境，供脚本通过 ctx.env 读取。填写常用片段可使用标题栏「小记」快速填入输入框。</p>
+
+                <div class="flex gap-2 flex-wrap">
+                  <button
+                    v-for="env in environments"
+                    :key="env.id"
+                    type="button"
+                    class="px-3 py-1.5 rounded-lg text-[12px] border transition-colors"
+                    :class="editingEnv?.id === env.id ? 'sb-bg-inset sb-border sb-text-primary' : 'sb-border sb-text-muted hover:border-[var(--sb-text-faint)]'"
+                    @click="selectEnv(env.id)"
+                  >
+                    {{ env.name }}
+                    <span v-if="env.isDefault" class="sb-text-faint ml-1">(默认)</span>
+                  </button>
+                </div>
+
+                <div v-if="editingEnv" class="rounded-lg border sb-border sb-bg-surface p-4 space-y-3">
+                  <div>
+                    <label class="text-[12px] sb-text-muted">名称</label>
+                    <input v-model="editingEnv.name" class="mt-1 w-full h-9 px-3 rounded-lg sb-input border text-[13px] outline-none" />
+                  </div>
+                  <label class="flex items-center gap-2 text-[12px] sb-text-muted">
+                    <input v-model="editingEnv.isDefault" type="checkbox" class="rounded" />
+                    设为默认环境
+                  </label>
+
+                  <div>
+                    <label class="text-[12px] sb-text-muted">环境变量</label>
+                    <div class="mt-2 space-y-1.5">
+                      <div v-for="(val, key) in editingEnv.variables" :key="key" class="flex items-center gap-2">
+                        <span class="text-[12px] font-mono sb-text-muted flex-1 truncate">{{ key }}</span>
+                        <span class="text-[12px] sb-text-faint flex-1 truncate">{{ val ? '••••' : '(空)' }}</span>
+                        <button type="button" class="sb-text-faint hover:text-red-400" title="移除变量" @click="removeEnvVar(String(key))">
+                          <Trash2 class="w-3.5 h-3.5" :stroke-width="1.5" />
+                        </button>
+                      </div>
+                    </div>
+                    <div class="mt-2 flex gap-2">
+                      <input v-model="envVarKey" placeholder="KEY" class="flex-1 h-8 px-3 rounded-lg sb-input border text-[12px] font-mono outline-none" />
+                      <input v-model="envVarValue" placeholder="VALUE" class="flex-1 h-8 px-3 rounded-lg sb-input border text-[12px] outline-none" />
+                      <button type="button" class="h-8 px-3 rounded-lg sb-bg-inset sb-text-secondary text-[12px]" @click="addEnvVar">添加</button>
+                    </div>
+                  </div>
+
+                  <div class="flex items-center justify-end">
+                    <button
+                      v-if="environments.length > 1"
+                      type="button"
+                      class="h-8 px-4 rounded-lg text-red-400 text-[12px] border sb-border"
+                      @click="deleteEnv(editingEnv.id)"
+                    >
+                      删除环境
+                    </button>
+                  </div>
+                </div>
+              </section>
+
+              <section class="settings-section space-y-3">
+                <div>
+                  <p class="settings-eyebrow">浏览器</p>
+                  <h2 class="settings-section-title">浏览器（SDK 使用）</h2>
+                </div>
+                <div v-if="browserStatus" class="rounded-lg border sb-border sb-bg-surface p-3 space-y-2">
+                  <div class="flex items-center gap-2 text-[12px]">
+                    <CheckCircle2 v-if="browserStatus.bundled" class="w-3.5 h-3.5 text-emerald-400" :stroke-width="1.5" />
+                    <XCircle v-else class="w-3.5 h-3.5 text-amber-400" :stroke-width="1.5" />
+                    <span :class="browserStatus.bundled ? 'text-emerald-400' : 'text-amber-400'">
+                      {{ browserStatus.bundled ? '内置 Chromium 已就绪' : '未检测到内置 Chromium' }}
+                    </span>
+                  </div>
+                </div>
+                <div>
+                  <label class="text-[12px] sb-text-muted">浏览器路径（可选）</label>
+                  <input
+                    v-model="browserPath"
+                    placeholder="留空自动检测"
+                    class="mt-1 w-full h-9 px-3 rounded-lg sb-input border text-[13px] font-mono outline-none"
+                    @blur="saveConfigNow"
+                  />
+                  <p class="mt-1 text-[11px] sb-text-faint">无头模式请在各脚本的详情面板或 autoforge.json 中单独配置</p>
+                </div>
+              </section>
+
+              <section class="settings-section space-y-3">
+                <div>
+                  <p class="settings-eyebrow">脚本执行</p>
+                  <h2 class="settings-section-title">Python</h2>
+                </div>
+                <div v-if="pythonStatus" class="rounded-lg border sb-border sb-bg-surface p-3 space-y-2">
+                  <div class="flex items-center gap-2 text-[12px]">
+                    <CheckCircle2 v-if="pythonStatus.found" class="w-3.5 h-3.5 text-emerald-400" :stroke-width="1.5" />
+                    <XCircle v-else class="w-3.5 h-3.5 text-amber-400" :stroke-width="1.5" />
+                    <span :class="pythonStatus.found ? 'text-emerald-400' : 'text-amber-400'">
+                      {{
+                        pythonStatus.found
+                          ? `Python ${pythonStatus.version} · ${pythonStatus.executable}`
+                          : `未检测到 Python ${pythonStatus.minVersion}+`
+                      }}
+                    </span>
+                  </div>
+                  <p v-if="pythonStatus.error && !pythonStatus.found" class="text-[11px] text-amber-400/90">
+                    {{ pythonStatus.error }}
+                  </p>
+                </div>
+                <div>
+                  <label class="text-[12px] sb-text-muted">Python 路径（可选）</label>
+                  <div class="mt-1 flex gap-2">
+                    <input
+                      v-model="pythonPath"
+                      placeholder="留空自动检测本机 Python"
+                      class="flex-1 min-w-0 h-9 px-3 rounded-lg sb-input border text-[13px] font-mono outline-none"
+                      @blur="saveConfigNow"
+                    />
+                    <button
+                      type="button"
+                      class="h-9 px-3 rounded-lg text-[12px] sb-text-muted border sb-border hover:sb-text-secondary hover:sb-bg-hover transition-colors flex-shrink-0"
+                      @click="browsePython"
+                    >
+                      浏览…
+                    </button>
+                    <button
+                      type="button"
+                      class="h-9 px-3 rounded-lg text-[12px] sb-text-muted border sb-border hover:sb-text-secondary hover:sb-bg-hover transition-colors flex-shrink-0 disabled:opacity-50"
+                      :disabled="detectingPython"
+                      @click="detectPython"
+                    >
+                      检测
+                    </button>
+                  </div>
+                  <p class="mt-1 text-[11px] sb-text-faint">Python 脚本在独立子进程中运行，需本机安装 Python 3.9+</p>
+                </div>
+                <div>
+                  <label class="text-[12px] sb-text-muted">pip 镜像源（可选）</label>
+                  <input
+                    v-model="pipIndexUrl"
+                    placeholder="如 https://pypi.tuna.tsinghua.edu.cn/simple"
+                    class="mt-1 w-full h-9 px-3 rounded-lg sb-input border text-[13px] font-mono outline-none"
+                    @blur="saveConfigNow"
+                  />
+                  <p class="mt-1 text-[11px] sb-text-faint">用于脚本依赖与全局 Python 依赖安装，留空使用 PyPI 默认源</p>
+                </div>
+                <div>
+                  <label class="text-[12px] sb-text-muted">运行超时（秒）</label>
+                  <input
+                    v-model.number="runTimeoutSeconds"
+                    type="number"
+                    min="0"
+                    step="1"
+                    placeholder="0 表示不限制"
+                    class="mt-1 w-full h-9 px-3 rounded-lg sb-input border text-[13px] outline-none"
+                    @blur="saveConfigNow"
+                  />
+                  <p class="mt-1 text-[11px] sb-text-faint">JS 与 Python 脚本共用；超时后自动停止运行</p>
+                </div>
+                <div class="rounded-lg border sb-border sb-bg-surface p-4 space-y-3">
+                  <div class="flex items-center justify-between gap-2">
+                    <div>
+                      <p class="text-[13px] sb-text-secondary">全局 Python 依赖</p>
+                      <p class="text-[11px] sb-text-faint mt-0.5">安装至 userData/runtime-python，所有 Python 脚本共享</p>
+                    </div>
+                    <button
+                      type="button"
+                      class="text-[12px] sb-text-muted hover:sb-text-secondary disabled:opacity-50"
+                      :disabled="loadingGlobalDeps || installingGlobalDep"
+                      @click="loadGlobalPythonDeps"
+                    >
+                      刷新
+                    </button>
+                  </div>
+                  <div v-if="loadingGlobalDeps" class="text-[12px] sb-text-faint">加载中…</div>
+                  <div v-else-if="!globalPythonDeps.length" class="text-[12px] sb-text-faint">尚未安装全局依赖</div>
+                  <div v-else class="space-y-1.5">
+                    <div v-for="dep in globalPythonDeps" :key="dep.name" class="flex items-center gap-2 text-[12px]">
+                      <span class="font-mono sb-text-secondary flex-1 truncate">{{ dep.name }}</span>
+                      <span class="sb-text-faint truncate max-w-[40%]">{{ dep.version }}</span>
+                      <button
+                        type="button"
+                        class="sb-text-faint hover:text-red-400 disabled:opacity-50"
+                        :disabled="installingGlobalDep"
+                        :title="`移除 ${dep.name}`"
+                        @click="removeGlobalPythonDep(dep.name)"
+                      >
+                        <Trash2 class="w-3.5 h-3.5" :stroke-width="1.5" />
+                      </button>
+                    </div>
+                  </div>
+                  <div class="flex gap-2">
+                    <input
+                      v-model="globalDepName"
+                      placeholder="包名，如 requests"
+                      class="flex-1 h-8 px-3 rounded-lg sb-input border text-[12px] font-mono outline-none"
+                    />
+                    <input
+                      v-model="globalDepVersion"
+                      placeholder="版本（可选）"
+                      class="flex-1 h-8 px-3 rounded-lg sb-input border text-[12px] font-mono outline-none"
+                    />
+                    <button
+                      type="button"
+                      class="h-8 px-3 rounded-lg sb-bg-inset sb-text-secondary text-[12px] disabled:opacity-50"
+                      :disabled="installingGlobalDep || !globalDepName.trim()"
+                      @click="installGlobalPythonDep"
+                    >
+                      {{ installingGlobalDep ? '安装中…' : '安装' }}
+                    </button>
+                  </div>
+                </div>
+              </section>
+            </template>
+
+            <template v-else-if="activeSection === 'tools'">
+              <section class="settings-section space-y-3">
+                <div class="settings-section-heading">
+                  <div>
+                    <p class="settings-eyebrow">编辑体验</p>
+                    <h2 class="settings-section-title">外部编辑器</h2>
+                  </div>
+                  <span class="settings-section-index">04</span>
+                </div>
+                <p class="text-[11px] sb-text-faint">在脚本详情「编辑」页点击「外部编辑器」时，用所选程序打开脚本工作区目录（如 VS Code、Cursor、WebStorm）。</p>
+                <div>
+                  <label class="text-[12px] sb-text-muted">编辑器路径</label>
+                  <div class="mt-1 flex gap-2">
+                    <input
+                      v-model="externalEditorPath"
+                      placeholder="留空则在首次使用时选择"
+                      class="flex-1 min-w-0 h-9 px-3 rounded-lg sb-input border text-[13px] font-mono outline-none"
+                      @blur="saveConfigNow"
+                    />
+                    <button
+                      type="button"
+                      class="h-9 px-3 rounded-lg text-[12px] sb-text-muted border sb-border hover:sb-text-secondary hover:sb-bg-hover transition-colors flex-shrink-0"
+                      @click="browseExternalEditor"
+                    >
+                      浏览…
+                    </button>
+                  </div>
+                </div>
+              </section>
+            </template>
+
+            <template v-else>
+              <section class="settings-section space-y-3">
+                <div class="settings-section-heading">
+                  <div>
+                    <p class="settings-eyebrow">诊断</p>
+                    <h2 class="settings-section-title">日志与数据</h2>
+                  </div>
+                  <span class="settings-section-index">05</span>
+                </div>
+                <div>
+                  <label class="text-[12px] sb-text-muted">日志级别</label>
+                  <select v-model="logLevel" class="mt-1 h-9 px-3 rounded-lg sb-input border text-[13px] outline-none" @change="saveConfigNow">
+                    <option value="INFO">INFO</option>
+                    <option value="WARN">WARN</option>
+                    <option value="ERROR">ERROR</option>
+                  </select>
+                </div>
+                <div class="rounded-lg border sb-border sb-bg-surface px-4 py-3 flex items-center justify-between gap-4">
+                  <div>
+                    <p class="text-[13px] sb-text-secondary">应用数据目录</p>
+                    <p class="text-[11px] sb-text-faint mt-0.5">查看脚本、运行时和应用配置所在位置</p>
+                  </div>
+                  <button type="button" class="text-[12px] sb-text-muted hover:sb-text-secondary underline" @click="openUserDataDir">
+                    打开目录
+                  </button>
+                </div>
+              </section>
+            </template>
+          </div>
+        </div>
+      </div>
     </div>
   </AppFeatureModal>
 </template>
 
 <style scoped>
+.settings-modal-shell {
+  height: min(92vh, 880px);
+  min-height: min(92vh, 880px);
+}
+
 .settings-modal-header {
   background: color-mix(in srgb, var(--sb-accent-solid) 8%, var(--sb-bg-panel));
   box-shadow: inset 3px 0 0 var(--sb-accent-solid);
+}
+
+.settings-layout {
+  display: grid;
+  grid-template-columns: 176px minmax(0, 1fr);
+}
+
+.settings-nav {
+  border-right: 1px solid var(--sb-border-subtle);
+  padding: 0.75rem;
+  overflow-y: auto;
+}
+
+.settings-nav-item {
+  position: relative;
+  display: flex;
+  width: 100%;
+  align-items: flex-start;
+  gap: 0.625rem;
+  border-radius: 0.625rem;
+  padding: 0.625rem 0.75rem;
+  color: var(--sb-text-muted);
+  text-align: left;
+  transition: background 0.16s ease, color 0.16s ease;
+}
+
+.settings-nav-item:hover,
+.settings-nav-item:focus-visible,
+.settings-nav-item.is-active {
+  color: var(--sb-text-primary);
+  background: color-mix(in srgb, var(--sb-accent-solid) 10%, var(--sb-bg-inset));
+}
+
+.settings-nav-item.is-active::before {
+  content: '';
+  position: absolute;
+  left: 0;
+  top: 0.55rem;
+  bottom: 0.55rem;
+  width: 2px;
+  border-radius: 999px;
+  background: var(--sb-accent-solid);
+}
+
+.settings-nav-item__icon {
+  width: 1rem;
+  height: 1rem;
+  margin-top: 0.125rem;
+  flex-shrink: 0;
+}
+
+.settings-nav-item__label,
+.settings-nav-item__description {
+  display: block;
+}
+
+.settings-nav-item__label {
+  font-size: 12px;
+  font-weight: 600;
+  line-height: 1.35;
+}
+
+.settings-nav-item__description {
+  margin-top: 0.125rem;
+  color: var(--sb-text-faint);
+  font-size: 10px;
+  line-height: 1.35;
+}
+
+.settings-content {
+  min-width: 0;
+}
+
+.settings-content-inner {
+  max-width: 52rem;
+  padding: 1.5rem 2rem 2rem;
+}
+
+.settings-section + .settings-section {
+  margin-top: 2.5rem;
+  padding-top: 2.25rem;
+  border-top: 1px solid var(--sb-border-subtle);
+}
+
+.settings-section-heading {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 1rem;
+}
+
+.settings-eyebrow {
+  margin-bottom: 0.25rem;
+  color: var(--sb-accent-solid);
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+}
+
+.settings-section-title {
+  color: var(--sb-text-secondary);
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.settings-section-index {
+  color: var(--sb-text-faint);
+  font-family: var(--font-mono);
+  font-size: 10px;
+  letter-spacing: 0.12em;
+}
+
+.settings-save-status {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  color: var(--sb-text-muted);
+  font-size: 11px;
+  white-space: nowrap;
+}
+
+.settings-save-status__dot {
+  width: 0.4rem;
+  height: 0.4rem;
+  border-radius: 999px;
+  background: var(--sb-text-faint);
+}
+
+.settings-save-status__dot.is-saving {
+  background: var(--sb-accent-solid);
+  animation: settings-save-pulse 1s ease-in-out infinite;
+}
+
+.settings-save-status__dot.is-saved {
+  background: #34d399;
+}
+
+.settings-save-status__dot.is-error {
+  background: #f59e0b;
+}
+
+@keyframes settings-save-pulse {
+  0%, 100% { opacity: 0.45; transform: scale(0.8); }
+  50% { opacity: 1; transform: scale(1); }
+}
+
+@media (max-width: 760px) {
+  .settings-layout {
+    display: flex;
+    flex-direction: column;
+  }
+
+  .settings-nav {
+    display: flex;
+    gap: 0.375rem;
+    border-right: 0;
+    border-bottom: 1px solid var(--sb-border-subtle);
+    overflow-x: auto;
+    overflow-y: hidden;
+  }
+
+  .settings-nav-item {
+    width: auto;
+    min-width: max-content;
+  }
+
+  .settings-nav-item__description {
+    display: none;
+  }
+
+  .settings-content-inner {
+    padding: 1.25rem 1rem 1.5rem;
+  }
 }
 </style>
