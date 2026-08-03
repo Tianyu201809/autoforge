@@ -1,11 +1,22 @@
 export interface BrowserDisconnectEmitter {
   once(event: 'disconnected', listener: () => void): unknown
+  close(options?: { reason?: string }): Promise<void>
 }
+
+export type BrowserDisconnectKind = 'intentional' | 'unexpected'
 
 export function attachBrowserDisconnectHandler(
   browser: BrowserDisconnectEmitter,
-  onDisconnected: () => void,
+  onDisconnected: (kind: BrowserDisconnectKind) => void,
   schedule: (callback: () => void) => void = setImmediate
 ): void {
-  browser.once('disconnected', () => schedule(onDisconnected))
+  let intentionalClose = false
+  const originalClose = browser.close.bind(browser)
+  browser.close = async (options) => {
+    intentionalClose = true
+    await originalClose(options)
+  }
+  browser.once('disconnected', () => {
+    schedule(() => onDisconnected(intentionalClose ? 'intentional' : 'unexpected'))
+  })
 }

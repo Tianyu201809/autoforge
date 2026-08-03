@@ -21,6 +21,20 @@ class FakeSignal:
         self.aborted = True
 
 
+class FakeBrowser:
+    def __init__(self) -> None:
+        self.listeners = {}
+
+    def on(self, event, callback) -> None:
+        self.listeners[event] = callback
+
+    async def close(self) -> None:
+        self.listeners["disconnected"](self)
+
+    def disconnect_externally(self) -> None:
+        self.listeners["disconnected"](self)
+
+
 def make_context(*, disconnected: bool):
     signal = FakeSignal()
     browser = SimpleNamespace(disconnected=disconnected)
@@ -28,6 +42,24 @@ def make_context(*, disconnected: bool):
 
 
 class BrowserDisconnectTests(unittest.IsolatedAsyncioTestCase):
+    async def test_explicit_close_is_not_recorded_as_disconnect(self) -> None:
+        browser_sdk = BrowserSdk({}, FakeSignal())
+        browser = FakeBrowser()
+        browser_sdk._attach_browser_lifecycle(browser)
+
+        await browser.close()
+
+        self.assertFalse(browser_sdk.disconnected)
+
+    async def test_external_close_is_recorded_as_disconnect(self) -> None:
+        browser_sdk = BrowserSdk({}, FakeSignal())
+        browser = FakeBrowser()
+        browser_sdk._attach_browser_lifecycle(browser)
+
+        browser.disconnect_externally()
+
+        self.assertTrue(browser_sdk.disconnected)
+
     async def test_disconnect_cancels_running_coroutine(self) -> None:
         ctx = make_context(disconnected=True)
         cancelled = False

@@ -46,13 +46,31 @@ class BrowserSdk:
         self._playwright: Any = None
         self._browser: Any = None
         self._disconnected = False
+        self._intentional_close = False
 
     @property
     def disconnected(self) -> bool:
         return self._disconnected
 
     def _handle_disconnected(self, _browser: Any = None) -> None:
-        self._disconnected = True
+        if not self._intentional_close:
+            self._disconnected = True
+
+    def _attach_browser_lifecycle(self, browser: Any) -> None:
+        self._browser = browser
+        self._intentional_close = False
+        original_close = browser.close
+
+        async def close(*args, **kwargs):
+            self._intentional_close = True
+            try:
+                return await original_close(*args, **kwargs)
+            finally:
+                if self._browser is browser:
+                    self._browser = None
+
+        browser.close = close
+        browser.on("disconnected", self._handle_disconnected)
 
     async def launch(self):
         if self._signal.aborted:
@@ -103,9 +121,8 @@ class BrowserSdk:
         else:
             browser = await pw.chromium.launch(**launch_kwargs)
 
-        self._browser = browser
         _apply_browser_context_defaults(browser, headless)
-        browser.on("disconnected", self._handle_disconnected)
+        self._attach_browser_lifecycle(browser)
         return browser
 
     async def close(self) -> None:

@@ -27,9 +27,9 @@ export function createScriptSdk(
         browserRef = browser
         applyBrowserContextDefaults(browser, plan.headless)
         if (onBrowserDisconnected) {
-          attachBrowserDisconnectHandler(browser, () => {
+          attachBrowserDisconnectHandler(browser, (kind) => {
             browserRef = null
-            onBrowserDisconnected()
+            if (kind === 'unexpected') onBrowserDisconnected()
           })
         }
         if (signal?.aborted) {
