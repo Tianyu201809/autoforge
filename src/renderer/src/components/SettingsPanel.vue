@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed, onUnmounted, ref, toRaw, watch } from 'vue'
-import { AppWindow, Boxes, CheckCircle2, Code2, Globe2, Plus, ScrollText, Settings, Trash2, X, XCircle } from 'lucide-vue-next'
+import { AppWindow, Boxes, Check, CheckCircle2, ChevronDown, Code2, Copy, Globe2, Plus, ScrollText, Settings, ShieldCheck, Terminal, Trash2, X, XCircle } from 'lucide-vue-next'
 import type { Component } from 'vue'
 import type { AppConfig, BrowserStatusInfo, EnvironmentProfile, GlobalDependency, PythonStatusInfo } from '../../../shared/types/script'
 import type { McpClientConfig, McpStatus } from '../../../shared/mcp-types'
@@ -26,7 +26,7 @@ interface SettingsSection {
 }
 
 const SETTINGS_SECTIONS: SettingsSection[] = [
-  { id: 'mcp', label: 'MCP', description: 'Agent control', icon: Code2 },
+  { id: 'mcp', label: 'MCP', description: '智能体接入', icon: Code2 },
   { id: 'overview', label: '概览', description: '产品与 Hub', icon: Boxes },
   { id: 'window', label: '窗口与外观', description: '显示与皮肤', icon: AppWindow },
   { id: 'runtime', label: '环境与运行', description: 'Profile 与运行时', icon: Globe2 },
@@ -70,6 +70,7 @@ const mcpStatus = ref<McpStatus | null>(null)
 const mcpClientConfig = ref<McpClientConfig | null>(null)
 const mcpBusy = ref(false)
 const mcpCopied = ref(false)
+const mcpCommandCopied = ref(false)
 const mcpRotated = ref(false)
 
 const environments = ref<EnvironmentProfile[]>([])
@@ -89,6 +90,38 @@ let envSaveTimer: number | undefined
 let envSaveInFlight = false
 let envSaveQueued = false
 let savedEnvSnapshot = ''
+
+const mcpConfigJson = computed(() => {
+  const config = mcpClientConfig.value
+  if (!config) return ''
+  return JSON.stringify({ mcpServers: { autoforge: { command: config.command, args: config.args } } }, null, 2)
+})
+
+const mcpStateLabel = computed(() => {
+  if (!mcpStatus.value) return '正在读取状态'
+  if (mcpStatus.value.running) return '运行中，可连接'
+  if (mcpStatus.value.enabled) return '正在启动'
+  return '未启用'
+})
+
+const mcpStateHint = computed(() => {
+  if (!mcpStatus.value) return '正在检查本地 MCP 服务状态'
+  if (mcpStatus.value.running) return 'Agent 现在可以通过标准 MCP 访问 Autoforge'
+  if (mcpStatus.value.enabled) return '服务正在准备，通常只需要几秒钟'
+  return '打开开关后，Agent 才能读取和运行脚本'
+})
+
+const mcpEnvironmentLabel = computed(() => {
+  if (mcpStatus.value?.appEnv === 'development') return '开发环境'
+  if (mcpStatus.value?.appEnv === 'production') return '生产环境'
+  return '未确定'
+})
+
+const mcpTransportLabel = computed(() => {
+  if (mcpStatus.value?.transport === 'named-pipe') return 'Windows 命名管道'
+  if (mcpStatus.value?.transport === 'unix-socket') return 'Unix Socket'
+  return '等待服务启动'
+})
 
 function syncWindowModeFromState(): void {
   if (!props.open || !windowModeReady.value || syncingFromEvent) return
@@ -273,14 +306,24 @@ async function rotateMcpToken(): Promise<void> {
 }
 
 async function copyMcpConfig(): Promise<void> {
-  if (!mcpClientConfig.value) return
-  const snippet = JSON.stringify({ mcpServers: { autoforge: { command: mcpClientConfig.value.command, args: mcpClientConfig.value.args } } }, null, 2)
+  if (!mcpConfigJson.value) return
   try {
-    await navigator.clipboard.writeText(snippet)
+    await navigator.clipboard.writeText(mcpConfigJson.value)
     mcpCopied.value = true
     window.setTimeout(() => { mcpCopied.value = false }, 1800)
   } catch (error) {
     pushToast({ type: 'error', title: 'MCP', message: error instanceof Error ? error.message : 'Unable to copy configuration' })
+  }
+}
+
+async function copyMcpCommand(): Promise<void> {
+  if (!mcpClientConfig.value) return
+  try {
+    await navigator.clipboard.writeText(mcpClientConfig.value.displayCommand)
+    mcpCommandCopied.value = true
+    window.setTimeout(() => { mcpCommandCopied.value = false }, 1800)
+  } catch (error) {
+    pushToast({ type: 'error', title: 'MCP', message: error instanceof Error ? error.message : 'Unable to copy command' })
   }
 }
 
@@ -641,42 +684,179 @@ async function removeGlobalPythonDep(name: string): Promise<void> {
             </template>
 
             <template v-else-if="activeSection === 'mcp'">
-              <section class="settings-section space-y-3">
+              <section class="mcp-intro">
+                <div class="mcp-intro__copy">
+                  <p class="settings-eyebrow">本地智能体接入</p>
+                  <h2 class="mcp-intro__title">让 Agent 帮你操作 Autoforge</h2>
+                  <p class="mcp-intro__description">通过标准 MCP 协议，让 Codex、Claude、Cursor 等 Agent 安全地读取、编辑和运行你的脚本。</p>
+                </div>
+                <div class="mcp-intro__badge" aria-hidden="true">
+                  <Terminal class="w-5 h-5" :stroke-width="1.6" />
+                  <span>STDIO</span>
+                </div>
+              </section>
+
+              <section class="settings-section mcp-section space-y-3">
                 <div class="settings-section-heading">
                   <div>
-                    <p class="settings-eyebrow">MCP</p>
-                    <h2 class="settings-section-title">Local agent control</h2>
+                    <p class="settings-eyebrow">连接状态</p>
+                    <h2 class="settings-section-title">MCP 服务</h2>
                   </div>
-                  <span class="settings-section-index">MCP</span>
+                  <span class="settings-section-index">01</span>
                 </div>
-                <p class="text-[11px] sb-text-faint">Enable the local MCP surface to let configured agents inspect and run scripts. The desktop app must remain open.</p>
-                <div class="rounded-lg border sb-border sb-bg-surface p-4 space-y-3">
-                  <label class="flex items-start gap-2 text-[13px] sb-text-secondary cursor-pointer">
-                    <input v-if="mcpStatus" :checked="mcpStatus.enabled" type="checkbox" class="rounded mt-0.5" :disabled="mcpBusy" @change="toggleMcp(($event.target as HTMLInputElement).checked)" />
-                    <span>
-                      Allow local MCP control
-                      <span class="block text-[11px] sb-text-faint mt-0.5">Disabled by default; turning it off closes existing adapter connections.</span>
-                    </span>
-                  </label>
-                  <div v-if="mcpStatus" class="grid grid-cols-2 gap-2 text-[11px] sb-text-muted">
-                    <span>Status: {{ mcpStatus.running ? 'running' : mcpStatus.enabled ? 'starting' : 'disabled' }}</span>
-                    <span>Environment: {{ mcpStatus.appEnv }}</span>
-                    <span>Transport: {{ mcpStatus.transport ?? '—' }}</span>
-                    <span>Connections: {{ mcpStatus.connectionCount }}</span>
+
+                <div
+                  class="mcp-status-card"
+                  :class="{ 'is-ready': mcpStatus?.running, 'is-starting': mcpStatus?.enabled && !mcpStatus?.running }"
+                >
+                  <div class="mcp-status-card__top">
+                    <div class="mcp-status-card__identity">
+                      <div class="mcp-status-card__icon" aria-hidden="true">
+                        <CheckCircle2 v-if="mcpStatus?.running" class="w-5 h-5" :stroke-width="1.7" />
+                        <Code2 v-else class="w-5 h-5" :stroke-width="1.7" />
+                      </div>
+                      <div>
+                        <p class="mcp-status-card__label">服务状态</p>
+                        <h3 class="mcp-status-card__title">{{ mcpStateLabel }}</h3>
+                        <p class="mcp-status-card__hint">{{ mcpStateHint }}</p>
+                      </div>
+                    </div>
+                    <label class="mcp-toggle" :class="{ 'is-disabled': mcpBusy || !mcpStatus }">
+                      <span class="sr-only">启用本地 MCP</span>
+                      <input
+                        v-if="mcpStatus"
+                        :checked="mcpStatus.enabled"
+                        type="checkbox"
+                        :disabled="mcpBusy"
+                        @change="toggleMcp(($event.target as HTMLInputElement).checked)"
+                      />
+                      <span class="mcp-toggle__track" aria-hidden="true"><span class="mcp-toggle__thumb" /></span>
+                    </label>
                   </div>
-                  <p v-if="mcpStatus?.endpoint" class="text-[10px] sb-text-faint font-mono break-all">{{ mcpStatus.endpoint }}</p>
-                </div>
-                <div v-if="mcpClientConfig" class="rounded-lg border sb-border sb-bg-surface p-4 space-y-2">
-                  <div class="flex items-center justify-between gap-2">
-                    <span class="text-[12px] sb-text-secondary">Client configuration</span>
-                    <button type="button" class="text-[12px] sb-text-muted hover:sb-text-secondary" @click="copyMcpConfig">{{ mcpCopied ? 'Copied' : 'Copy JSON' }}</button>
+
+                  <div v-if="mcpStatus" class="mcp-status-grid">
+                    <div class="mcp-status-metric">
+                      <span>运行环境</span>
+                      <strong>{{ mcpEnvironmentLabel }}</strong>
+                    </div>
+                    <div class="mcp-status-metric">
+                      <span>连接方式</span>
+                      <strong>{{ mcpTransportLabel }}</strong>
+                    </div>
+                    <div class="mcp-status-metric">
+                      <span>当前连接</span>
+                      <strong>{{ mcpStatus.connectionCount }} 个</strong>
+                    </div>
                   </div>
-                  <code class="block text-[10px] sb-text-faint font-mono whitespace-pre-wrap break-all">{{ mcpClientConfig.displayCommand }}</code>
-                  <p class="text-[10px] sb-text-faint">Token is discovered at runtime and is never shown or copied.</p>
+
+                  <div v-if="mcpStatus?.endpoint" class="mcp-endpoint">
+                    <span>本地端点</span>
+                    <code>{{ mcpStatus.endpoint }}</code>
+                  </div>
                 </div>
-                <button type="button" class="h-8 px-3 rounded-lg text-[12px] sb-text-muted border sb-border hover:sb-text-secondary disabled:opacity-50" :disabled="mcpBusy || !mcpStatus?.enabled" @click="rotateMcpToken">
-                  {{ mcpRotated ? 'Token rotated' : 'Rotate token' }}
-                </button>
+                <p class="mcp-status-note"><ShieldCheck class="w-3.5 h-3.5" :stroke-width="1.7" />仅允许本机连接；关闭服务会断开现有 Agent 连接。</p>
+              </section>
+
+              <section class="settings-section mcp-section space-y-3">
+                <div class="settings-section-heading">
+                  <div>
+                    <p class="settings-eyebrow">快速接入</p>
+                    <h2 class="settings-section-title">按 3 步完成配置</h2>
+                  </div>
+                  <span class="settings-section-index">02</span>
+                </div>
+                <div class="mcp-guide-grid">
+                  <article class="mcp-guide-card">
+                    <span class="mcp-guide-card__number">01</span>
+                    <div>
+                      <h3>开启 MCP</h3>
+                      <p>打开上方开关，保持 Autoforge 在后台运行。</p>
+                    </div>
+                  </article>
+                  <article class="mcp-guide-card">
+                    <span class="mcp-guide-card__number">02</span>
+                    <div>
+                      <h3>复制配置</h3>
+                      <p>复制下方 JSON，粘贴到 Agent 的 MCP 配置文件。</p>
+                    </div>
+                  </article>
+                  <article class="mcp-guide-card">
+                    <span class="mcp-guide-card__number">03</span>
+                    <div>
+                      <h3>开始使用</h3>
+                      <p>重启 Agent 后即可让它查询或运行 Autoforge 脚本。</p>
+                    </div>
+                  </article>
+                </div>
+              </section>
+
+              <section class="settings-section mcp-section space-y-3">
+                <div class="settings-section-heading">
+                  <div>
+                    <p class="settings-eyebrow">Agent 配置</p>
+                    <h2 class="settings-section-title">复制配置到你的客户端</h2>
+                  </div>
+                  <span class="settings-section-index">03</span>
+                </div>
+                <div v-if="mcpClientConfig" class="mcp-config-card">
+                  <div class="mcp-config-card__header">
+                    <div>
+                      <p class="mcp-config-card__eyebrow">标准 MCP 启动配置</p>
+                      <h3>Autoforge MCP</h3>
+                      <p>适用于 Codex、Claude Desktop、Cursor 等支持 MCP 的 Agent。</p>
+                    </div>
+                    <button type="button" class="mcp-copy-button" @click="copyMcpConfig">
+                      <Check v-if="mcpCopied" class="w-3.5 h-3.5" :stroke-width="1.8" />
+                      <Copy v-else class="w-3.5 h-3.5" :stroke-width="1.6" />
+                      {{ mcpCopied ? '已复制配置' : '复制 JSON 配置' }}
+                    </button>
+                  </div>
+
+                  <div class="mcp-config-field">
+                    <div class="mcp-config-field__heading">
+                      <span>启动命令</span>
+                      <button type="button" class="mcp-inline-action" @click="copyMcpCommand">
+                        {{ mcpCommandCopied ? '已复制' : '复制命令' }}
+                      </button>
+                    </div>
+                    <code class="mcp-code-line">{{ mcpClientConfig.command }}</code>
+                  </div>
+
+                  <div class="mcp-config-field">
+                    <div class="mcp-config-field__heading"><span>启动参数</span><span class="mcp-config-field__hint">自动生成，无需修改</span></div>
+                    <div class="mcp-args-list">
+                      <code v-for="argument in mcpClientConfig.args" :key="argument">{{ argument }}</code>
+                    </div>
+                  </div>
+
+                  <div class="mcp-config-field mcp-env-field">
+                    <div class="mcp-config-field__heading"><span>环境变量</span><span class="mcp-config-field__hint">无需填写</span></div>
+                    <p>连接令牌由 Autoforge 在本机运行时自动发现，不会写入配置文件。</p>
+                  </div>
+
+                  <details class="mcp-json-details">
+                    <summary>
+                      <span>查看完整 JSON</span>
+                      <ChevronDown class="mcp-json-details__icon w-4 h-4" :stroke-width="1.5" />
+                    </summary>
+                    <pre>{{ mcpConfigJson }}</pre>
+                  </details>
+
+                  <div class="mcp-config-card__footer">
+                    <p><ShieldCheck class="w-3.5 h-3.5" :stroke-width="1.7" />安全令牌只存在于本机运行时，不需要手动填写或分享。</p>
+                    <button type="button" class="mcp-rotate-button" :disabled="mcpBusy || !mcpStatus?.enabled" @click="rotateMcpToken">
+                      {{ mcpRotated ? '令牌已更新' : '轮换安全令牌' }}
+                    </button>
+                  </div>
+                </div>
+              </section>
+
+              <section class="mcp-help-card">
+                <div class="mcp-help-card__icon" aria-hidden="true"><Code2 class="w-4 h-4" :stroke-width="1.6" /></div>
+                <div>
+                  <h3>Agent 显示未连接？</h3>
+                  <p>确认 MCP 开关已打开，并重启 Agent 让它重新读取配置。Autoforge 关闭时，Agent 会显示“应用未就绪”。</p>
+                </div>
               </section>
             </template>
 
@@ -1180,6 +1360,551 @@ async function removeGlobalPythonDep(name: string): Promise<void> {
   50% { opacity: 1; transform: scale(1); }
 }
 
+.mcp-intro {
+  position: relative;
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 1.5rem;
+  overflow: hidden;
+  padding: 1.35rem 1.4rem;
+  border: 1px solid color-mix(in srgb, var(--sb-accent-solid) 28%, var(--sb-border));
+  border-radius: 1rem;
+  background:
+    radial-gradient(circle at 84% 14%, color-mix(in srgb, var(--sb-accent-solid) 24%, transparent), transparent 42%),
+    linear-gradient(135deg, color-mix(in srgb, var(--sb-accent-solid) 13%, var(--sb-bg-panel)), var(--sb-bg-surface));
+}
+
+.mcp-intro::after {
+  position: absolute;
+  right: -2.5rem;
+  bottom: -4rem;
+  width: 10rem;
+  height: 10rem;
+  border: 1px solid color-mix(in srgb, var(--sb-accent-solid) 18%, transparent);
+  border-radius: 50%;
+  content: '';
+  opacity: 0.7;
+}
+
+.mcp-intro__copy {
+  position: relative;
+  z-index: 1;
+  max-width: 34rem;
+}
+
+.mcp-intro__title {
+  color: var(--sb-text-primary);
+  font-size: 18px;
+  font-weight: 700;
+  letter-spacing: -0.025em;
+}
+
+.mcp-intro__description {
+  max-width: 32rem;
+  margin-top: 0.45rem;
+  color: var(--sb-text-muted);
+  font-size: 11px;
+  line-height: 1.7;
+}
+
+.mcp-intro__badge {
+  position: relative;
+  z-index: 1;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.45rem;
+  flex-shrink: 0;
+  padding: 0.55rem 0.7rem;
+  border: 1px solid color-mix(in srgb, var(--sb-accent-solid) 34%, var(--sb-border));
+  border-radius: 0.7rem;
+  color: var(--sb-accent-solid);
+  background: color-mix(in srgb, var(--sb-bg-inset) 74%, transparent);
+  font-family: var(--font-mono);
+  font-size: 10px;
+  letter-spacing: 0.1em;
+}
+
+.mcp-section {
+  margin-top: 2rem;
+  padding-top: 0;
+  border-top: 0;
+}
+
+.mcp-status-card {
+  padding: 1rem;
+  border: 1px solid var(--sb-border);
+  border-radius: 0.9rem;
+  background: linear-gradient(145deg, color-mix(in srgb, var(--sb-bg-surface) 88%, var(--sb-bg-panel)), var(--sb-bg-inset));
+  transition: border-color 0.18s ease, box-shadow 0.18s ease;
+}
+
+.mcp-status-card.is-ready {
+  border-color: color-mix(in srgb, #34d399 42%, var(--sb-border));
+  box-shadow: 0 14px 32px color-mix(in srgb, #34d399 8%, transparent);
+}
+
+.mcp-status-card.is-starting {
+  border-color: color-mix(in srgb, var(--sb-accent-solid) 38%, var(--sb-border));
+}
+
+.mcp-status-card__top {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 1rem;
+}
+
+.mcp-status-card__identity {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.75rem;
+  min-width: 0;
+}
+
+.mcp-status-card__icon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 2.25rem;
+  height: 2.25rem;
+  flex-shrink: 0;
+  border: 1px solid color-mix(in srgb, var(--sb-accent-solid) 26%, var(--sb-border));
+  border-radius: 0.7rem;
+  color: var(--sb-accent-solid);
+  background: color-mix(in srgb, var(--sb-accent-solid) 10%, var(--sb-bg-panel));
+}
+
+.mcp-status-card.is-ready .mcp-status-card__icon {
+  border-color: color-mix(in srgb, #34d399 36%, var(--sb-border));
+  color: #34d399;
+  background: color-mix(in srgb, #34d399 10%, var(--sb-bg-panel));
+}
+
+.mcp-status-card__label {
+  color: var(--sb-text-faint);
+  font-size: 10px;
+}
+
+.mcp-status-card__title {
+  margin-top: 0.1rem;
+  color: var(--sb-text-primary);
+  font-size: 14px;
+  font-weight: 650;
+}
+
+.mcp-status-card__hint {
+  margin-top: 0.25rem;
+  color: var(--sb-text-muted);
+  font-size: 11px;
+  line-height: 1.5;
+}
+
+.mcp-toggle {
+  position: relative;
+  display: inline-flex;
+  flex-shrink: 0;
+  cursor: pointer;
+}
+
+.mcp-toggle.is-disabled {
+  cursor: not-allowed;
+  opacity: 0.6;
+}
+
+.mcp-toggle input {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  opacity: 0;
+  pointer-events: none;
+}
+
+.mcp-toggle input:focus-visible + .mcp-toggle__track {
+  outline: 2px solid color-mix(in srgb, var(--sb-accent-solid) 62%, transparent);
+  outline-offset: 3px;
+}
+
+.mcp-toggle__track {
+  display: inline-flex;
+  align-items: center;
+  width: 2.7rem;
+  height: 1.55rem;
+  padding: 0.18rem;
+  border-radius: 999px;
+  background: var(--sb-border);
+  transition: background 0.18s ease;
+}
+
+.mcp-toggle input:checked + .mcp-toggle__track {
+  background: var(--sb-accent-solid);
+}
+
+.mcp-toggle__thumb {
+  width: 1.18rem;
+  height: 1.18rem;
+  border-radius: 50%;
+  background: var(--sb-text-primary);
+  box-shadow: 0 2px 5px rgb(0 0 0 / 18%);
+  transition: transform 0.18s ease;
+}
+
+.mcp-toggle input:checked + .mcp-toggle__track .mcp-toggle__thumb {
+  transform: translateX(1.15rem);
+}
+
+.mcp-status-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 0.5rem;
+  margin-top: 1rem;
+}
+
+.mcp-status-metric {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+  min-width: 0;
+  padding: 0.65rem 0.7rem;
+  border: 1px solid var(--sb-border-subtle);
+  border-radius: 0.65rem;
+  background: color-mix(in srgb, var(--sb-bg-inset) 70%, transparent);
+}
+
+.mcp-status-metric span,
+.mcp-status-metric strong {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.mcp-status-metric span {
+  color: var(--sb-text-faint);
+  font-size: 10px;
+}
+
+.mcp-status-metric strong {
+  color: var(--sb-text-secondary);
+  font-size: 11px;
+  font-weight: 600;
+}
+
+.mcp-endpoint {
+  display: flex;
+  align-items: baseline;
+  gap: 0.65rem;
+  min-width: 0;
+  margin-top: 0.65rem;
+  padding-top: 0.65rem;
+  border-top: 1px solid var(--sb-border-subtle);
+  color: var(--sb-text-faint);
+  font-size: 10px;
+}
+
+.mcp-endpoint code {
+  min-width: 0;
+  overflow-wrap: anywhere;
+  color: var(--sb-text-muted);
+  font-family: var(--font-mono);
+}
+
+.mcp-status-note {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  color: var(--sb-text-faint);
+  font-size: 10px;
+}
+
+.mcp-status-note svg,
+.mcp-config-card__footer svg {
+  flex-shrink: 0;
+  color: #34d399;
+}
+
+.mcp-guide-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 0.6rem;
+}
+
+.mcp-guide-card {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.65rem;
+  min-height: 7.2rem;
+  padding: 0.85rem;
+  border: 1px solid var(--sb-border);
+  border-radius: 0.75rem;
+  background: var(--sb-bg-surface);
+}
+
+.mcp-guide-card__number {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 1.55rem;
+  height: 1.55rem;
+  flex-shrink: 0;
+  border: 1px solid color-mix(in srgb, var(--sb-accent-solid) 38%, var(--sb-border));
+  border-radius: 0.45rem;
+  color: var(--sb-accent-solid);
+  font-family: var(--font-mono);
+  font-size: 9px;
+}
+
+.mcp-guide-card h3 {
+  color: var(--sb-text-secondary);
+  font-size: 12px;
+  font-weight: 650;
+}
+
+.mcp-guide-card p {
+  margin-top: 0.35rem;
+  color: var(--sb-text-faint);
+  font-size: 10px;
+  line-height: 1.6;
+}
+
+.mcp-config-card {
+  padding: 1rem;
+  border: 1px solid var(--sb-border);
+  border-radius: 0.9rem;
+  background: linear-gradient(160deg, var(--sb-bg-surface), color-mix(in srgb, var(--sb-bg-inset) 75%, var(--sb-bg-panel)));
+}
+
+.mcp-config-card__header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 1rem;
+  padding-bottom: 0.9rem;
+  border-bottom: 1px solid var(--sb-border-subtle);
+}
+
+.mcp-config-card__eyebrow {
+  color: var(--sb-accent-solid);
+  font-size: 10px;
+  font-weight: 650;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.mcp-config-card__header h3 {
+  margin-top: 0.3rem;
+  color: var(--sb-text-primary);
+  font-size: 14px;
+  font-weight: 650;
+}
+
+.mcp-config-card__header p:last-child {
+  margin-top: 0.25rem;
+  color: var(--sb-text-faint);
+  font-size: 10px;
+}
+
+.mcp-copy-button,
+.mcp-inline-action {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  color: var(--sb-accent-solid);
+  font-size: 11px;
+  transition: opacity 0.16s ease, color 0.16s ease;
+}
+
+.mcp-copy-button {
+  flex-shrink: 0;
+  padding: 0.5rem 0.65rem;
+  border: 1px solid color-mix(in srgb, var(--sb-accent-solid) 32%, var(--sb-border));
+  border-radius: 0.55rem;
+  background: color-mix(in srgb, var(--sb-accent-solid) 8%, transparent);
+}
+
+.mcp-copy-button:hover,
+.mcp-inline-action:hover {
+  color: var(--sb-text-primary);
+}
+
+.mcp-config-field {
+  margin-top: 0.85rem;
+}
+
+.mcp-config-field__heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  color: var(--sb-text-muted);
+  font-size: 11px;
+}
+
+.mcp-config-field__hint {
+  color: var(--sb-text-faint);
+  font-size: 10px;
+}
+
+.mcp-code-line,
+.mcp-args-list {
+  display: block;
+  margin-top: 0.4rem;
+  padding: 0.65rem 0.75rem;
+  border: 1px solid var(--sb-border-subtle);
+  border-radius: 0.55rem;
+  color: var(--sb-text-secondary);
+  background: color-mix(in srgb, var(--sb-bg-panel) 76%, var(--sb-bg-inset));
+  font-family: var(--font-mono);
+  font-size: 10px;
+  line-height: 1.55;
+  overflow-wrap: anywhere;
+}
+
+.mcp-args-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+}
+
+.mcp-args-list code {
+  padding: 0.25rem 0.4rem;
+  border: 1px solid var(--sb-border-subtle);
+  border-radius: 0.35rem;
+  color: var(--sb-text-muted);
+  background: var(--sb-bg-inset);
+}
+
+.mcp-env-field {
+  padding: 0.7rem 0.75rem;
+  border: 1px dashed var(--sb-border);
+  border-radius: 0.55rem;
+}
+
+.mcp-env-field p {
+  margin-top: 0.35rem;
+  color: var(--sb-text-faint);
+  font-size: 10px;
+  line-height: 1.55;
+}
+
+.mcp-json-details {
+  margin-top: 0.9rem;
+  border-top: 1px solid var(--sb-border-subtle);
+}
+
+.mcp-json-details summary {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0.7rem 0 0.15rem;
+  color: var(--sb-text-muted);
+  cursor: pointer;
+  font-size: 11px;
+  list-style: none;
+}
+
+.mcp-json-details summary::-webkit-details-marker {
+  display: none;
+}
+
+.mcp-json-details__icon {
+  transition: transform 0.18s ease;
+}
+
+.mcp-json-details[open] .mcp-json-details__icon {
+  transform: rotate(180deg);
+}
+
+.mcp-json-details pre {
+  max-height: 13rem;
+  margin-top: 0.45rem;
+  overflow: auto;
+  padding: 0.75rem;
+  border: 1px solid var(--sb-border-subtle);
+  border-radius: 0.55rem;
+  color: var(--sb-text-muted);
+  background: var(--sb-bg-panel);
+  font-family: var(--font-mono);
+  font-size: 10px;
+  line-height: 1.65;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.mcp-config-card__footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  margin-top: 0.9rem;
+  padding-top: 0.8rem;
+  border-top: 1px solid var(--sb-border-subtle);
+}
+
+.mcp-config-card__footer p {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.4rem;
+  color: var(--sb-text-faint);
+  font-size: 10px;
+  line-height: 1.5;
+}
+
+.mcp-rotate-button {
+  flex-shrink: 0;
+  padding: 0.45rem 0.65rem;
+  border: 1px solid var(--sb-border);
+  border-radius: 0.5rem;
+  color: var(--sb-text-muted);
+  font-size: 10px;
+  transition: color 0.16s ease, border-color 0.16s ease;
+}
+
+.mcp-rotate-button:hover:not(:disabled) {
+  border-color: color-mix(in srgb, var(--sb-accent-solid) 42%, var(--sb-border));
+  color: var(--sb-text-secondary);
+}
+
+.mcp-rotate-button:disabled {
+  cursor: not-allowed;
+  opacity: 0.45;
+}
+
+.mcp-help-card {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.7rem;
+  margin-top: 1.75rem;
+  padding: 0.8rem 0.9rem;
+  border: 1px solid var(--sb-border-subtle);
+  border-radius: 0.75rem;
+  background: color-mix(in srgb, var(--sb-accent-solid) 5%, var(--sb-bg-surface));
+}
+
+.mcp-help-card__icon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 1.75rem;
+  height: 1.75rem;
+  flex-shrink: 0;
+  border-radius: 0.5rem;
+  color: var(--sb-accent-solid);
+  background: color-mix(in srgb, var(--sb-accent-solid) 12%, var(--sb-bg-panel));
+}
+
+.mcp-help-card h3 {
+  color: var(--sb-text-secondary);
+  font-size: 11px;
+  font-weight: 650;
+}
+
+.mcp-help-card p {
+  margin-top: 0.25rem;
+  color: var(--sb-text-faint);
+  font-size: 10px;
+  line-height: 1.6;
+}
+
 @media (max-width: 760px) {
   .settings-layout {
     display: flex;
@@ -1206,6 +1931,26 @@ async function removeGlobalPythonDep(name: string): Promise<void> {
 
   .settings-content-inner {
     padding: 1.25rem 1rem 1.5rem;
+  }
+
+  .mcp-intro {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
+  .mcp-status-grid,
+  .mcp-guide-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .mcp-guide-card {
+    min-height: 0;
+  }
+
+  .mcp-config-card__header,
+  .mcp-config-card__footer {
+    align-items: flex-start;
+    flex-direction: column;
   }
 }
 </style>
