@@ -32,6 +32,7 @@ import type {
   SystemMemoryInfo
 } from '../../shared/types/script'
 import type { ScriptIcon, ScriptLifecycleEvent } from '../../shared/script-contract'
+import type { McpClientConfig, McpStatus } from '../../shared/mcp-types'
 
 export interface ScriptListResponse {
   scripts: ScriptItem[]
@@ -194,6 +195,13 @@ export interface AutoforgeApi {
   config: {
     get: () => Promise<AppConfig>
     set: (config: Partial<AppConfig>) => Promise<AppConfig>
+  }
+  mcp: {
+    getStatus: () => Promise<McpStatus>
+    setEnabled: (enabled: boolean) => Promise<McpStatus>
+    rotateToken: () => Promise<McpStatus>
+    getClientConfig: () => Promise<McpClientConfig>
+    onStatus: (callback: (status: McpStatus) => void) => () => void
   }
   deps: {
     installGlobal: (

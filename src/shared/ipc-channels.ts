@@ -82,6 +82,14 @@ export const IPC = {
 
   CONFIG_SET: 'config:set',
 
+  MCP_GET_STATUS: 'mcp:get-status',
+
+  MCP_SET_ENABLED: 'mcp:set-enabled',
+
+  MCP_ROTATE_TOKEN: 'mcp:rotate-token',
+
+  MCP_GET_CLIENT_CONFIG: 'mcp:get-client-config',
+
 
 
   DEPS_INSTALL_GLOBAL: 'deps:install-global',
@@ -150,7 +158,9 @@ export const IPC = {
   WINDOW_SET_MODE: 'window:set-mode',
   EVENT_WINDOW_MODE: 'event:window-mode',
 
-  EVENT_HUB_SCRIPT_INSTALLED: 'event:hub-script-installed'
+  EVENT_HUB_SCRIPT_INSTALLED: 'event:hub-script-installed',
+
+  EVENT_MCP_STATUS: 'event:mcp-status'
 
 } as const
 

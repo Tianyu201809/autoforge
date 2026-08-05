@@ -9,6 +9,7 @@
     "dev": "node scripts/run-utf8.mjs electron-vite dev --mode development",
     "build": "node scripts/run-utf8.mjs electron-vite build --mode production",
     "preview": "node scripts/run-utf8.mjs electron-vite preview --mode production",
+    "mcp": "node --import tsx src/mcp/stdio-server.ts",
     "prod": "npm run build && npm run preview",
     "generate:detailpanel": "node scripts/write-detailpanel.mjs",
     "install:browsers": "node scripts/install-browsers.mjs",
@@ -23,6 +24,7 @@
     "test:unit": "node --import tsx --test src/shared/category-tree.test.ts src/shared/instance-slots.test.ts src/main/services/browser-window-launch.test.mjs src/main/services/browser-context-defaults.test.mjs src/main/services/browser-lifecycle.test.mjs src/main/services/python-process-exit.test.mjs src/renderer/src/components/Sidebar.test.mjs"
   },
   "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.30.0",
     "adm-zip": "^0.6.0",
     "dompurify": "^3.4.12",
     "lucide-vue-next": "^0.469.0",

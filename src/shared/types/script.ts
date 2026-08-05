@@ -164,6 +164,9 @@ export interface PythonStatusInfo {
 }
 
 export interface AppConfig {
+  mcp?: {
+    enabled?: boolean
+  }
   /** AutoforgeHub 网站地址 */
   hub?: {
     url?: string

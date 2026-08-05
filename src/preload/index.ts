@@ -34,6 +34,7 @@ import type {
 } from '../shared/types/script'
 import type { ScriptIcon, ScriptLifecycleEvent } from '../shared/script-contract'
 import type { ScriptLanguage } from '../shared/script-language'
+import type { McpClientConfig, McpStatus } from '../shared/mcp-types'
 
 export interface EditorFileStatePayload {
   content: string
@@ -241,6 +242,17 @@ const autoforge = {
   config: {
     get: (): Promise<AppConfig> => ipcRenderer.invoke(IPC.CONFIG_GET),
     set: (config: Partial<AppConfig>): Promise<AppConfig> => ipcRenderer.invoke(IPC.CONFIG_SET, config)
+  },
+  mcp: {
+    getStatus: (): Promise<McpStatus> => ipcRenderer.invoke(IPC.MCP_GET_STATUS),
+    setEnabled: (enabled: boolean): Promise<McpStatus> => ipcRenderer.invoke(IPC.MCP_SET_ENABLED, enabled),
+    rotateToken: (): Promise<McpStatus> => ipcRenderer.invoke(IPC.MCP_ROTATE_TOKEN),
+    getClientConfig: (): Promise<McpClientConfig> => ipcRenderer.invoke(IPC.MCP_GET_CLIENT_CONFIG),
+    onStatus: (callback: (status: McpStatus) => void): (() => void) => {
+      const handler = (_event: IpcRendererEvent, status: McpStatus): void => callback(status)
+      ipcRenderer.on(IPC.EVENT_MCP_STATUS, handler)
+      return () => ipcRenderer.removeListener(IPC.EVENT_MCP_STATUS, handler)
+    }
   },
   deps: {
     installGlobal: (

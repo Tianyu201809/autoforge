@@ -26,10 +26,20 @@ import {
 import { startHubBridgeServer, stopHubBridgeServer } from './services/hub-bridge-server'
 import { broadcastToRenderers } from './services/window-broadcast'
 import { scriptStore } from './services/script-store'
+import { createRuntimeContainer } from './services/runtime-container'
+import { createAutoforgeControlFacade } from './services/autoforge-control-facade'
+import { McpAuditService } from './services/mcp-audit'
+import { configureMcpControlServer, type McpControlServer } from './services/mcp-control-server'
+import { RunEventStore } from './services/run-event-store'
+import { runStdioServer } from '../mcp/stdio-server'
 
-configureAppUserDataPath()
+const mcpStdioMode = process.argv.includes('--mcp-stdio')
+
+if (!mcpStdioMode) configureAppUserDataPath()
 
 let mainWindow: BrowserWindow | null = null
+let mcpControlServer: McpControlServer | null = null
+let runtimeEventStore: RunEventStore | null = null
 
 function createWindow(): void {
   mainWindow = new BrowserWindow({
@@ -85,7 +95,7 @@ function createWindow(): void {
   }
 }
 
-app.whenReady().then(async () => {
+if (!mcpStdioMode) app.whenReady().then(async () => {
   console.info(`[app] env=${appEnv} packaged=${app.isPackaged}`)
   if (process.platform === 'win32') {
     app.setAppUserModelId('com.autoforge.app')
@@ -94,7 +104,30 @@ app.whenReady().then(async () => {
   await ensureAppDataSeeded()
   await initDatabase(getAppUserDataPath())
 
-  registerIpcHandlers(() => mainWindow)
+  const runtime = createRuntimeContainer(() => mainWindow)
+  const eventStore = new RunEventStore()
+  runtimeEventStore = eventStore
+  const audit = new McpAuditService()
+  const facade = createAutoforgeControlFacade(runtime)
+  const mcpServer = configureMcpControlServer({
+    appVersion: app.getVersion(),
+    appEnv,
+    facade,
+    eventStore,
+    audit,
+    onStatus: (status) => broadcastToRenderers(IPC.EVENT_MCP_STATUS, status)
+  })
+  mcpControlServer = mcpServer
+  registerIpcHandlers(() => mainWindow, runtime)
+
+  if (scriptStore.getConfig().mcp?.enabled === true) {
+    try {
+      await mcpServer.start()
+    } catch (error) {
+      console.error('[mcp] failed to start control server', error)
+      scriptStore.setConfig({ mcp: { enabled: false } })
+    }
+  }
 
   initMainWindowMode({
     getWindow: () => mainWindow,
@@ -150,14 +183,21 @@ app.whenReady().then(async () => {
   })
 })
 
-app.on('before-quit', () => {
-  stopHubBridgeServer()
-  closeDatabase()
-})
+if (!mcpStdioMode) {
+  app.on('before-quit', () => {
+    stopHubBridgeServer()
+    void mcpControlServer?.dispose()
+    runtimeEventStore?.dispose()
+    runtimeEventStore = null
+    closeDatabase()
+  })
 
-app.on('window-all-closed', () => {
-  if (shouldKeepAliveOnAllWindowsClosed()) return
-  if (process.platform !== 'darwin') {
-    app.quit()
-  }
-})
+  app.on('window-all-closed', () => {
+    if (shouldKeepAliveOnAllWindowsClosed()) return
+    if (process.platform !== 'darwin') {
+      app.quit()
+    }
+  })
+}
+
+if (mcpStdioMode) void runStdioServer(process.argv.slice(2))

@@ -1,6 +1,7 @@
-import { app, dialog, ipcMain, shell, type BrowserWindow } from 'electron'
+import { dialog, ipcMain, shell, type BrowserWindow } from 'electron'
 import { existsSync, statSync } from 'fs'
 import { IPC } from '../../shared/ipc-channels'
+import { appEnv } from '../../shared/app-env'
 import { MANIFEST_FILENAME } from '../../shared/script-contract'
 import type { AppConfig, AppWindowConfig, EnvironmentProfile, ExecutionHistoryQuery, ScriptIcon, ScriptMeta } from '../../shared/types/script'
 import { getAppUserDataPath } from '../services/app-data-root'
@@ -22,6 +23,8 @@ import {
 import { scriptRegistry } from '../services/script-registry'
 import { scriptStore } from '../services/script-store'
 import { scriptWorkspace } from '../services/script-workspace'
+import { createRuntimeContainer, type AutoforgeRuntime } from '../services/runtime-container'
+import { getConfiguredMcpControlServer, getMcpClientConfig, getMcpControlStatus, rotateMcpToken, startMcpControlServer, stopMcpControlServer } from '../services/mcp-control-server'
 import { executionHistory } from '../services/execution-history'
 import {
   buildScriptExportPlan,
@@ -61,11 +64,12 @@ import {
 let runner: ScriptRunnerService
 let scheduler: SchedulerService
 
-export function registerIpcHandlers(getWindow: () => BrowserWindow | null): void {
-  runner = new ScriptRunnerService(getWindow)
-  scheduler = new SchedulerService((scriptId) =>
-    runner.start(scriptId, undefined, undefined, { trigger: 'scheduled' })
-  )
+export function registerIpcHandlers(
+  getWindow: () => BrowserWindow | null,
+  runtime: AutoforgeRuntime = createRuntimeContainer(getWindow)
+): void {
+  runner = runtime.runner
+  scheduler = runtime.scheduler
 
   ipcMain.handle(IPC.SCRIPTS_LIST, () => {
     const sessions = runner.listSessions()
@@ -429,6 +433,27 @@ export function registerIpcHandlers(getWindow: () => BrowserWindow | null): void
     }
     return saved
   })
+
+  ipcMain.handle(IPC.MCP_GET_STATUS, () => getMcpControlStatus())
+
+  ipcMain.handle(IPC.MCP_SET_ENABLED, async (_event, enabled: boolean) => {
+    if (typeof enabled !== 'boolean') throw new Error('invalid_params: enabled must be boolean')
+    const current = scriptStore.getConfig().mcp ?? {}
+    scriptStore.setConfig({ mcp: { ...current, enabled } })
+    const server = getConfiguredMcpControlServer()
+    if (!server) return getMcpControlStatus()
+    if (enabled) return startMcpControlServer()
+    await stopMcpControlServer()
+    return getMcpControlStatus()
+  })
+
+  ipcMain.handle(IPC.MCP_ROTATE_TOKEN, async () => {
+    const status = getMcpControlStatus()
+    if (!status.enabled) throw new Error('app_not_ready: MCP is disabled')
+    return rotateMcpToken()
+  })
+
+  ipcMain.handle(IPC.MCP_GET_CLIENT_CONFIG, () => getMcpClientConfig(appEnv))
 
   ipcMain.handle(IPC.WINDOW_SHOW, () => {
     showMainWindow()

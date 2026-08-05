@@ -277,6 +277,10 @@ Electron 34 · Vue 3 · TypeScript · Tailwind CSS 4 · Playwright Core · sql.j
 
 ---
 
+## MCP
+
+本地 agent 接入、开关、token 生命周期和安全边界见 [MCP 使用文档](docs/mcp.md)。MCP 默认关闭，Autoforge 必须保持运行。
+
 ## FAQ
 
 **脚本跑在沙箱里吗？** JavaScript 脚本在主进程 Node 环境运行；Python 脚本在独立子进程中运行。两者均无严格资源隔离，请只导入可信脚本。

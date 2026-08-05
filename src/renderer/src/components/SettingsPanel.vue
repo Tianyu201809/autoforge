@@ -3,6 +3,7 @@ import { computed, onUnmounted, ref, toRaw, watch } from 'vue'
 import { AppWindow, Boxes, CheckCircle2, Code2, Globe2, Plus, ScrollText, Settings, Trash2, X, XCircle } from 'lucide-vue-next'
 import type { Component } from 'vue'
 import type { AppConfig, BrowserStatusInfo, EnvironmentProfile, GlobalDependency, PythonStatusInfo } from '../../../shared/types/script'
+import type { McpClientConfig, McpStatus } from '../../../shared/mcp-types'
 import { DEFAULT_GLOBAL_SHORTCUT } from '../../../shared/accelerator'
 import SkinPicker from './SkinPicker.vue'
 import ShortcutRecorder from './ShortcutRecorder.vue'
@@ -14,7 +15,7 @@ const { pushToast } = useToast()
 
 const props = defineProps<{ open: boolean }>()
 
-type SettingsSectionId = 'overview' | 'window' | 'runtime' | 'tools' | 'logs'
+type SettingsSectionId = 'overview' | 'mcp' | 'window' | 'runtime' | 'tools' | 'logs'
 type SaveState = 'idle' | 'saving' | 'saved' | 'error'
 
 interface SettingsSection {
@@ -25,6 +26,7 @@ interface SettingsSection {
 }
 
 const SETTINGS_SECTIONS: SettingsSection[] = [
+  { id: 'mcp', label: 'MCP', description: 'Agent control', icon: Code2 },
   { id: 'overview', label: '概览', description: '产品与 Hub', icon: Boxes },
   { id: 'window', label: '窗口与外观', description: '显示与皮肤', icon: AppWindow },
   { id: 'runtime', label: '环境与运行', description: 'Profile 与运行时', icon: Globe2 },
@@ -64,6 +66,11 @@ const installingGlobalDep = ref(false)
 const loadingGlobalDeps = ref(false)
 const windowModeReady = ref(false)
 const initialized = ref(false)
+const mcpStatus = ref<McpStatus | null>(null)
+const mcpClientConfig = ref<McpClientConfig | null>(null)
+const mcpBusy = ref(false)
+const mcpCopied = ref(false)
+const mcpRotated = ref(false)
 
 const environments = ref<EnvironmentProfile[]>([])
 const editingEnv = ref<EnvironmentProfile | null>(null)
@@ -72,6 +79,7 @@ const envVarValue = ref('')
 const envSaveState = ref<SaveState>('idle')
 
 let offModeChange: (() => void) | undefined
+let offMcpStatus: (() => void) | undefined
 let syncingFromEvent = false
 let hydrating = false
 let configSaveInFlight = false
@@ -103,6 +111,8 @@ async function initializeSettings(): Promise<void> {
   hydrating = true
   try {
     const config = await window.autoforge.config.get()
+    mcpStatus.value = await window.autoforge.mcp.getStatus()
+    mcpClientConfig.value = await window.autoforge.mcp.getClientConfig()
     autoforgeHubUrl.value = config.hub?.url ?? ''
     browserPath.value = config.browser?.executablePath ?? ''
     pythonPath.value = config.python?.executablePath ?? ''
@@ -147,9 +157,15 @@ watch(
         globalShortcutRegistered.value = mode.globalShortcutRegistered
         syncingFromEvent = false
       })
+      offMcpStatus?.()
+      offMcpStatus = window.autoforge.mcp.onStatus((status) => {
+        mcpStatus.value = status
+      })
     } else {
       offModeChange?.()
       offModeChange = undefined
+      offMcpStatus?.()
+      offMcpStatus = undefined
     }
   },
   { immediate: true }
@@ -227,7 +243,46 @@ function handleClose(): void {
 onUnmounted(() => {
   flushPendingSaves()
   offModeChange?.()
+  offMcpStatus?.()
 })
+
+async function toggleMcp(enabled?: boolean): Promise<void> {
+  if (!mcpStatus.value || mcpBusy.value) return
+  mcpBusy.value = true
+  try {
+    mcpStatus.value = await window.autoforge.mcp.setEnabled(enabled ?? !mcpStatus.value.enabled)
+  } catch (error) {
+    pushToast({ type: 'error', title: 'MCP', message: error instanceof Error ? error.message : 'Unable to update MCP status' })
+  } finally {
+    mcpBusy.value = false
+  }
+}
+
+async function rotateMcpToken(): Promise<void> {
+  if (mcpBusy.value || !mcpStatus.value?.enabled) return
+  mcpBusy.value = true
+  try {
+    mcpStatus.value = await window.autoforge.mcp.rotateToken()
+    mcpRotated.value = true
+    window.setTimeout(() => { mcpRotated.value = false }, 1800)
+  } catch (error) {
+    pushToast({ type: 'error', title: 'MCP', message: error instanceof Error ? error.message : 'Unable to rotate token' })
+  } finally {
+    mcpBusy.value = false
+  }
+}
+
+async function copyMcpConfig(): Promise<void> {
+  if (!mcpClientConfig.value) return
+  const snippet = JSON.stringify({ mcpServers: { autoforge: { command: mcpClientConfig.value.command, args: mcpClientConfig.value.args } } }, null, 2)
+  try {
+    await navigator.clipboard.writeText(snippet)
+    mcpCopied.value = true
+    window.setTimeout(() => { mcpCopied.value = false }, 1800)
+  } catch (error) {
+    pushToast({ type: 'error', title: 'MCP', message: error instanceof Error ? error.message : 'Unable to copy configuration' })
+  }
+}
 
 function environmentPayload(env: EnvironmentProfile): Partial<EnvironmentProfile> {
   return {
@@ -582,6 +637,46 @@ async function removeGlobalPythonDep(name: string): Promise<void> {
                   />
                   <p class="mt-1 text-[11px] sb-text-faint">支持 http:// 和 https:// 地址。</p>
                 </div>
+              </section>
+            </template>
+
+            <template v-else-if="activeSection === 'mcp'">
+              <section class="settings-section space-y-3">
+                <div class="settings-section-heading">
+                  <div>
+                    <p class="settings-eyebrow">MCP</p>
+                    <h2 class="settings-section-title">Local agent control</h2>
+                  </div>
+                  <span class="settings-section-index">MCP</span>
+                </div>
+                <p class="text-[11px] sb-text-faint">Enable the local MCP surface to let configured agents inspect and run scripts. The desktop app must remain open.</p>
+                <div class="rounded-lg border sb-border sb-bg-surface p-4 space-y-3">
+                  <label class="flex items-start gap-2 text-[13px] sb-text-secondary cursor-pointer">
+                    <input v-if="mcpStatus" :checked="mcpStatus.enabled" type="checkbox" class="rounded mt-0.5" :disabled="mcpBusy" @change="toggleMcp(($event.target as HTMLInputElement).checked)" />
+                    <span>
+                      Allow local MCP control
+                      <span class="block text-[11px] sb-text-faint mt-0.5">Disabled by default; turning it off closes existing adapter connections.</span>
+                    </span>
+                  </label>
+                  <div v-if="mcpStatus" class="grid grid-cols-2 gap-2 text-[11px] sb-text-muted">
+                    <span>Status: {{ mcpStatus.running ? 'running' : mcpStatus.enabled ? 'starting' : 'disabled' }}</span>
+                    <span>Environment: {{ mcpStatus.appEnv }}</span>
+                    <span>Transport: {{ mcpStatus.transport ?? '—' }}</span>
+                    <span>Connections: {{ mcpStatus.connectionCount }}</span>
+                  </div>
+                  <p v-if="mcpStatus?.endpoint" class="text-[10px] sb-text-faint font-mono break-all">{{ mcpStatus.endpoint }}</p>
+                </div>
+                <div v-if="mcpClientConfig" class="rounded-lg border sb-border sb-bg-surface p-4 space-y-2">
+                  <div class="flex items-center justify-between gap-2">
+                    <span class="text-[12px] sb-text-secondary">Client configuration</span>
+                    <button type="button" class="text-[12px] sb-text-muted hover:sb-text-secondary" @click="copyMcpConfig">{{ mcpCopied ? 'Copied' : 'Copy JSON' }}</button>
+                  </div>
+                  <code class="block text-[10px] sb-text-faint font-mono whitespace-pre-wrap break-all">{{ mcpClientConfig.displayCommand }}</code>
+                  <p class="text-[10px] sb-text-faint">Token is discovered at runtime and is never shown or copied.</p>
+                </div>
+                <button type="button" class="h-8 px-3 rounded-lg text-[12px] sb-text-muted border sb-border hover:sb-text-secondary disabled:opacity-50" :disabled="mcpBusy || !mcpStatus?.enabled" @click="rotateMcpToken">
+                  {{ mcpRotated ? 'Token rotated' : 'Rotate token' }}
+                </button>
               </section>
             </template>
 
