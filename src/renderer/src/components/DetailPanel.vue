@@ -1576,6 +1576,7 @@ async function handleRename(): Promise<void> {
       <LogConsole
         embedded
         title="最近运行日志"
+        :session-id="latestRunSessionId"
         :logs="latestRunLogs"
         :run-progress="latestRunSession?.runProgress"
         @clear="clearSessionLogs"

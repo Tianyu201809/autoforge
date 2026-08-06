@@ -141,6 +141,18 @@ export class ExecutionHistoryService {
     const repos = this.ensureInitialized()
     return repos.execution.listForScript(scriptId, limit)
   }
+
+  getById(id: string): ExecutionRecord | null {
+    return this.ensureInitialized().execution.getById(id)
+  }
+
+  delete(id: string): number {
+    return this.ensureInitialized().execution.deleteById(id)
+  }
+
+  deleteMany(ids: string[]): number {
+    return this.ensureInitialized().execution.deleteByIds(ids)
+  }
 }
 
 export const executionHistory = new ExecutionHistoryService()

@@ -10,6 +10,7 @@ import {
 } from 'lucide-vue-next'
 import type { ExecutionRecord, ExecutionTrigger, RunSession, ScriptItem, SessionStatus } from '../../../shared/types/script'
 import RunResultModal from './RunResultModal.vue'
+import { askConfirm } from '../composables/useConfirmDialog'
 
 const props = defineProps<{
   scriptId: string
@@ -37,6 +38,9 @@ const listRef = ref<HTMLElement | null>(null)
 const resultModalOpen = ref(false)
 const resultModalSession = ref<RunSession | null>(null)
 const openingRecord = ref(false)
+const editMode = ref(false)
+const selectedIds = ref<string[]>([])
+const contextMenuRecordId = ref<string | null>(null)
 
 let unsubSession: (() => void) | undefined
 
@@ -44,6 +48,8 @@ async function loadHistory(reset = true): Promise<void> {
   if (reset) {
     loading.value = true
     records.value = []
+    selectedIds.value = []
+    contextMenuRecordId.value = null
   } else {
     loadingMore.value = true
   }
@@ -185,6 +191,46 @@ function isRecordClickable(record: ExecutionRecord): boolean {
   return record.status !== 'running'
 }
 
+function enterEditMode(): void {
+  editMode.value = true
+  selectedIds.value = []
+}
+
+function exitEditMode(): void {
+  editMode.value = false
+  selectedIds.value = []
+}
+
+function toggleSelected(id: string): void {
+  selectedIds.value = selectedIds.value.includes(id)
+    ? selectedIds.value.filter((item) => item !== id)
+    : [...selectedIds.value, id]
+}
+
+function selectAllLoaded(): void {
+  selectedIds.value = records.value.filter((record) => record.status !== 'running').map((record) => record.id)
+}
+
+async function deleteSelected(): Promise<void> {
+  if (!selectedIds.value.length) return
+  const confirmed = await askConfirm({
+    title: '删除运行历史',
+    message: `确定删除当前页选中的 ${selectedIds.value.length} 条运行记录吗？`,
+    confirmLabel: '删除',
+    variant: 'danger'
+  })
+  if (!confirmed) return
+  await window.autoforge.history.deleteMany([...selectedIds.value])
+  await loadHistory(true)
+  exitEditMode()
+}
+
+async function deleteSingle(id: string): Promise<void> {
+  contextMenuRecordId.value = null
+  await window.autoforge.history.delete(id)
+  await loadHistory(true)
+}
+
 async function openRecordResult(record: ExecutionRecord): Promise<void> {
   if (!isRecordClickable(record) || openingRecord.value) return
   openingRecord.value = true
@@ -225,6 +271,12 @@ const loadedSummary = computed(() => `已加载 ${records.value.length} / ${tota
           {{ option }} 天
         </button>
         <span class="ml-auto text-[11px] sb-text-muted tabular-nums">
+          <button v-if="!editMode" type="button" class="h-6 px-2 rounded text-[11px] sb-text-muted hover:sb-text-secondary sb-bg-hover" @click="enterEditMode">编辑</button>
+          <template v-else>
+            <button type="button" class="h-6 px-2 rounded text-[11px] sb-text-muted hover:sb-text-secondary sb-bg-hover" @click="selectAllLoaded">全选</button>
+            <button type="button" class="h-6 px-2 rounded text-[11px] sb-text-muted hover:sb-text-secondary sb-bg-hover" @click="exitEditMode">取消</button>
+            <button type="button" class="h-6 px-2 rounded text-[11px] text-red-400 hover:sb-bg-hover disabled:opacity-40" :disabled="!selectedIds.length" @click="deleteSelected">删除已选（{{ selectedIds.length }}）</button>
+          </template>
           共 {{ total }} 条
         </span>
       </div>
@@ -296,8 +348,10 @@ const loadedSummary = computed(() => `已加载 ${records.value.length} / ${tota
               : 'cursor-default opacity-80'
           "
           :disabled="!isRecordClickable(record) || openingRecord"
+          @contextmenu.prevent="record.status !== 'running' && (contextMenuRecordId = record.id)"
           @click="openRecordResult(record)"
-        >
+          >
+          <input v-if="editMode && record.status !== 'running'" type="checkbox" class="mt-1" :checked="selectedIds.includes(record.id)" @click.stop="toggleSelected(record.id)" />
           <span
             class="mt-1.5 w-2 h-2 rounded-full shrink-0"
             :class="[
@@ -355,6 +409,10 @@ const loadedSummary = computed(() => `已加载 ${records.value.length} / ${tota
       >
         {{ loadedSummary }}
       </div>
+    </div>
+
+    <div v-if="contextMenuRecordId" class="fixed z-30 rounded border sb-border-subtle sb-bg-surface px-2 py-1 shadow-lg">
+      <button type="button" class="px-2 py-1 text-[12px] text-red-400 hover:sb-bg-hover rounded" @click="deleteSingle(contextMenuRecordId)">删除此条</button>
     </div>
 
     <RunResultModal

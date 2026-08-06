@@ -4,7 +4,8 @@ import type { ScriptLifecycleEvent } from '../../../shared/script-contract'
 import { useToast } from './useToast'
 
 const sessions = ref<RunSession[]>([])
-const logs = ref<LogLine[]>([])
+type RuntimeLogLine = LogLine & { id: string }
+const logs = ref<RuntimeLogLine[]>([])
 const lifecycleEvents = ref<ScriptLifecycleEvent[]>([])
 const activeSession = ref<RunSession | null>(null)
 
@@ -39,7 +40,7 @@ async function stop(sessionId: string): Promise<void> {
   await refreshSessions()
 }
 
-function logsForSession(sessionId: string | undefined): LogLine[] {
+function logsForSession(sessionId: string | undefined): RuntimeLogLine[] {
   if (!sessionId) return logs.value.slice(-200)
   return logs.value.filter((l) => l.sessionId === sessionId)
 }
@@ -50,6 +51,13 @@ function clearLogs(sessionId?: string): void {
   } else {
     logs.value = []
   }
+}
+
+function removeLogs(sessionId: string, ids: string[]): number {
+  const selected = new Set(ids)
+  const before = logs.value.length
+  logs.value = logs.value.filter((line) => line.sessionId !== sessionId || !selected.has(line.id))
+  return before - logs.value.length
 }
 
 function lastSuccessSessionForScript(scriptId: string) {
@@ -135,8 +143,9 @@ export function useScriptRunner(
     }
     void refreshSessions()
 
+    let nextLogId = 0
     unsubLog = window.autoforge.runner.onLog((line) => {
-      logs.value.push(line)
+      logs.value.push({ ...line, id: `${line.sessionId}:${++nextLogId}` })
       if (logs.value.length > 2000) logs.value.shift()
     })
 
@@ -202,6 +211,7 @@ export function useScriptRunner(
     logsForSession,
     resultForScript,
     lastSuccessSessionForScript,
-    clearLogs
+    clearLogs,
+    removeLogs
   }
 }

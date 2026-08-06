@@ -191,6 +191,8 @@ export interface AutoforgeApi {
     queryPage: (options?: ExecutionHistoryQuery) => Promise<ExecutionHistoryPage>
     forScript: (scriptId: string, limit?: number) => Promise<ExecutionRecord[]>
     todayCount: () => Promise<number>
+    delete: (id: string) => Promise<number>
+    deleteMany: (ids: string[]) => Promise<number>
   }
   config: {
     get: () => Promise<AppConfig>

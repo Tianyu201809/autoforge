@@ -422,6 +422,21 @@ export function registerIpcHandlers(
     return executionHistory.getTodayCount()
   })
 
+  ipcMain.handle(IPC.HISTORY_DELETE, (_event, id: unknown) => {
+    if (typeof id !== 'string' || !id.trim()) return 0
+    const record = executionHistory.getById(id.trim())
+    if (!record || record.status === 'running') return 0
+    return executionHistory.delete(id.trim())
+  })
+
+  ipcMain.handle(IPC.HISTORY_DELETE_MANY, (_event, ids: unknown) => {
+    if (!Array.isArray(ids)) return 0
+    const normalized = [...new Set(ids.filter((id): id is string => typeof id === 'string').map((id) => id.trim()))].filter(Boolean)
+    if (normalized.length === 0) return 0
+    const deletable = normalized.filter((id) => executionHistory.getById(id)?.status !== 'running')
+    return executionHistory.deleteMany(deletable)
+  })
+
   ipcMain.handle(IPC.CONFIG_GET, () => {
     return scriptStore.getConfig()
   })

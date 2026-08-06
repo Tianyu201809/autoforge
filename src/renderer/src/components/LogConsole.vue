@@ -19,6 +19,7 @@ import type { LogLine, SessionStatus } from '../../../shared/types/script'
 import type { ScriptRunProgress } from '../../../shared/script-progress'
 import { formatScriptRunProgressSummary, isControlLogMessage } from '../../../shared/script-progress'
 import ScriptRunProgressPanel from './ScriptRunProgressPanel.vue'
+import { askConfirm } from '../composables/useConfirmDialog'
 
 export type LogConsoleDisplayMode = 'hidden' | 'normal'
 
@@ -49,6 +50,8 @@ const props = withDefaults(
 
 const emit = defineEmits<{
   clear: [sessionId?: string]
+  delete: [sessionId: string, logId: string]
+  deleteMany: [sessionId: string, logIds: string[]]
   close: [sessionId: string]
   closeAll: []
   popout: []
@@ -76,6 +79,9 @@ const logBodyRef = ref<HTMLDivElement | null>(null)
 const panelRef = ref<HTMLElement | null>(null)
 const terminalBodyRef = ref<HTMLElement | null>(null)
 const autoScroll = ref(true)
+const editMode = ref(false)
+const selectedLogIds = ref<string[]>([])
+const contextMenu = ref<{ logId: string; x: number; y: number } | null>(null)
 const panelHeight = ref(DEFAULT_PANEL_HEIGHT)
 const sidebarWidth = ref(DEFAULT_SIDEBAR_WIDTH)
 const resizing = ref(false)
@@ -312,7 +318,60 @@ const panelBodyStyle = computed(() => {
 })
 
 function clearLogs(sessionId?: string): void {
+  editMode.value = false
+  selectedLogIds.value = []
+  contextMenu.value = null
   emit('clear', sessionId ?? activeSessionId.value)
+}
+
+function logId(log: LogLine, index: number): string {
+  return 'id' in log && typeof log.id === 'string' ? log.id : `${log.ts}-${index}`
+}
+
+function enterEditMode(): void {
+  editMode.value = true
+  selectedLogIds.value = []
+}
+
+function exitEditMode(): void {
+  editMode.value = false
+  selectedLogIds.value = []
+}
+
+function toggleLogSelection(id: string): void {
+  selectedLogIds.value = selectedLogIds.value.includes(id)
+    ? selectedLogIds.value.filter((item) => item !== id)
+    : [...selectedLogIds.value, id]
+}
+
+function selectAllVisibleLogs(): void {
+  selectedLogIds.value = activeLogs.value.map((line, index) => logId(line, index))
+}
+
+async function deleteSelectedLogs(): Promise<void> {
+  const sessionId = activeSessionId.value ?? props.sessionId
+  if (!sessionId || selectedLogIds.value.length === 0) return
+  const confirmed = await askConfirm({
+    title: '删除日志',
+    message: `确定删除选中的 ${selectedLogIds.value.length} 条日志吗？`,
+    confirmLabel: '删除',
+    variant: 'danger'
+  })
+  if (!confirmed) return
+  emit('deleteMany', sessionId, [...selectedLogIds.value])
+  exitEditMode()
+}
+
+function openContextMenu(logIdValue: string, event: MouseEvent): void {
+  contextMenu.value = { logId: logIdValue, x: event.offsetX, y: event.offsetY }
+}
+
+function deleteSingleLog(): void {
+  const sessionId = activeSessionId.value ?? props.sessionId
+  const logIdValue = contextMenu.value?.logId
+  if (!sessionId || !logIdValue) return
+  emit('delete', sessionId, logIdValue)
+  contextMenu.value = null
 }
 
 function closeSession(sessionId: string, e: Event): void {
@@ -422,6 +481,14 @@ onUnmounted(() => {
     <div class="flex items-center justify-between mb-2">
       <span class="sb-field-label">{{ title }}</span>
       <div class="flex items-center gap-0.5">
+        <button v-if="!editMode" type="button" class="w-6 h-6 flex items-center justify-center rounded sb-text-muted hover:sb-text-primary sb-bg-hover" title="编辑日志" @click="enterEditMode">
+          <Eraser class="w-3 h-3" :stroke-width="1.5" />
+        </button>
+        <template v-else>
+          <button type="button" class="px-1.5 h-6 rounded text-[10px] sb-text-muted hover:sb-text-primary sb-bg-hover" @click="selectAllVisibleLogs">全选</button>
+          <button type="button" class="px-1.5 h-6 rounded text-[10px] sb-text-muted hover:sb-text-primary sb-bg-hover" @click="exitEditMode">取消</button>
+          <button type="button" class="px-1.5 h-6 rounded text-[10px] text-red-400 hover:sb-bg-hover disabled:opacity-40" :disabled="!selectedLogIds.length" @click="deleteSelectedLogs">删除已选（{{ selectedLogIds.length }}）</button>
+        </template>
         <button type="button" class="w-6 h-6 flex items-center justify-center rounded sb-text-muted hover:sb-text-primary sb-bg-hover" title="缩小" @click="zoomOut">
           <Minus class="w-3 h-3" :stroke-width="1.5" />
         </button>
@@ -437,16 +504,18 @@ onUnmounted(() => {
     <ScriptRunProgressPanel v-if="activeRunProgress" :progress="activeRunProgress" compact />
     <div
       ref="logBodyRef"
-      class="log-console-selectable rounded-lg border sb-border-subtle sb-bg-log p-3 font-mono leading-relaxed space-y-1 flex-1 overflow-y-auto min-h-[120px]"
+      class="log-console-selectable relative rounded-lg border sb-border-subtle sb-bg-log p-3 font-mono leading-relaxed space-y-1 flex-1 overflow-y-auto min-h-[120px]"
       :style="{ fontSize: `${fontSize}px` }"
       @scroll="onScroll"
     >
       <p v-if="!displayLogs.length" class="sb-text-faint">暂无日志</p>
-      <p v-for="(log, i) in displayLogs" :key="`${log.ts}-${i}`">
+      <p v-for="(log, i) in displayLogs" :key="logId(log, i)" class="group flex items-start" @contextmenu.prevent="openContextMenu(logId(log, i), $event)">
+        <input v-if="editMode" type="checkbox" class="mr-2 mt-1" :checked="selectedLogIds.includes(logId(log, i))" @click.stop="toggleLogSelection(logId(log, i))" />
         <span class="sb-text-faint">{{ formatLogTime(log.ts) }}</span>
         <span class="ml-1" :class="logLevelClass(log.level)">{{ log.level }}</span>
         <span class="sb-text-muted ml-1" :class="logMessageClass(log.message)">{{ log.message }}</span>
       </p>
+      <button v-if="contextMenu" type="button" class="absolute z-20 px-3 py-1.5 rounded border sb-border-subtle sb-bg-surface text-[12px] text-red-400 shadow-lg" :style="{ left: `${contextMenu.x}px`, top: `${contextMenu.y}px` }" @click="deleteSingleLog">删除此条</button>
     </div>
   </div>
 
@@ -479,6 +548,14 @@ onUnmounted(() => {
       </div>
       <div class="flex items-center gap-1 flex-shrink-0">
         <template v-if="isExpanded">
+          <button v-if="!editMode" type="button" class="w-7 h-7 flex items-center justify-center rounded sb-text-muted hover:sb-text-primary sb-bg-hover" title="编辑日志" @click="enterEditMode">
+            <Eraser class="w-3.5 h-3.5" :stroke-width="1.5" />
+          </button>
+          <template v-else>
+            <button type="button" class="px-2 h-7 rounded text-[11px] sb-text-muted hover:sb-text-primary sb-bg-hover" @click="selectAllVisibleLogs">全选</button>
+            <button type="button" class="px-2 h-7 rounded text-[11px] sb-text-muted hover:sb-text-primary sb-bg-hover" @click="exitEditMode">取消</button>
+            <button type="button" class="px-2 h-7 rounded text-[11px] text-red-400 hover:sb-bg-hover disabled:opacity-40" :disabled="!selectedLogIds.length" @click="deleteSelectedLogs">删除已选（{{ selectedLogIds.length }}）</button>
+          </template>
           <button type="button" class="w-7 h-7 flex items-center justify-center rounded sb-text-muted hover:sb-text-primary sb-bg-hover" title="缩小" @click="zoomOut">
             <Minus class="w-3.5 h-3.5" :stroke-width="1.5" />
           </button>
@@ -541,18 +618,20 @@ onUnmounted(() => {
         <ScriptRunProgressPanel v-if="activeRunProgress" :progress="activeRunProgress" />
         <div
           ref="logBodyRef"
-          class="terminal-log flex-1 min-w-0 min-h-0 font-mono leading-relaxed overflow-y-auto px-4 py-2"
+          class="terminal-log relative flex-1 min-w-0 min-h-0 font-mono leading-relaxed overflow-y-auto px-4 py-2"
           :style="{ fontSize: `${fontSize}px` }"
           @scroll="onScroll"
         >
           <p v-if="!activeLogs.length" class="terminal-log-message py-2 opacity-70">
             {{ activeSession ? '等待输出…' : '暂无日志，运行脚本后将在此显示输出' }}
           </p>
-          <p v-for="(log, i) in activeLogs" :key="`${activeSessionId}-${log.ts}-${i}`" class="py-0.5 whitespace-pre-wrap break-all">
+          <p v-for="(log, i) in activeLogs" :key="logId(log, i)" class="group flex items-start py-0.5 whitespace-pre-wrap break-all" @contextmenu.prevent="openContextMenu(logId(log, i), $event)">
+            <input v-if="editMode" type="checkbox" class="mr-2 mt-1" :checked="selectedLogIds.includes(logId(log, i))" @click.stop="toggleLogSelection(logId(log, i))" />
             <span class="terminal-log-time">{{ formatLogTime(log.ts) }}</span>
             <span class="ml-1.5" :class="logLevelClass(log.level)">{{ log.level }}</span>
             <span class="ml-1.5" :class="logMessageClass(log.message)">{{ log.message }}</span>
           </p>
+          <button v-if="contextMenu" type="button" class="absolute z-20 px-3 py-1.5 rounded border sb-border-subtle sb-bg-surface text-[12px] text-red-400 shadow-lg" :style="{ left: `${contextMenu.x}px`, top: `${contextMenu.y}px` }" @click.stop="deleteSingleLog">删除此条</button>
         </div>
       </div>
 

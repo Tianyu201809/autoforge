@@ -97,6 +97,14 @@ function handleClear(sessionId?: string): void {
   }
 }
 
+function handleDelete(sessionId: string, logId: string): void {
+  runner.removeLogs(sessionId, [logId])
+}
+
+function handleDeleteMany(sessionId: string, logIds: string[]): void {
+  runner.removeLogs(sessionId, logIds)
+}
+
 function handleClose(sessionId: string): void {
   trackedSessionIds.value = trackedSessionIds.value.filter((id) => id !== sessionId)
   runner.clearLogs(sessionId)
@@ -130,6 +138,8 @@ function handleCloseAll(): void {
         :sessions="sessions"
         standalone
         @clear="handleClear"
+        @delete="handleDelete"
+        @delete-many="handleDeleteMany"
         @close="handleClose"
         @close-all="handleCloseAll"
         @stop="(id) => void runner.stop(id)"

@@ -71,6 +71,18 @@ export class ExecutionRepository {
     return row ? rowToExecutionRecord(row as Parameters<typeof rowToExecutionRecord>[0]) : null
   }
 
+  deleteById(id: string): number {
+    return this.db.prepare('DELETE FROM execution_records WHERE id = ?').run(id).changes
+  }
+
+  deleteByIds(ids: string[]): number {
+    const uniqueIds = [...new Set(ids)]
+    if (uniqueIds.length === 0) return 0
+    const deleteOne = this.db.prepare('DELETE FROM execution_records WHERE id = ?')
+    const tx = this.db.transaction(() => uniqueIds.reduce((count, id) => count + deleteOne.run(id).changes, 0))
+    return tx()
+  }
+
   reconcileInterruptedRuns(now: string): number {
     const running = this.db
       .prepare(`${SELECT_ALL} WHERE status = 'running'`)

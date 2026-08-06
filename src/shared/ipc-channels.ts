@@ -75,6 +75,8 @@ export const IPC = {
   HISTORY_QUERY_PAGE: 'history:query-page',
   HISTORY_FOR_SCRIPT: 'history:for-script',
   HISTORY_TODAY_COUNT: 'history:today-count',
+  HISTORY_DELETE: 'history:delete',
+  HISTORY_DELETE_MANY: 'history:delete-many',
 
 
 

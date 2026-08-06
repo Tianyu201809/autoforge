@@ -299,6 +299,14 @@ function handleClearLogs(sessionId?: string): void {
   }
 }
 
+function handleDeleteLogs(sessionId: string, logId: string): void {
+  runner.removeLogs(sessionId, [logId])
+}
+
+function handleDeleteManyLogs(sessionId: string, logIds: string[]): void {
+  runner.removeLogs(sessionId, logIds)
+}
+
 async function handleDelete(scriptId: string): Promise<void> {
   const confirmed = await askConfirm({
     title: '删除脚本',
@@ -473,6 +481,8 @@ onUnmounted(() => {
               v-model:active-session-id="logConsoleActiveSessionId"
               :sessions="logConsoleSessions"
               @clear="handleClearLogs"
+              @delete="handleDeleteLogs"
+              @delete-many="handleDeleteManyLogs"
               @close="handleCloseTerminal"
               @close-all="handleCloseAllTerminals"
               @stop="(id) => runner.stop(id).then(() => refresh())"

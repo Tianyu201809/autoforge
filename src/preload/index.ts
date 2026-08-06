@@ -237,7 +237,9 @@ const autoforge = {
       ipcRenderer.invoke(IPC.HISTORY_QUERY_PAGE, options),
     forScript: (scriptId: string, limit?: number): Promise<ExecutionRecord[]> =>
       ipcRenderer.invoke(IPC.HISTORY_FOR_SCRIPT, scriptId, limit),
-    todayCount: (): Promise<number> => ipcRenderer.invoke(IPC.HISTORY_TODAY_COUNT)
+    todayCount: (): Promise<number> => ipcRenderer.invoke(IPC.HISTORY_TODAY_COUNT),
+    delete: (id: string): Promise<number> => ipcRenderer.invoke(IPC.HISTORY_DELETE, id),
+    deleteMany: (ids: string[]): Promise<number> => ipcRenderer.invoke(IPC.HISTORY_DELETE_MANY, ids)
   },
   config: {
     get: (): Promise<AppConfig> => ipcRenderer.invoke(IPC.CONFIG_GET),
