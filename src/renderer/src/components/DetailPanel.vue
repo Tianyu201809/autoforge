@@ -44,6 +44,7 @@ import { useManifestEditor } from '../composables/useManifestEditor'
 import { SCRIPT_README_EMPTY_MESSAGE, useScriptReadme } from '../composables/useScriptReadme'
 import { getStoredMainSidebarWidth } from '../constants/layout'
 import { isSafeHttpUrl } from '../lib/script-readme-markdown'
+import { scriptLanguageBadge } from '../../../shared/script-language'
 
 const { saveFeedback, showSaveFeedback, clearSaveFeedback } = usePanelSaveFeedback()
 
@@ -57,6 +58,8 @@ const props = defineProps<{
   environmentRevision?: number
   categoryDefinitions?: import('../../../shared/types/script').CategoryDefinition[]
 }>()
+
+const languageBadge = computed(() => scriptLanguageBadge(props.script.language))
 
 const PANEL_WIDTH_KEY = 'autoforge-detail-panel-width'
 const RUN_SPLIT_KEY = 'autoforge-run-split-top-pct'
@@ -1166,7 +1169,7 @@ async function handleRename(): Promise<void> {
 
 <template>
   <aside
-    class="relative flex-shrink-0 border-l sb-border sb-bg-panel flex flex-col min-h-0"
+    class="detail-panel relative flex-shrink-0 border-l sb-border sb-bg-panel flex flex-col min-h-0"
     :class="resizing && 'select-none'"
     :style="{ width: `${panelWidth}px` }"
   >
@@ -1233,13 +1236,19 @@ async function handleRename(): Promise<void> {
             </button>
           </div>
           <div class="flex items-center gap-2 mt-1.5 flex-wrap">
-            <span class="text-[10px] px-1.5 py-0.5 rounded border font-medium" :class="script.categoryColor">{{ script.categoryLabel }}</span>
-            <span class="text-[10px] sb-text-faint font-mono">{{ script.version }}</span>
+            <span class="text-[10px] px-1.5 py-0.5 rounded border font-medium whitespace-nowrap shrink-0" :class="script.categoryColor">{{ script.categoryLabel }}</span>
+            <span class="text-[10px] sb-text-faint font-mono whitespace-nowrap shrink-0">{{ script.version }}</span>
           </div>
         </div>
       </div>
 
-      <div class="detail-panel-header-tools">
+      <div class="detail-panel-header-actions">
+        <span
+          class="detail-panel-language-badge"
+          :class="languageBadge.className"
+          :title="script.language === 'python' ? 'Python 脚本' : 'JavaScript 脚本'"
+        >{{ languageBadge.label }}</span>
+        <div class="detail-panel-header-tools">
         <button
           type="button"
           class="detail-panel-open-dir"
@@ -1281,6 +1290,7 @@ async function handleRename(): Promise<void> {
         >
           <X :stroke-width="1.75" />
         </button>
+        </div>
       </div>
     </div>
 
@@ -1708,6 +1718,45 @@ async function handleRename(): Promise<void> {
 </template>
 
 <style scoped>
+.detail-panel {
+  container-type: inline-size;
+}
+
+.detail-panel-header-actions {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 0.375rem;
+  margin-left: auto;
+  flex-shrink: 0;
+}
+
+.detail-panel-language-badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 1.75rem;
+  padding: 0.125rem 0.375rem;
+  border-width: 1px;
+  border-radius: 0.375rem;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 0.625rem;
+  font-weight: 600;
+  line-height: 1rem;
+  letter-spacing: 0.025em;
+  white-space: nowrap;
+}
+
+@container (max-width: 620px) {
+  .detail-panel-header {
+    flex-wrap: wrap;
+  }
+
+  .detail-panel-header > .detail-panel-header-actions {
+    width: 100%;
+  }
+}
+
 .script-readme-body :deep(h1) {
   font-size: 1.25rem;
   font-weight: 600;
