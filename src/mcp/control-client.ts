@@ -41,9 +41,17 @@ export class McpControlClient {
   private pending = new Map<string, Pending>()
   private listeners = new Set<(event: ControlEvent) => void>()
   private connected = false
+  private options: EndpointDiscoveryOptions | null = null
+  private connectPromise: Promise<void> | null = null
 
   async connect(options: EndpointDiscoveryOptions): Promise<void> {
-    await this.close()
+    this.options = { ...options }
+    await this.disconnect()
+    await this.ensureConnected()
+  }
+
+  private async openConnection(options: EndpointDiscoveryOptions): Promise<void> {
+    await this.disconnect()
     const descriptor = readMcpEndpointDescriptor(options.appEnv, options.runtimeDirectory)
     if (!descriptor) throw new McpControlClientError('app_not_ready', 'Autoforge MCP is disabled or not running', true)
     this.descriptor = descriptor
@@ -51,9 +59,13 @@ export class McpControlClient {
     const socket = connectSocket(endpoint)
     this.socket = socket
     socket.setEncoding('utf8')
-    socket.on('data', (chunk: string | Buffer) => this.onData(String(chunk)))
-    socket.on('error', (error) => this.onSocketError(error))
-    socket.on('close', () => this.onSocketClose())
+    socket.on('data', (chunk: string | Buffer) => {
+      if (this.socket === socket) this.onData(String(chunk))
+    })
+    socket.on('error', (error) => {
+      if (this.socket === socket) this.onSocketError(error)
+    })
+    socket.on('close', () => this.onSocketClose(socket))
     await new Promise<void>((resolve, reject) => {
       const onConnect = (): void => {
         socket.removeListener('error', onError)
@@ -75,7 +87,7 @@ export class McpControlClient {
   }
 
   async request<T>(method: string, params?: unknown): Promise<T> {
-    if (!this.socket || !this.connected) throw new McpControlClientError('app_not_ready', 'Autoforge MCP is not connected', true)
+    await this.ensureConnected()
     return this.requestInternal<T>(method, params)
   }
 
@@ -85,10 +97,37 @@ export class McpControlClient {
   }
 
   async close(): Promise<void> {
+    this.options = null
+    await this.disconnect()
+  }
+
+  private async ensureConnected(): Promise<void> {
+    if (!this.options) throw new McpControlClientError('app_not_ready', 'Autoforge MCP connection is not configured', true)
+    if (this.socket && !this.socket.destroyed && this.connected) {
+      const current = readMcpEndpointDescriptor(this.options.appEnv, this.options.runtimeDirectory)
+      if (
+        current &&
+        this.descriptor &&
+        current.pid === this.descriptor.pid &&
+        current.token === this.descriptor.token &&
+        current.endpoint === this.descriptor.endpoint
+      ) return
+      await this.disconnect()
+    }
+    if (!this.connectPromise) {
+      this.connectPromise = this.openConnection(this.options).finally(() => {
+        this.connectPromise = null
+      })
+    }
+    await this.connectPromise
+  }
+
+  private async disconnect(): Promise<void> {
     const socket = this.socket
     this.socket = null
     this.connected = false
     this.descriptor = null
+    this.buffer = ''
     if (!socket) return
     for (const pending of this.pending.values()) {
       clearTimeout(pending.timer)
@@ -162,9 +201,12 @@ export class McpControlClient {
     this.pending.clear()
   }
 
-  private onSocketClose(): void {
+  private onSocketClose(socket: Socket): void {
+    if (this.socket !== socket) return
     this.connected = false
     this.socket = null
+    this.descriptor = null
+    this.buffer = ''
     this.onSocketError(new McpControlClientError('app_not_ready', 'MCP connection closed', true))
   }
 }

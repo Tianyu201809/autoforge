@@ -74,15 +74,22 @@ test('MCP control server authenticates and routes requests', async () => {
     runtimeDirectory: runtime
   })
   server.attachEventStore()
-  await server.start()
   const client = new McpControlClient()
-  await client.connect({ appEnv: 'development', runtimeDirectory: runtime })
+  await assert.rejects(
+    () => client.connect({ appEnv: 'development', runtimeDirectory: runtime }),
+    (error: unknown) => error instanceof McpControlClientError && error.code === 'app_not_ready'
+  )
+  await server.start()
   const list = await client.request<{ scripts: Array<{ id: string }>; total: number }>('scripts.list')
   assert.equal(list.total, 1)
   assert.equal(list.scripts[0]?.id, 'script-1')
   await assert.rejects(() => client.request('scripts.delete', { scriptId: 'script-1' }), (error: unknown) => error instanceof McpControlClientError && error.code === 'confirmation_required')
   const deleted = await client.request<{ deleted: boolean }>('scripts.delete', { scriptId: 'script-1', confirm: true })
   assert.equal(deleted.deleted, true)
+  await server.stop()
+  await server.start()
+  const listAfterRestart = await client.request<{ scripts: Array<{ id: string }>; total: number }>('scripts.list')
+  assert.equal(listAfterRestart.total, 1)
   await client.close()
   await server.stop()
   eventStore.dispose()
