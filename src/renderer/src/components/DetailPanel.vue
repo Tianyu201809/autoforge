@@ -1735,25 +1735,43 @@ async function handleRename(): Promise<void> {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  min-width: 1.75rem;
-  padding: 0.125rem 0.375rem;
+  width: 6rem;
+  height: 3.25rem;
   border-width: 1px;
-  border-radius: 0.375rem;
+  border-radius: 0.75rem;
   font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
-  font-size: 0.625rem;
-  font-weight: 600;
-  line-height: 1rem;
-  letter-spacing: 0.025em;
+  font-size: 1.5rem;
+  font-weight: 700;
+  line-height: 1;
+  letter-spacing: 0.04em;
+  background-color: transparent;
   white-space: nowrap;
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.18),
+    0 8px 20px rgba(15, 23, 42, 0.12);
 }
 
 @container (max-width: 620px) {
   .detail-panel-header {
-    flex-wrap: wrap;
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) 6rem;
+    align-items: start;
   }
 
   .detail-panel-header > .detail-panel-header-actions {
-    width: 100%;
+    display: contents;
+  }
+
+  .detail-panel-language-badge {
+    grid-column: 2;
+    grid-row: 1;
+    justify-self: end;
+  }
+
+  .detail-panel-header-tools {
+    grid-column: 1 / -1;
+    grid-row: 2;
+    justify-self: end;
   }
 }
 

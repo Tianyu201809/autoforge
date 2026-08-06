@@ -143,3 +143,120 @@ Expected: all unit tests pass and all Electron/Vite bundles build successfully.
 git add src/renderer/src/components/DetailPanel.vue src/renderer/src/components/DetailPanelHeader.test.mjs package.json docs/superpowers/plans/2026-08-06-detail-panel-language-badge.md
 git commit -m "feat: show language badge in detail panel"
 ```
+
+---
+
+### Task 2: Enlarge the Badge into a Language Card
+
+**Files:**
+- Modify: `src/renderer/src/components/DetailPanel.vue:1734`
+- Test: `src/renderer/src/components/DetailPanelHeader.test.mjs:15`
+
+**Interfaces:**
+- Consumes: the existing `.detail-panel-language-badge` element and `languageBadge.className` color classes.
+- Produces: a fixed `96×52px` non-interactive language card with `24px` centered `JS` / `Py` text.
+
+- [x] **Step 1: Add failing large-card style assertions**
+
+Add these assertions to `shows the script language above the header actions`:
+
+```js
+assert.match(source, /\.detail-panel-language-badge\s*\{[^}]*width:\s*6rem/s)
+assert.match(source, /\.detail-panel-language-badge\s*\{[^}]*height:\s*3\.25rem/s)
+assert.match(source, /\.detail-panel-language-badge\s*\{[^}]*font-size:\s*1\.5rem/s)
+assert.match(source, /\.detail-panel-language-badge\s*\{[^}]*border-radius:\s*0\.75rem/s)
+assert.match(source, /\.detail-panel-language-badge\s*\{[^}]*box-shadow:/s)
+```
+
+Run:
+
+```powershell
+node --test src/renderer/src/components/DetailPanelHeader.test.mjs
+```
+
+Expected: FAIL because the current badge uses compact `min-width`, padding, `0.625rem` text, and `0.375rem` radius.
+
+- [x] **Step 2: Apply the large language-card styles**
+
+Replace `.detail-panel-language-badge` with:
+
+```css
+.detail-panel-language-badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 6rem;
+  height: 3.25rem;
+  border-width: 1px;
+  border-radius: 0.75rem;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 1.5rem;
+  font-weight: 700;
+  line-height: 1;
+  letter-spacing: 0.04em;
+  background-color: transparent;
+  white-space: nowrap;
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.18),
+    0 8px 20px rgba(15, 23, 42, 0.12);
+}
+```
+
+- [x] **Step 3: Run focused validation**
+
+Run:
+
+```powershell
+node --test src/renderer/src/components/DetailPanelHeader.test.mjs
+npx eslint src/renderer/src/components/DetailPanel.vue src/renderer/src/components/DetailPanelHeader.test.mjs
+```
+
+Expected: both language-card tests pass and ESLint exits with code `0`.
+
+- [x] **Step 4: Run full validation**
+
+Run:
+
+```powershell
+npm run test:unit
+npm run build
+```
+
+Expected: all unit tests pass and all Electron/Vite bundles build successfully.
+
+- [x] **Step 5: Commit the revision**
+
+```powershell
+git add src/renderer/src/components/DetailPanel.vue src/renderer/src/components/DetailPanelHeader.test.mjs docs/superpowers/plans/2026-08-06-detail-panel-language-badge.md
+git commit -m "fix: enlarge detail panel language badge"
+```
+
+#### Responsive layout correction
+
+The `620px` container query must use a two-column grid instead of wrapping the complete action group:
+
+```css
+@container (max-width: 620px) {
+  .detail-panel-header {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) 6rem;
+    align-items: start;
+  }
+
+  .detail-panel-header > .detail-panel-header-actions {
+    display: contents;
+  }
+
+  .detail-panel-language-badge {
+    grid-column: 2;
+    grid-row: 1;
+    justify-self: end;
+  }
+
+  .detail-panel-header-tools {
+    grid-column: 1 / -1;
+    grid-row: 2;
+    justify-self: end;
+  }
+}
+```
