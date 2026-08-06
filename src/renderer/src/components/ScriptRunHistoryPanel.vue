@@ -40,7 +40,7 @@ const resultModalSession = ref<RunSession | null>(null)
 const openingRecord = ref(false)
 const editMode = ref(false)
 const selectedIds = ref<string[]>([])
-const contextMenuRecordId = ref<string | null>(null)
+const contextMenu = ref<{ recordId: string; x: number; y: number } | null>(null)
 
 let unsubSession: (() => void) | undefined
 
@@ -49,7 +49,7 @@ async function loadHistory(reset = true): Promise<void> {
     loading.value = true
     records.value = []
     selectedIds.value = []
-    contextMenuRecordId.value = null
+    contextMenu.value = null
   } else {
     loadingMore.value = true
   }
@@ -96,10 +96,12 @@ onMounted(() => {
   unsubSession = window.autoforge.runner.onSession(() => {
     void loadHistory(true)
   })
+  document.addEventListener('click', closeContextMenu)
 })
 
 onUnmounted(() => {
   unsubSession?.()
+  document.removeEventListener('click', closeContextMenu)
 })
 
 watch(
@@ -226,9 +228,20 @@ async function deleteSelected(): Promise<void> {
 }
 
 async function deleteSingle(id: string): Promise<void> {
-  contextMenuRecordId.value = null
+  contextMenu.value = null
   await window.autoforge.history.delete(id)
   await loadHistory(true)
+}
+
+function openContextMenu(record: ExecutionRecord, event: MouseEvent): void {
+  if (record.status === 'running') return
+  event.preventDefault()
+  event.stopPropagation()
+  contextMenu.value = { recordId: record.id, x: event.clientX, y: event.clientY }
+}
+
+function closeContextMenu(): void {
+  contextMenu.value = null
 }
 
 async function openRecordResult(record: ExecutionRecord): Promise<void> {
@@ -252,7 +265,7 @@ const loadedSummary = computed(() => `已加载 ${records.value.length} / ${tota
 </script>
 
 <template>
-  <div class="flex-1 flex flex-col min-h-0">
+  <div class="flex-1 flex flex-col min-h-0" @click="closeContextMenu">
     <div class="flex-shrink-0 px-4 py-3 border-b sb-border-subtle space-y-2.5">
       <div class="flex flex-wrap items-center gap-2">
         <span class="sb-field-label">时间范围</span>
@@ -348,7 +361,7 @@ const loadedSummary = computed(() => `已加载 ${records.value.length} / ${tota
               : 'cursor-default opacity-80'
           "
           :disabled="!isRecordClickable(record) || openingRecord"
-          @contextmenu.prevent="record.status !== 'running' && (contextMenuRecordId = record.id)"
+          @contextmenu="openContextMenu(record, $event)"
           @click="openRecordResult(record)"
           >
           <input v-if="editMode && record.status !== 'running'" type="checkbox" class="mt-1" :checked="selectedIds.includes(record.id)" @click.stop="toggleSelected(record.id)" />
@@ -411,9 +424,16 @@ const loadedSummary = computed(() => `已加载 ${records.value.length} / ${tota
       </div>
     </div>
 
-    <div v-if="contextMenuRecordId" class="fixed z-30 rounded border sb-border-subtle sb-bg-surface px-2 py-1 shadow-lg">
-      <button type="button" class="px-2 py-1 text-[12px] text-red-400 hover:sb-bg-hover rounded" @click="deleteSingle(contextMenuRecordId)">删除此条</button>
-    </div>
+    <Teleport to="body">
+      <div
+        v-if="contextMenu"
+        class="fixed z-[300] rounded border sb-border-subtle sb-bg-surface px-2 py-1 shadow-lg"
+        :style="{ left: `${contextMenu.x}px`, top: `${contextMenu.y}px` }"
+        @click.stop
+      >
+        <button type="button" class="px-2 py-1 text-[12px] text-red-400 hover:sb-bg-hover rounded" @click="deleteSingle(contextMenu.recordId)">删除此条</button>
+      </div>
+    </Teleport>
 
     <RunResultModal
       :open="resultModalOpen"

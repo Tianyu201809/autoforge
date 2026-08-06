@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, onUnmounted, ref, watch } from 'vue'
+import { computed, onMounted, onUnmounted, ref, watch } from 'vue'
 import {
   AlertCircle,
   CheckCircle2,
@@ -39,7 +39,7 @@ const resultModalScript = ref<ScriptItem | null>(null)
 const openingRecord = ref(false)
 const editMode = ref(false)
 const selectedIds = ref<string[]>([])
-const contextMenuRecordId = ref<string | null>(null)
+const contextMenu = ref<{ recordId: string; x: number; y: number } | null>(null)
 
 let unsubSession: (() => void) | undefined
 
@@ -53,7 +53,7 @@ async function loadHistory(): Promise<void> {
     summaries.value = data
     todayCount.value = count
     selectedIds.value = []
-    contextMenuRecordId.value = null
+    contextMenu.value = null
   } finally {
     loading.value = false
   }
@@ -78,8 +78,13 @@ watch(
   { immediate: true }
 )
 
+onMounted(() => {
+  document.addEventListener('click', closeContextMenu)
+})
+
 onUnmounted(() => {
   unsubSession?.()
+  document.removeEventListener('click', closeContextMenu)
 })
 
 const filteredSummaries = computed(() => {
@@ -256,9 +261,20 @@ async function deleteSelected(): Promise<void> {
 }
 
 async function deleteSingle(id: string): Promise<void> {
-  contextMenuRecordId.value = null
+  contextMenu.value = null
   await window.autoforge.history.delete(id)
   await loadHistory()
+}
+
+function openContextMenu(record: ExecutionRecord, event: MouseEvent): void {
+  if (record.status === 'running') return
+  event.preventDefault()
+  event.stopPropagation()
+  contextMenu.value = { recordId: record.id, x: event.clientX, y: event.clientY }
+}
+
+function closeContextMenu(): void {
+  contextMenu.value = null
 }
 
 async function openRecordResult(record: ExecutionRecord): Promise<void> {
@@ -291,7 +307,7 @@ function closeResultModal(): void {
     aria-labelledby="execution-history-modal-title"
     @close="emit('close')"
   >
-    <div class="flex flex-col h-full min-h-0 overflow-hidden">
+            <div class="flex flex-col h-full min-h-0 overflow-hidden" @click="closeContextMenu">
     <div class="relative flex items-center justify-between px-6 py-4 border-b sb-border-subtle flex-shrink-0 execution-history-modal-header overflow-hidden">
       <div
         class="absolute inset-x-0 top-0 h-px pointer-events-none"
@@ -407,7 +423,7 @@ function closeResultModal(): void {
                 : 'cursor-default opacity-80'
             "
             :disabled="!isRecordClickable(record) || openingRecord"
-            @contextmenu.prevent="record.status !== 'running' && (contextMenuRecordId = record.id)"
+            @contextmenu="openContextMenu(record, $event)"
             @click="openRecordResult(record)"
           >
             <input v-if="editMode && record.status !== 'running'" type="checkbox" class="mt-1" :checked="selectedIds.includes(record.id)" @click.stop="toggleSelected(record.id)" />
@@ -457,9 +473,16 @@ function closeResultModal(): void {
       </section>
     </div>
 
-    <div v-if="contextMenuRecordId" class="fixed z-30 rounded border sb-border-subtle sb-bg-surface px-2 py-1 shadow-lg">
-      <button type="button" class="px-2 py-1 text-[12px] text-red-400 hover:sb-bg-hover rounded" @click="deleteSingle(contextMenuRecordId)">删除此条</button>
-    </div>
+    <Teleport to="body">
+      <div
+        v-if="contextMenu"
+        class="fixed z-[300] rounded border sb-border-subtle sb-bg-surface px-2 py-1 shadow-lg"
+        :style="{ left: `${contextMenu.x}px`, top: `${contextMenu.y}px` }"
+        @click.stop
+      >
+        <button type="button" class="px-2 py-1 text-[12px] text-red-400 hover:sb-bg-hover rounded" @click="deleteSingle(contextMenu.recordId)">删除此条</button>
+      </div>
+    </Teleport>
 
     <RunResultModal
       :open="resultModalOpen"
