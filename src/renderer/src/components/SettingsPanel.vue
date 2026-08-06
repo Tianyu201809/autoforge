@@ -3,6 +3,7 @@ import { computed, onUnmounted, ref, toRaw, watch } from 'vue'
 import { AppWindow, Boxes, Check, CheckCircle2, ChevronDown, Code2, Copy, Globe2, Plus, ScrollText, Settings, ShieldCheck, Terminal, Trash2, X, XCircle } from 'lucide-vue-next'
 import type { Component } from 'vue'
 import type { AppConfig, BrowserStatusInfo, EnvironmentProfile, GlobalDependency, PythonStatusInfo } from '../../../shared/types/script'
+import { formatCodexMcpAddCommand, formatCodexMcpToml, formatGenericMcpJson } from '../../../shared/mcp-client-config'
 import type { McpClientConfig, McpStatus } from '../../../shared/mcp-types'
 import { DEFAULT_GLOBAL_SHORTCUT } from '../../../shared/accelerator'
 import SkinPicker from './SkinPicker.vue'
@@ -17,6 +18,7 @@ const props = defineProps<{ open: boolean }>()
 
 type SettingsSectionId = 'overview' | 'mcp' | 'window' | 'runtime' | 'tools' | 'logs'
 type SaveState = 'idle' | 'saving' | 'saved' | 'error'
+type McpConfigTarget = 'codex' | 'generic'
 
 interface SettingsSection {
   id: SettingsSectionId
@@ -71,6 +73,8 @@ const mcpClientConfig = ref<McpClientConfig | null>(null)
 const mcpBusy = ref(false)
 const mcpCopied = ref(false)
 const mcpCommandCopied = ref(false)
+const mcpCodexCliCopied = ref(false)
+const mcpConfigTarget = ref<McpConfigTarget>('codex')
 const mcpRotated = ref(false)
 
 const environments = ref<EnvironmentProfile[]>([])
@@ -94,8 +98,20 @@ let savedEnvSnapshot = ''
 const mcpConfigJson = computed(() => {
   const config = mcpClientConfig.value
   if (!config) return ''
-  return JSON.stringify({ mcpServers: { autoforge: { command: config.command, args: config.args } } }, null, 2)
+  return formatGenericMcpJson(config)
 })
+
+const mcpCodexToml = computed(() => {
+  const config = mcpClientConfig.value
+  return config ? formatCodexMcpToml(config) : ''
+})
+
+const mcpCodexAddCommand = computed(() => {
+  const config = mcpClientConfig.value
+  return config ? formatCodexMcpAddCommand(config) : ''
+})
+
+const mcpConfigPayload = computed(() => mcpConfigTarget.value === 'codex' ? mcpCodexToml.value : mcpConfigJson.value)
 
 const mcpStateLabel = computed(() => {
   if (!mcpStatus.value) return '正在读取状态'
@@ -306,9 +322,9 @@ async function rotateMcpToken(): Promise<void> {
 }
 
 async function copyMcpConfig(): Promise<void> {
-  if (!mcpConfigJson.value) return
+  if (!mcpConfigPayload.value) return
   try {
-    await navigator.clipboard.writeText(mcpConfigJson.value)
+    await navigator.clipboard.writeText(mcpConfigPayload.value)
     mcpCopied.value = true
     window.setTimeout(() => { mcpCopied.value = false }, 1800)
   } catch (error) {
@@ -319,11 +335,22 @@ async function copyMcpConfig(): Promise<void> {
 async function copyMcpCommand(): Promise<void> {
   if (!mcpClientConfig.value) return
   try {
-    await navigator.clipboard.writeText(mcpClientConfig.value.displayCommand)
+    await navigator.clipboard.writeText(mcpClientConfig.value.command)
     mcpCommandCopied.value = true
     window.setTimeout(() => { mcpCommandCopied.value = false }, 1800)
   } catch (error) {
     pushToast({ type: 'error', title: 'MCP', message: error instanceof Error ? error.message : 'Unable to copy command' })
+  }
+}
+
+async function copyMcpCodexCli(): Promise<void> {
+  if (!mcpCodexAddCommand.value) return
+  try {
+    await navigator.clipboard.writeText(mcpCodexAddCommand.value)
+    mcpCodexCliCopied.value = true
+    window.setTimeout(() => { mcpCodexCliCopied.value = false }, 1800)
+  } catch (error) {
+    pushToast({ type: 'error', title: 'MCP', message: error instanceof Error ? error.message : 'Unable to copy Codex command' })
   }
 }
 
@@ -777,14 +804,14 @@ async function removeGlobalPythonDep(name: string): Promise<void> {
                     <span class="mcp-guide-card__number">02</span>
                     <div>
                       <h3>复制配置</h3>
-                      <p>复制下方 JSON，粘贴到 Agent 的 MCP 配置文件。</p>
+                      <p>选择客户端，复制对应的 Codex TOML、安装命令或通用 JSON。</p>
                     </div>
                   </article>
                   <article class="mcp-guide-card">
                     <span class="mcp-guide-card__number">03</span>
                     <div>
                       <h3>开始使用</h3>
-                      <p>重启 Agent 后即可让它查询或运行 Autoforge 脚本。</p>
+                      <p>新建 Agent 会话后，即可查询或运行 Autoforge 脚本。</p>
                     </div>
                   </article>
                 </div>
@@ -798,25 +825,50 @@ async function removeGlobalPythonDep(name: string): Promise<void> {
                   </div>
                   <span class="settings-section-index">03</span>
                 </div>
+                <div class="mcp-client-tabs" role="tablist" aria-label="MCP 客户端类型">
+                  <button
+                    type="button"
+                    role="tab"
+                    :aria-selected="mcpConfigTarget === 'codex'"
+                    :class="{ 'is-active': mcpConfigTarget === 'codex' }"
+                    @click="mcpConfigTarget = 'codex'"
+                  >
+                    Codex
+                  </button>
+                  <button
+                    type="button"
+                    role="tab"
+                    :aria-selected="mcpConfigTarget === 'generic'"
+                    :class="{ 'is-active': mcpConfigTarget === 'generic' }"
+                    @click="mcpConfigTarget = 'generic'"
+                  >
+                    Claude / Cursor
+                  </button>
+                </div>
                 <div v-if="mcpClientConfig" class="mcp-config-card">
                   <div class="mcp-config-card__header">
                     <div>
-                      <p class="mcp-config-card__eyebrow">标准 MCP 启动配置</p>
+                      <p class="mcp-config-card__eyebrow">{{ mcpConfigTarget === 'codex' ? 'Codex MCP 配置' : '标准 MCP JSON 配置' }}</p>
                       <h3>Autoforge MCP</h3>
-                      <p>适用于 Codex、Claude Desktop、Cursor 等支持 MCP 的 Agent。</p>
+                      <p>{{ mcpConfigTarget === 'codex' ? '适用于 Codex App、CLI 和 IDE 扩展。' : '适用于 Claude Desktop、Cursor 等使用 mcpServers JSON 的客户端。' }}</p>
                     </div>
                     <button type="button" class="mcp-copy-button" @click="copyMcpConfig">
                       <Check v-if="mcpCopied" class="w-3.5 h-3.5" :stroke-width="1.8" />
                       <Copy v-else class="w-3.5 h-3.5" :stroke-width="1.6" />
-                      {{ mcpCopied ? '已复制配置' : '复制 JSON 配置' }}
+                      {{ mcpCopied ? '已复制配置' : mcpConfigTarget === 'codex' ? '复制 Codex TOML' : '复制 JSON 配置' }}
                     </button>
+                  </div>
+
+                  <div v-if="mcpConfigTarget === 'codex'" class="mcp-codex-warning">
+                    <strong>命令和参数必须分开填写</strong>
+                    <p>“启动命令”只能填写下方的可执行文件；每个启动参数必须单独占一项。不要填写成 <code>npm run mcp</code> 或 <code>--app-env development</code>。</p>
                   </div>
 
                   <div class="mcp-config-field">
                     <div class="mcp-config-field__heading">
                       <span>启动命令</span>
                       <button type="button" class="mcp-inline-action" @click="copyMcpCommand">
-                        {{ mcpCommandCopied ? '已复制' : '复制命令' }}
+                        {{ mcpCommandCopied ? '已复制' : '复制可执行文件' }}
                       </button>
                     </div>
                     <code class="mcp-code-line">{{ mcpClientConfig.command }}</code>
@@ -825,8 +877,19 @@ async function removeGlobalPythonDep(name: string): Promise<void> {
                   <div class="mcp-config-field">
                     <div class="mcp-config-field__heading"><span>启动参数</span><span class="mcp-config-field__hint">自动生成，无需修改</span></div>
                     <div class="mcp-args-list">
-                      <code v-for="argument in mcpClientConfig.args" :key="argument">{{ argument }}</code>
+                      <code v-for="(argument, index) in mcpClientConfig.args" :key="`${index}-${argument}`"><span>{{ index + 1 }}</span>{{ argument }}</code>
                     </div>
+                  </div>
+
+                  <div v-if="mcpConfigTarget === 'codex'" class="mcp-config-field">
+                    <div class="mcp-config-field__heading">
+                      <span>Codex CLI 快速安装</span>
+                      <button type="button" class="mcp-inline-action" @click="copyMcpCodexCli">
+                        {{ mcpCodexCliCopied ? '已复制' : '复制安装命令' }}
+                      </button>
+                    </div>
+                    <code class="mcp-code-line">{{ mcpCodexAddCommand }}</code>
+                    <p class="mcp-field-explanation">在终端执行一次即可写入 Codex 配置；已有同名配置时请先移除旧配置。</p>
                   </div>
 
                   <div class="mcp-config-field mcp-env-field">
@@ -836,10 +899,10 @@ async function removeGlobalPythonDep(name: string): Promise<void> {
 
                   <details class="mcp-json-details">
                     <summary>
-                      <span>查看完整 JSON</span>
+                      <span>{{ mcpConfigTarget === 'codex' ? '查看完整 Codex TOML' : '查看完整 JSON' }}</span>
                       <ChevronDown class="mcp-json-details__icon w-4 h-4" :stroke-width="1.5" />
                     </summary>
-                    <pre>{{ mcpConfigJson }}</pre>
+                    <pre>{{ mcpConfigPayload }}</pre>
                   </details>
 
                   <div class="mcp-config-card__footer">
@@ -854,8 +917,8 @@ async function removeGlobalPythonDep(name: string): Promise<void> {
               <section class="mcp-help-card">
                 <div class="mcp-help-card__icon" aria-hidden="true"><Code2 class="w-4 h-4" :stroke-width="1.6" /></div>
                 <div>
-                  <h3>Agent 显示未连接？</h3>
-                  <p>确认 MCP 开关已打开，并重启 Agent 让它重新读取配置。Autoforge 关闭时，Agent 会显示“应用未就绪”。</p>
+                  <h3>为什么会看到新的 adapter 进程？</h3>
+                  <p>Codex 的 stdio 模式会为每个 Codex 会话启动一个轻量 adapter，这是正常行为，但不应打开新的 Autoforge 窗口。若窗口反复出现，请删除旧配置并使用上方 Codex TOML 或 CLI 命令重新接入。</p>
                 </div>
               </section>
             </template>
@@ -1666,6 +1729,34 @@ async function removeGlobalPythonDep(name: string): Promise<void> {
   line-height: 1.6;
 }
 
+.mcp-client-tabs {
+  display: inline-flex;
+  gap: 0.2rem;
+  padding: 0.2rem;
+  border: 1px solid var(--sb-border-subtle);
+  border-radius: 0.65rem;
+  background: var(--sb-bg-inset);
+}
+
+.mcp-client-tabs button {
+  padding: 0.42rem 0.7rem;
+  border-radius: 0.48rem;
+  color: var(--sb-text-faint);
+  font-size: 10px;
+  font-weight: 600;
+  transition: color 0.16s ease, background 0.16s ease, box-shadow 0.16s ease;
+}
+
+.mcp-client-tabs button:hover {
+  color: var(--sb-text-secondary);
+}
+
+.mcp-client-tabs button.is-active {
+  color: var(--sb-text-primary);
+  background: var(--sb-bg-panel);
+  box-shadow: 0 3px 10px rgb(0 0 0 / 8%);
+}
+
 .mcp-config-card {
   padding: 1rem;
   border: 1px solid var(--sb-border);
@@ -1701,6 +1792,35 @@ async function removeGlobalPythonDep(name: string): Promise<void> {
   margin-top: 0.25rem;
   color: var(--sb-text-faint);
   font-size: 10px;
+}
+
+.mcp-codex-warning {
+  margin-top: 0.85rem;
+  padding: 0.7rem 0.75rem;
+  border: 1px solid color-mix(in srgb, #f59e0b 32%, var(--sb-border));
+  border-radius: 0.6rem;
+  background: color-mix(in srgb, #f59e0b 7%, var(--sb-bg-panel));
+}
+
+.mcp-codex-warning strong {
+  color: color-mix(in srgb, #f59e0b 70%, var(--sb-text-primary));
+  font-size: 11px;
+  font-weight: 650;
+}
+
+.mcp-codex-warning p {
+  margin-top: 0.3rem;
+  color: var(--sb-text-muted);
+  font-size: 10px;
+  line-height: 1.6;
+}
+
+.mcp-codex-warning code {
+  padding: 0.1rem 0.25rem;
+  border-radius: 0.25rem;
+  color: var(--sb-text-secondary);
+  background: var(--sb-bg-inset);
+  font-family: var(--font-mono);
 }
 
 .mcp-copy-button,
@@ -1766,11 +1886,33 @@ async function removeGlobalPythonDep(name: string): Promise<void> {
 }
 
 .mcp-args-list code {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
   padding: 0.25rem 0.4rem;
   border: 1px solid var(--sb-border-subtle);
   border-radius: 0.35rem;
   color: var(--sb-text-muted);
   background: var(--sb-bg-inset);
+}
+
+.mcp-args-list code span {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 1rem;
+  height: 1rem;
+  border-radius: 0.25rem;
+  color: var(--sb-accent-solid);
+  background: color-mix(in srgb, var(--sb-accent-solid) 12%, transparent);
+  font-size: 8px;
+}
+
+.mcp-field-explanation {
+  margin-top: 0.35rem;
+  color: var(--sb-text-faint);
+  font-size: 10px;
+  line-height: 1.55;
 }
 
 .mcp-env-field {

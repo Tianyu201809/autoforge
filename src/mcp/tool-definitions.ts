@@ -44,8 +44,8 @@ export const AUTOFORGE_TOOL_DEFINITIONS: AutoforgeToolDefinition[] = [
   { name: 'autoforge_set_script_params', description: 'Persist script parameters. Secret values are write-only. Requires confirm=true.', schema: { scriptId: id, envId: id, values: stringMap, confirm }, method: 'scripts.set-params' }
 ]
 
-function successResult(value: unknown): CallToolResult {
-  const payload = value && typeof value === 'object' ? value : { value }
+export function successResult(value: unknown): CallToolResult {
+  const payload = value && typeof value === 'object' && !Array.isArray(value) ? value : { value }
   return {
     content: [{ type: 'text', text: JSON.stringify(payload) }],
     structuredContent: payload as Record<string, unknown>

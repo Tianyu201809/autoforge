@@ -2,6 +2,7 @@ import { timingSafeEqual } from 'crypto'
 import { createServer, type Server as NetServer, type Socket } from 'net'
 import { MCP_LIMITS, MCP_PROTOCOL_VERSION, parseControlMessage, serializeControlMessage, type ControlEvent, type ControlErrorResponse, type ControlRequest, type ControlResponse, type McpErrorCode } from '../../shared/mcp-control-protocol'
 import type { AppEnv } from '../../shared/app-env'
+import { formatMcpCommandLine } from '../../shared/mcp-client-config'
 import type { McpClientConfig, McpStatus, ScriptListInput } from '../../shared/mcp-types'
 import type { ExecutionHistoryQuery, EnvironmentProfile } from '../../shared/types/script'
 import { sanitizeErrorMessage, sanitizeEnvironment, sanitizeLogLine, sanitizeScriptItem, sanitizeSession } from './mcp-sanitizers'
@@ -640,19 +641,22 @@ export function getMcpControlStatus(): McpStatus {
 
 export function getMcpClientConfig(appEnv: AppEnv): McpClientConfig {
   if (appEnv === 'development') {
+    const command = process.platform === 'win32' ? 'npm.cmd' : 'npm'
+    const args = ['--prefix', process.cwd(), 'run', 'mcp', '--', '--app-env', 'development']
     return {
-      command: 'npm',
-      args: ['run', 'mcp', '--', '--app-env', 'development'],
+      command,
+      args,
       appEnv,
-      displayCommand: 'npm run mcp -- --app-env development'
+      displayCommand: formatMcpCommandLine(command, args)
     }
   }
   const command = process.execPath
   const displayName = process.platform === 'win32' ? 'Autoforge.exe' : 'Autoforge'
+  const args = ['--mcp-stdio', '--app-env', appEnv]
   return {
     command,
-    args: ['--mcp-stdio', '--app-env', appEnv],
+    args,
     appEnv,
-    displayCommand: `${displayName} --mcp-stdio --app-env ${appEnv}`
+    displayCommand: formatMcpCommandLine(displayName, args)
   }
 }

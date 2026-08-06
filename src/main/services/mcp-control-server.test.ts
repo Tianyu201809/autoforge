@@ -5,7 +5,7 @@ import { join } from 'path'
 import test from 'node:test'
 import type { AutoforgeControlFacade } from './autoforge-control-facade'
 import { McpAuditService } from './mcp-audit'
-import { McpControlServer } from './mcp-control-server'
+import { getMcpClientConfig, McpControlServer } from './mcp-control-server'
 import { RunEventStore } from './run-event-store'
 import { McpControlClient, McpControlClientError } from '../../mcp/control-client'
 
@@ -86,4 +86,11 @@ test('MCP control server authenticates and routes requests', async () => {
   await client.close()
   await server.stop()
   eventStore.dispose()
+})
+
+test('development MCP config is directly executable outside the Autoforge workspace', () => {
+  const config = getMcpClientConfig('development')
+  assert.equal(config.command, process.platform === 'win32' ? 'npm.cmd' : 'npm')
+  assert.deepEqual(config.args.slice(0, 2), ['--prefix', process.cwd()])
+  assert.deepEqual(config.args.slice(-5), ['run', 'mcp', '--', '--app-env', 'development'])
 })

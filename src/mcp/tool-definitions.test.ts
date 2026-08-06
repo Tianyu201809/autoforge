@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
-import { AUTOFORGE_TOOL_DEFINITIONS } from './tool-definitions'
+import { AUTOFORGE_TOOL_DEFINITIONS, successResult } from './tool-definitions'
 
 test('MCP tool definitions expose the approved surface and confirmation schemas', () => {
   const names = AUTOFORGE_TOOL_DEFINITIONS.map((item) => item.name)
@@ -13,4 +13,14 @@ test('MCP tool definitions expose the approved surface and confirmation schemas'
     assert.ok(definition.schema.confirm)
     assert.equal(definition.schema.confirm.safeParse(true).success, true)
   }
+})
+
+test('MCP tool results wrap arrays in an object structuredContent payload', () => {
+  const environments = [{ id: 'env-1', name: 'Development' }]
+  const result = successResult(environments)
+
+  assert.deepEqual(result.structuredContent, { value: environments })
+  assert.deepEqual(JSON.parse(result.content[0]?.type === 'text' ? result.content[0].text : ''), {
+    value: environments
+  })
 })
