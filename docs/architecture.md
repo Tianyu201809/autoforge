@@ -1,6 +1,6 @@
 # Autoforge 架构说明
 
-> 当前应用版本：**1.20.0** · 详见 [v1.20.0 版本说明](./v1.20.0.md)
+> 当前应用版本：**1.24.0** · 详见 [v1.24.0 版本说明](./v1.24.0.md)
 
 ## 设计原则
 
@@ -69,6 +69,10 @@ userData/                     # autoforge-development 或 autoforge-production
 | `log-bus` / `script-lifecycle` | 日志广播与生命周期事件 |
 | `hub-bridge-server` | 本机 HTTP 桥（`127.0.0.1:19276`）：`/health`、`/install`、CORS、安装锁 |
 | `hub-script-installer` | Hub zip 下载、解压、定位 `autoforge.json` 包根、调用 registry 导入 |
+| `mcp-control-server` | 本地 Named Pipe / Unix Socket 控制面、握手、认证、请求路由与连接限制 |
+| `mcp/control-client` | MCP adapter 到主进程的 descriptor 发现、握手和断线重连 |
+| `mcp/tool-definitions` / `resource-definitions` | Agent 工具、只读 Resources、结果封装和错误转换 |
+| `run-event-store` / `mcp-audit` | session 快照、增量日志、终态等待和脱敏审计 |
 
 ## Hub 一键安装数据流
 
@@ -126,7 +130,7 @@ run(ctx) → log / stage / progress / result → UI
 
 JS 与 Python 共用 `shared/script-progress.ts` 定义的控制协议；取消时 JS 通过 `AbortSignal`，Python 通过终止子进程。
 
-## 已交付能力（截至 v1.20.0）
+## 已交付能力（截至 v1.24.0）
 
 | 能力 | 模块 / 入口 |
 |------|-------------|
@@ -161,6 +165,7 @@ JS 与 Python 共用 `shared/script-progress.ts` 定义的控制协议；取消�
 | 入口函数别名 | `resolveScriptEntryFn` · `run` / `main` / `default`（JS） |
 | 运行二次确认 | `useConfirmDialog` · 详情面板与卡片快捷运行 |
 | 功能弹窗 | `AppFeatureModal` · 设置 / 执行历史 / 开发指南居中模态 |
+| 本地 MCP 控制 | `mcp-control-server` / `mcp` · Agent 查询、运行、编辑脚本与环境；默认关闭 |
 
 ## 还需关注的能力（后续迭代）
 
@@ -185,7 +190,9 @@ JS 与 Python 共用 `shared/script-progress.ts` 定义的控制协议；取消�
 
 | 文档 | 内容 |
 |------|------|
-| [v1.20.0 版本说明](./v1.20.0.md) | 当前版本（分类树、多实例批量） |
+| [v1.24.0 版本说明](./v1.24.0.md) | 当前版本（本地 MCP、Agent 接入与安全控制） |
+| [MCP 使用文档](./mcp.md) | 客户端配置、Token、安全与工具范围 |
+| [v1.20.0 版本说明](./v1.20.0.md) | 分类树、多实例批量 |
 | [v1.19.0 版本说明](./v1.19.0.md) | AutoforgeHub 入口 |
 | [v1.15.0 版本说明](./v1.15.0.md) | Hub 一键安装 |
 | [v1.11.0 版本说明](./v1.11.0.md) | 功能弹窗、UI 优化 |

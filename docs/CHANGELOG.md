@@ -4,6 +4,29 @@
 
 ---
 
+## [1.24.0] — 2026-08-06
+
+### 新增
+
+- **本地 MCP 控制面** — Codex、Claude、Cursor 等 Agent 可通过标准 MCP 查询、编辑和运行 Autoforge 脚本；MCP 默认关闭，由设置页控制
+- **MCP 工具与 Resources** — 覆盖脚本 / 文件、环境 Profile、运行 session、增量日志和执行历史；写操作要求 `confirm: true`
+- **客户端配置指导** — 设置页提供 Codex TOML、`codex mcp add` 命令和 Claude / Cursor 通用 JSON
+
+### 安全
+
+- 仅使用 Windows Named Pipe 或 macOS / Linux Unix Socket，不新增 TCP 监听
+- 主进程自动生成和轮换 runtime token；secret 字段脱敏；写操作、路径边界和审计记录统一受控
+
+### 改进
+
+- adapter 支持 Autoforge 延迟启动、应用重启和 token 轮换后的自动重连
+- MCP 设置页补充中文配置说明、参数边界提示和 adapter 生命周期说明
+
+### 修复
+
+- 修复 Codex 将数组作为 `structuredContent` 导致环境列表、会话列表调用失败的问题
+- 修复错误的 command / args 配置可能触发重复启动 Autoforge 窗口的问题
+
 ## [1.20.0] — 2026-07-22
 
 ### 新增
