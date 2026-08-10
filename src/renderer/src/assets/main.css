@@ -39,6 +39,11 @@ body {
   color: var(--sb-text-secondary);
 }
 
+.is-file-path-drop-target {
+  border-color: var(--sb-accent-solid) !important;
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--sb-accent-solid) 18%, transparent);
+}
+
 /* 全局滚动条 — 细窄圆角，随主题色自适应 */
 * {
   scrollbar-width: thin;

@@ -1,6 +1,7 @@
 import { createApp } from 'vue'
 import App from './App.vue'
 import './assets/main.css'
+import { filePathDropDirective } from './directives/file-path-drop'
 
 function showBootError(message: string): void {
   const root = document.getElementById('app')
@@ -12,7 +13,9 @@ if (!window.autoforge) {
   showBootError('Preload 未加载：window.autoforge 不可用。\n请确认 preload 脚本路径正确后重启应用。')
 } else {
   try {
-    createApp(App).mount('#app')
+    const app = createApp(App)
+    app.directive('file-path-drop', filePathDropDirective)
+    app.mount('#app')
   } catch (error) {
     const message = error instanceof Error ? error.stack ?? error.message : String(error)
     showBootError(`Vue 启动失败：\n${message}`)

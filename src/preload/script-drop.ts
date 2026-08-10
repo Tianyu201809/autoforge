@@ -82,6 +82,7 @@ export function bindFilePathDropTarget(
 ): () => void {
   const clearFeedback = (): void => element.classList.remove('is-file-path-drop-target')
   const onDragOver = (event: DragEvent): void => {
+    if (element.disabled || element.readOnly) return
     if (!resolvePaths(event).length) return
     event.preventDefault()
     if (event.dataTransfer) event.dataTransfer.dropEffect = 'copy'
@@ -91,6 +92,7 @@ export function bindFilePathDropTarget(
   const onDrop = (event: DragEvent): void => {
     const paths = resolvePaths(event)
     clearFeedback()
+    if (element.disabled || element.readOnly) return
     if (!paths.length) return
     event.preventDefault()
     event.stopPropagation()
