@@ -52,8 +52,8 @@ describe('buildPaginationItems', () => {
   })
 
   it('shows a page number instead of hiding a one-page gap', () => {
-    assert.deepEqual(buildPaginationItems(3, 6), [1, 2, 3, 4, 'ellipsis', 6])
-    assert.deepEqual(buildPaginationItems(4, 6), [1, 'ellipsis', 3, 4, 5, 6])
+    assert.deepEqual(buildPaginationItems(3, 6), [1, 2, 3, 4, 5, 6])
+    assert.deepEqual(buildPaginationItems(4, 6), [1, 2, 3, 4, 5, 6])
   })
 })
 
