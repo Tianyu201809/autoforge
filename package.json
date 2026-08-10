@@ -21,7 +21,7 @@
     "dist:linux": "npm run generate:icons && npm run install:browsers && npm run build && electron-builder --linux",
     "lint": "eslint .",
     "lint:fix": "eslint . --fix",
-    "test:unit": "node --import tsx --test src/shared/category-tree.test.ts src/shared/instance-slots.test.ts src/main/services/browser-window-launch.test.mjs src/main/services/browser-context-defaults.test.mjs src/main/services/browser-lifecycle.test.mjs src/main/services/python-process-exit.test.mjs src/renderer/src/utils/pagination.test.ts src/renderer/src/components/Sidebar.test.mjs src/renderer/src/components/HistoryContextMenu.test.mjs src/renderer/src/components/DetailPanelHeader.test.mjs"
+    "test:unit": "node --import tsx --test src/shared/category-tree.test.ts src/shared/instance-slots.test.ts src/main/services/browser-window-launch.test.mjs src/main/services/browser-context-defaults.test.mjs src/main/services/browser-lifecycle.test.mjs src/main/services/python-process-exit.test.mjs src/preload/script-drop.test.ts src/renderer/src/utils/pagination.test.ts src/renderer/src/components/Sidebar.test.mjs src/renderer/src/components/HistoryContextMenu.test.mjs src/renderer/src/components/DetailPanelHeader.test.mjs"
   },
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.30.0",

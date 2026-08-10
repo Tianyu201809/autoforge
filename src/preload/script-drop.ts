@@ -47,7 +47,9 @@ function commonParentDir(paths: string[]): string | null {
   return /^[a-zA-Z]:/.test(joined) ? joined.replace(/\//g, '\\') : `/${joined}`
 }
 
-function collectDropPaths(event: DragEvent): string[] {
+export type DropPathResolver = (event: DragEvent) => string[]
+
+export function collectDropPaths(event: DragEvent): string[] {
   const dt = event.dataTransfer
   if (!dt) return []
 
@@ -72,6 +74,40 @@ function collectDropPaths(event: DragEvent): string[] {
   }
 
   return paths
+}
+
+export function bindFilePathDropTarget(
+  element: HTMLInputElement | HTMLTextAreaElement,
+  resolvePaths: DropPathResolver = collectDropPaths
+): () => void {
+  const clearFeedback = (): void => element.classList.remove('is-file-path-drop-target')
+  const onDragOver = (event: DragEvent): void => {
+    if (!resolvePaths(event).length) return
+    event.preventDefault()
+    if (event.dataTransfer) event.dataTransfer.dropEffect = 'copy'
+    element.classList.add('is-file-path-drop-target')
+  }
+  const onDragLeave = (): void => clearFeedback()
+  const onDrop = (event: DragEvent): void => {
+    const paths = resolvePaths(event)
+    clearFeedback()
+    if (!paths.length) return
+    event.preventDefault()
+    event.stopPropagation()
+    element.value = paths.join('\n')
+    element.dispatchEvent(new Event('input', { bubbles: true }))
+  }
+
+  element.addEventListener('dragover', onDragOver)
+  element.addEventListener('dragleave', onDragLeave)
+  element.addEventListener('drop', onDrop)
+
+  return () => {
+    clearFeedback()
+    element.removeEventListener('dragover', onDragOver)
+    element.removeEventListener('dragleave', onDragLeave)
+    element.removeEventListener('drop', onDrop)
+  }
 }
 
 function resolveDropImportPath(event: DragEvent): string | null {

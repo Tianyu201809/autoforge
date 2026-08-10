@@ -147,6 +147,9 @@ export interface AutoforgeApi {
       }
     ) => () => void
   }
+  files: {
+    setupPathDropTarget: (element: HTMLInputElement | HTMLTextAreaElement) => () => void
+  }
   categories: {
     list: () => Promise<CategoryDefinition[]>
     create: (label: string, colorPreset: string, parentId?: string | null) => Promise<CategoryDefinition>
