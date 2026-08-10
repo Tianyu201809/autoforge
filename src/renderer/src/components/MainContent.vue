@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, onMounted, onUnmounted, ref } from 'vue'
+import { computed, onMounted, onUnmounted, ref, watch } from 'vue'
 import {
   ArrowDown,
   ArrowUp,
@@ -17,6 +17,7 @@ import type { CategoryDefinition, ScriptItem, ScriptListFilter, ScriptSortBy, Sc
 import { buildCategoryTree } from '../../../shared/category-tree'
 import ScriptCard from './ScriptCard.vue'
 import { useToast } from '../composables/useToast'
+import { buildPaginationItems, normalizePageInput } from '../utils/pagination'
 
 const props = defineProps<{
   scripts: ScriptItem[]
@@ -89,9 +90,32 @@ const sortOpen = ref(false)
 const filterWrapRef = ref<HTMLElement | null>(null)
 const sortWrapRef = ref<HTMLElement | null>(null)
 const mainRef = ref<HTMLElement | null>(null)
+const jumpPageInput = ref(String(props.listPage))
+const paginationItems = computed(() => buildPaginationItems(props.listPage, props.listTotalPages))
 const { pushToast } = useToast()
 
 let unbindDropZone: (() => void) | undefined
+
+watch(
+  () => props.listPage,
+  (page) => {
+    jumpPageInput.value = String(page)
+  }
+)
+
+function goToPage(page: number): void {
+  if (page !== props.listPage) emit('update:listPage', page)
+}
+
+function submitJumpPage(): void {
+  const page = normalizePageInput(jumpPageInput.value, props.listTotalPages)
+  if (page === null) {
+    jumpPageInput.value = String(props.listPage)
+    return
+  }
+  jumpPageInput.value = String(page)
+  goToPage(page)
+}
 
 function setGridColumns(columns: GridColumns): void {
   gridColumns.value = columns
@@ -371,30 +395,81 @@ onUnmounted(() => {
 
     <div
       v-if="totalScripts > 0 && listTotalPages > 1"
-      class="flex-shrink-0 flex items-center justify-between px-5 py-2 border-t sb-border-subtle"
+      class="flex-shrink-0 flex flex-wrap items-center justify-between gap-2 px-5 py-2 border-t sb-border-subtle"
     >
       <span class="text-[12px] sb-text-muted tabular-nums">
         共 {{ totalScripts }} 个，第 {{ listPage }} / {{ listTotalPages }} 页
       </span>
-      <div class="flex items-center gap-1.5">
+      <div class="flex items-center justify-end gap-1.5 flex-wrap">
         <button
           type="button"
+          aria-label="上一页"
           class="flex items-center gap-0.5 h-7 px-2.5 rounded-md text-[12px] sb-text-muted border sb-border hover:sb-text-secondary hover:sb-bg-hover transition-colors disabled:opacity-40"
           :disabled="listPage <= 1"
-          @click="emit('update:listPage', listPage - 1)"
+          @click="goToPage(listPage - 1)"
         >
           <ChevronLeft class="w-3.5 h-3.5" :stroke-width="1.5" />
           上一页
         </button>
+
+        <div class="flex items-center gap-1" aria-label="脚本列表分页">
+          <template v-for="(item, index) in paginationItems" :key="`${item}-${index}`">
+            <span
+              v-if="item === 'ellipsis'"
+              class="w-7 text-center text-[12px] sb-text-faint"
+              aria-hidden="true"
+            >
+              ...
+            </span>
+            <button
+              v-else
+              type="button"
+              class="h-7 w-7 rounded-md border text-[12px] tabular-nums transition-colors disabled:opacity-100"
+              :class="item === listPage
+                ? 'sb-bg-inset border-[var(--sb-accent-solid)] text-[var(--sb-accent-solid)] font-medium'
+                : 'sb-border sb-text-muted hover:sb-text-secondary hover:sb-bg-hover'"
+              :aria-current="item === listPage ? 'page' : undefined"
+              :aria-label="`第 ${item} 页`"
+              :disabled="item === listPage"
+              @click="goToPage(item)"
+            >
+              {{ item }}
+            </button>
+          </template>
+        </div>
+
         <button
           type="button"
+          aria-label="下一页"
           class="flex items-center gap-0.5 h-7 px-2.5 rounded-md text-[12px] sb-text-muted border sb-border hover:sb-text-secondary hover:sb-bg-hover transition-colors disabled:opacity-40"
           :disabled="listPage >= listTotalPages"
-          @click="emit('update:listPage', listPage + 1)"
+          @click="goToPage(listPage + 1)"
         >
           下一页
           <ChevronRight class="w-3.5 h-3.5" :stroke-width="1.5" />
         </button>
+
+        <form class="ml-1 flex items-center gap-1" @submit.prevent="submitJumpPage">
+          <label for="script-list-jump-page" class="text-[12px] sb-text-muted">跳至</label>
+          <input
+            id="script-list-jump-page"
+            v-model="jumpPageInput"
+            type="number"
+            inputmode="numeric"
+            step="1"
+            min="1"
+            :max="listTotalPages"
+            class="h-7 w-14 rounded-md border sb-border sb-bg-input px-1.5 text-center text-[12px] tabular-nums outline-none focus:sb-input"
+            aria-label="跳转页码"
+          />
+          <span class="text-[12px] sb-text-muted">页</span>
+          <button
+            type="submit"
+            class="h-7 px-2.5 rounded-md border sb-border sb-text-muted text-[12px] hover:sb-text-secondary hover:sb-bg-hover transition-colors"
+          >
+            跳转
+          </button>
+        </form>
       </div>
     </div>
   </main>
