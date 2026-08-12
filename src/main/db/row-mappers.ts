@@ -43,6 +43,7 @@ export interface ScriptRow {
   icon_border: string
   version: string
   entry: string
+  language: string
   imported_at: string | null
   env_schema: string
   param_schema: string
@@ -113,7 +114,7 @@ export function rowToScriptBase(row: ScriptRow): ScriptMeta {
     version: row.version,
     importedAt: row.imported_at ?? undefined,
     entry: row.entry,
-    language: resolveScriptLanguage(undefined, row.entry),
+    language: resolveScriptLanguage(row.language, row.entry),
     envSchema: fromJson(row.env_schema, []),
     paramSchema: fromJson(row.param_schema, []),
     dependencies: fromJson(row.dependencies, undefined),
@@ -177,6 +178,7 @@ export function scriptMetaToScriptRow(meta: Omit<ScriptMeta, 'starred' | 'archiv
     version: meta.version,
     imported_at: meta.importedAt ?? null,
     entry: meta.entry,
+    language: meta.language,
     env_schema: JSON.stringify(meta.envSchema ?? []),
     param_schema: JSON.stringify(meta.paramSchema ?? []),
     dependencies: toJson(meta.dependencies),

@@ -13,7 +13,7 @@ const SCRIPT_JOIN = `
   SELECT
     s.id, s.hub_script_id, s.name, s.description, s.workspace_path, s.category, s.category_label,
     s.category_color, s.icon, s.icon_color, s.icon_bg, s.icon_border, s.version,
-    s.entry, s.imported_at, s.env_schema, s.param_schema, s.dependencies, s.browser,
+    s.entry, s.language, s.imported_at, s.env_schema, s.param_schema, s.dependencies, s.browser,
     p.starred, p.archived, p.recent_run_at, p.schedule, p.default_env_id,
     p.config_by_env, p.params_by_env, p.saved_params, p.instance_slots
   FROM scripts s
@@ -49,11 +49,11 @@ export class ScriptRepository {
       .prepare(
         `INSERT INTO scripts (
           id, hub_script_id, name, description, workspace_path, category, category_label, category_color,
-          icon, icon_color, icon_bg, icon_border, version, entry, imported_at, env_schema, param_schema,
+          icon, icon_color, icon_bg, icon_border, version, entry, language, imported_at, env_schema, param_schema,
           dependencies, browser
         ) VALUES (
           @id, @hub_script_id, @name, @description, @workspace_path, @category, @category_label, @category_color,
-          @icon, @icon_color, @icon_bg, @icon_border, @version, @entry, @imported_at, @env_schema, @param_schema,
+          @icon, @icon_color, @icon_bg, @icon_border, @version, @entry, @language, @imported_at, @env_schema, @param_schema,
           @dependencies, @browser
         )`
       )
@@ -88,7 +88,7 @@ export class ScriptRepository {
             hub_script_id = @hub_script_id, name = @name, description = @description, workspace_path = @workspace_path,
             category = @category, category_label = @category_label, category_color = @category_color,
             icon = @icon, icon_color = @icon_color, icon_bg = @icon_bg, icon_border = @icon_border,
-            version = @version, entry = @entry, imported_at = @imported_at, env_schema = @env_schema, param_schema = @param_schema,
+            version = @version, entry = @entry, language = @language, imported_at = @imported_at, env_schema = @env_schema, param_schema = @param_schema,
             dependencies = @dependencies, browser = @browser
            WHERE id = @id`
         )
@@ -175,11 +175,11 @@ export class ScriptRepository {
       .prepare(
         `INSERT INTO scripts (
           id, hub_script_id, name, description, workspace_path, category, category_label, category_color,
-          icon, icon_color, icon_bg, icon_border, version, entry, imported_at, env_schema, param_schema,
+          icon, icon_color, icon_bg, icon_border, version, entry, language, imported_at, env_schema, param_schema,
           dependencies, browser
         ) VALUES (
           @id, @hub_script_id, @name, @description, @workspace_path, @category, @category_label, @category_color,
-          @icon, @icon_color, @icon_bg, @icon_border, @version, @entry, @imported_at, @env_schema, @param_schema,
+          @icon, @icon_color, @icon_bg, @icon_border, @version, @entry, @language, @imported_at, @env_schema, @param_schema,
           @dependencies, @browser
         )`
       )

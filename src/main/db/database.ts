@@ -5,6 +5,10 @@ import { MIGRATION_002 } from './migrations/002-script-imported-at'
 import { MIGRATION_003 } from './migrations/003-script-hub-id'
 import { MIGRATION_004 } from './migrations/004-category-parent-id'
 import { MIGRATION_005 } from './migrations/005-instance-slots'
+import {
+  EXECUTABLE_TRUST_SCHEMA,
+  MIGRATION_006
+} from './migrations/006-script-language-executable-trust'
 import { migrateFromJsonIfNeeded } from './migrate-from-json'
 import { openSqliteDatabase, type SqliteDatabase } from './sqlite-adapter'
 
@@ -102,6 +106,22 @@ function runMigrations(database: SqliteDatabase): void {
   if (currentVersion < 5) {
     database.prepare('INSERT INTO schema_migrations (version) VALUES (?)').run(5)
   }
+
+  ensureScriptLanguageSchema(database)
+  if (currentVersion < 6) {
+    database.prepare('INSERT INTO schema_migrations (version) VALUES (?)').run(6)
+  }
+}
+
+function ensureScriptLanguageSchema(database: SqliteDatabase): void {
+  if (!tableHasColumn(database, 'scripts', 'language')) {
+    database.exec(MIGRATION_006)
+    database
+      .prepare("UPDATE scripts SET language = 'python' WHERE lower(entry) LIKE '%.py'")
+      .run()
+    return
+  }
+  database.exec(EXECUTABLE_TRUST_SCHEMA)
 }
 
 function ensureInstanceSlotsColumn(database: SqliteDatabase): void {

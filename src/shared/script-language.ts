@@ -1,5 +1,5 @@
-/** 脚本运行时语言 — 为 JS / Python 执行器分流预留 */
-export type ScriptLanguage = 'javascript' | 'python'
+/** 脚本运行时类型 */
+export type ScriptLanguage = 'javascript' | 'python' | 'executable'
 
 const JS_EXTENSIONS = new Set(['.js', '.mjs', '.cjs', '.jsx', '.ts', '.tsx'])
 const PY_EXTENSIONS = new Set(['.py'])
@@ -8,9 +8,19 @@ export function resolveScriptLanguage(
   manifestLanguage?: ScriptLanguage | string,
   entry?: string
 ): ScriptLanguage {
-  if (manifestLanguage === 'python' || manifestLanguage === 'javascript') {
+  if (
+    manifestLanguage === 'python' ||
+    manifestLanguage === 'javascript' ||
+    manifestLanguage === 'executable'
+  ) {
     return manifestLanguage
   }
+  return inferScriptLanguageFromExtension(entry) ?? 'javascript'
+}
+
+export function inferScriptLanguageFromExtension(
+  entry?: string
+): 'javascript' | 'python' | undefined {
   if (entry) {
     const dot = entry.lastIndexOf('.')
     if (dot >= 0) {
@@ -19,7 +29,7 @@ export function resolveScriptLanguage(
       if (JS_EXTENSIONS.has(ext)) return 'javascript'
     }
   }
-  return 'javascript'
+  return undefined
 }
 
 export interface ScriptLanguageBadge {
@@ -32,6 +42,12 @@ export function scriptLanguageBadge(language: ScriptLanguage): ScriptLanguageBad
     return {
       label: 'Py',
       className: 'text-sky-400/90 border-sky-500/25 bg-sky-500/10'
+    }
+  }
+  if (language === 'executable') {
+    return {
+      label: 'EXE',
+      className: 'text-emerald-400/90 border-emerald-500/25 bg-emerald-500/10'
     }
   }
   return {

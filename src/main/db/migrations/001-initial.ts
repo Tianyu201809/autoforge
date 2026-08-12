@@ -44,6 +44,7 @@ CREATE TABLE IF NOT EXISTS scripts (
   icon_border TEXT NOT NULL,
   version TEXT NOT NULL DEFAULT '',
   entry TEXT NOT NULL DEFAULT 'index.mjs',
+  language TEXT NOT NULL DEFAULT 'javascript',
   env_schema TEXT NOT NULL DEFAULT '[]',
   param_schema TEXT NOT NULL DEFAULT '[]',
   dependencies TEXT,
@@ -80,4 +81,13 @@ CREATE TABLE IF NOT EXISTS execution_records (
 CREATE INDEX IF NOT EXISTS idx_exec_started_at ON execution_records(started_at DESC);
 CREATE INDEX IF NOT EXISTS idx_exec_script_started ON execution_records(script_id, started_at DESC);
 CREATE INDEX IF NOT EXISTS idx_scripts_category ON scripts(category);
+
+CREATE TABLE IF NOT EXISTS executable_trust (
+  script_id TEXT NOT NULL REFERENCES scripts(id) ON DELETE CASCADE,
+  entry TEXT NOT NULL,
+  sha256 TEXT NOT NULL,
+  trusted_at TEXT NOT NULL,
+  PRIMARY KEY (script_id, entry, sha256)
+);
+CREATE INDEX IF NOT EXISTS idx_executable_trust_script ON executable_trust(script_id);
 `

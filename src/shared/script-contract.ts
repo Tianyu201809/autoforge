@@ -1,7 +1,6 @@
 /** Autoforge 脚本包规范 — autoforge.json 字段定义 */
 
 import type { ScriptLanguage } from './script-language'
-import { resolveScriptLanguage } from './script-language'
 
 export const AUTOFORGE_MANIFEST_VERSION = '1.0'
 export const MANIFEST_FILENAME = 'autoforge.json'
@@ -200,6 +199,7 @@ export { SCRIPT_CONTROL_PREFIX, serializeScriptControl } from './script-progress
 export type ScriptLifecyclePhase =
   | 'queued'
   | 'validating'
+  | 'awaiting-confirmation'
   | 'installing-deps'
   | 'starting'
   | 'running'
@@ -358,14 +358,16 @@ export function validateManifest(raw: unknown): { ok: true; manifest: ScriptMani
   }
   const entry = typeof obj.entry === 'string' ? obj.entry : 'index.mjs'
   const manifestLanguage =
-    obj.language === 'python' || obj.language === 'javascript' ? obj.language : undefined
+    obj.language === 'python' || obj.language === 'javascript' || obj.language === 'executable'
+      ? obj.language
+      : undefined
   const manifest: ScriptManifest = {
     autoforge: autoforgeVersion,
     name: nameStr.trim(),
     description: typeof obj.description === 'string' ? obj.description : undefined,
     version: typeof obj.version === 'string' ? obj.version : '1.0.0',
     entry,
-    language: resolveScriptLanguage(manifestLanguage, entry),
+    language: manifestLanguage,
     category: typeof obj.category === 'string' ? obj.category : 'local',
     categoryLabel: typeof obj.categoryLabel === 'string' ? obj.categoryLabel : undefined,
     icon: typeof obj.icon === 'string' ? (obj.icon as ScriptIcon) : 'app-window',
@@ -385,6 +387,9 @@ export function validateManifest(raw: unknown): { ok: true; manifest: ScriptMani
     if (typeof browser.headless === 'boolean') {
       manifest.browser = { headless: browser.headless }
     }
+  }
+  if (manifest.language === 'executable' && Object.keys(manifest.dependencies ?? {}).length > 0) {
+    return { ok: false, error: '可执行程序不能声明 dependencies' }
   }
   if (obj.export && typeof obj.export === 'object') {
     const exportConfig = obj.export as Record<string, unknown>
