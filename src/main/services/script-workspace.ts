@@ -34,6 +34,11 @@ import type { CategoryDefinition, ScriptFileContent, ScriptMeta } from '../../sh
 import { resolveCategoryForManifest } from './category-service'
 import { scriptStore } from './script-store'
 import { assertRunnableExecutable, inspectExecutable } from './executable-inspector'
+import {
+  createExecutableManifest,
+  discoverExecutableCandidates,
+  type ExecutableCandidate
+} from './executable-package-discovery'
 
 export { MANIFEST_FILENAME }
 
@@ -300,6 +305,53 @@ export class ScriptWorkspace {
     }
     writeFileSync(join(targetDir, MANIFEST_FILENAME), JSON.stringify(manifest, null, 2), UTF8)
     return this.manifestToMeta(scriptId, manifest) as ScriptMeta
+  }
+
+  importExecutableSource(
+    sourcePath: string,
+    packageRoot: string,
+    selectedEntry?: string,
+    singleFileCandidate?: ExecutableCandidate
+  ): ScriptMeta {
+    const candidates = singleFileCandidate
+      ? [singleFileCandidate]
+      : discoverExecutableCandidates(packageRoot)
+    if (candidates.length === 0) {
+      throw new Error('未找到当前系统可运行的 PE、Mach-O 或 ELF 程序')
+    }
+    const candidate = selectedEntry
+      ? candidates.find((item) => item.entry === toPosixPath(selectedEntry))
+      : candidates.length === 1
+        ? candidates[0]
+        : undefined
+    if (!candidate) {
+      throw new Error(selectedEntry ? '候选入口已变化，请重新选择' : '检测到多个可执行程序，请先选择入口')
+    }
+
+    const scriptId = randomUUID()
+    const targetDir = this.getScriptDir(scriptId)
+    const stagingDir = `${targetDir}.incoming-${randomUUID()}`
+    try {
+      if (singleFileCandidate) {
+        mkdirSync(stagingDir, { recursive: true })
+        copyFileSync(sourcePath, join(stagingDir, candidate.entry))
+      } else {
+        cpSync(packageRoot, stagingDir, { recursive: true })
+      }
+      const manifest = createExecutableManifest(candidate)
+      writeFileSync(
+        join(stagingDir, MANIFEST_FILENAME),
+        JSON.stringify(manifest, null, 2),
+        UTF8
+      )
+      const validated = this.validatePackageDirectory(stagingDir)
+      renameSync(stagingDir, targetDir)
+      return this.manifestToMeta(scriptId, validated) as ScriptMeta
+    } catch (error) {
+      rmSync(stagingDir, { recursive: true, force: true })
+      rmSync(targetDir, { recursive: true, force: true })
+      throw error
+    }
   }
 
   /** 导入文件夹或文件 */

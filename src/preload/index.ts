@@ -25,6 +25,7 @@ import type {
   ScriptExportResult,
   ScriptExportPreview,
   ScriptItem,
+  ScriptImportInspection,
   ScriptInstanceSlot,
   ScriptMeta,
   ScriptStats,
@@ -119,7 +120,10 @@ const autoforge = {
   scripts: {
     list: (): Promise<ScriptListResponse> => ipcRenderer.invoke(IPC.SCRIPTS_LIST),
     get: (id: string): Promise<ScriptItem | null> => ipcRenderer.invoke(IPC.SCRIPTS_GET, id),
-    import: (sourcePath: string): Promise<ScriptItem> => ipcRenderer.invoke(IPC.SCRIPTS_IMPORT, sourcePath),
+    inspectImport: (sourcePath: string): Promise<ScriptImportInspection> =>
+      ipcRenderer.invoke(IPC.SCRIPTS_INSPECT_IMPORT, sourcePath),
+    import: (sourcePath: string, selectedEntry?: string): Promise<ScriptItem> =>
+      ipcRenderer.invoke(IPC.SCRIPTS_IMPORT, sourcePath, selectedEntry),
     exportZip: (id: string): Promise<ScriptExportResult | null> =>
       ipcRenderer.invoke(IPC.SCRIPTS_EXPORT_ZIP, id),
     previewExport: (id: string): Promise<ScriptExportPreview> =>

@@ -87,8 +87,12 @@ export function registerIpcHandlers(
     return enrichScriptItem(meta, runner.listSessions())
   })
 
-  ipcMain.handle(IPC.SCRIPTS_IMPORT, (_event, sourcePath: string) => {
-    const script = scriptRegistry.importFromPath(sourcePath)
+  ipcMain.handle(IPC.SCRIPTS_INSPECT_IMPORT, (_event, sourcePath: string) => {
+    return scriptRegistry.inspectImport(sourcePath)
+  })
+
+  ipcMain.handle(IPC.SCRIPTS_IMPORT, (_event, sourcePath: string, selectedEntry?: string) => {
+    const script = scriptRegistry.importFromPath(sourcePath, { selectedEntry })
     scheduler.reload(scriptRegistry.listAll())
     return enrichScriptItem(script, runner.listSessions())
   })
@@ -160,7 +164,10 @@ export function registerIpcHandlers(
     const win = getWindow()
     const result = await dialog.showOpenDialog(win ?? undefined, {
       properties: ['openFile', 'openDirectory'],
-      filters: [{ name: '脚本文件', extensions: ['js', 'mjs', 'cjs', 'py'] }]
+      filters: [
+        { name: 'Autoforge 包与脚本', extensions: ['zip', 'js', 'mjs', 'cjs', 'py', 'exe'] },
+        { name: '所有文件', extensions: ['*'] }
+      ]
     })
     if (result.canceled || !result.filePaths[0]) return null
     return result.filePaths[0]

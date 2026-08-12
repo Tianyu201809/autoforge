@@ -6,6 +6,8 @@ export const IPC = {
 
   SCRIPTS_IMPORT: 'scripts:import',
 
+  SCRIPTS_INSPECT_IMPORT: 'scripts:inspect-import',
+
   SCRIPTS_EXPORT_ZIP: 'scripts:export-zip',
 
   SCRIPTS_EXPORT_PREVIEW: 'scripts:export-preview',

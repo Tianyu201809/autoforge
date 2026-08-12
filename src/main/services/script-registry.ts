@@ -2,6 +2,8 @@ import type { ScriptMeta } from '../../shared/types/script'
 import { existsSync, statSync } from 'fs'
 import { scriptStore } from './script-store'
 import { scriptWorkspace } from './script-workspace'
+import { inspectScriptImport, inspectPreparedPackage, withPreparedImportSource } from './script-import-source'
+import type { ScriptImportInspection } from '../../shared/types/script'
 
 function resolveWorkspaceImportedAt(workspacePath: string): string {
   if (workspacePath && existsSync(workspacePath)) {
@@ -25,8 +27,28 @@ export class ScriptRegistry {
     return scriptStore.getScriptByHubScriptId(hubScriptId)
   }
 
-  importFromPath(sourcePath: string, options?: { hubScriptId?: string }): ScriptMeta {
-    const imported = scriptWorkspace.import(sourcePath)
+  inspectImport(sourcePath: string): ScriptImportInspection {
+    return inspectScriptImport(sourcePath)
+  }
+
+  importFromPath(
+    sourcePath: string,
+    options?: { hubScriptId?: string; selectedEntry?: string }
+  ): ScriptMeta {
+    const imported = withPreparedImportSource(sourcePath, (source) => {
+      if (source.singleScriptLanguage) return scriptWorkspace.importFromFile(sourcePath)
+      if (source.hasManifest) return scriptWorkspace.importFromDirectory(source.packageRoot)
+      const inspection = inspectPreparedPackage(source)
+      const selectedEntry = options?.selectedEntry ?? (
+        inspection.kind === 'ready' ? inspection.candidate?.entry : undefined
+      )
+      return scriptWorkspace.importExecutableSource(
+        sourcePath,
+        source.packageRoot,
+        selectedEntry,
+        source.singleFileCandidate
+      )
+    })
     const meta = {
       ...imported,
       hubScriptId: options?.hubScriptId?.trim() || undefined

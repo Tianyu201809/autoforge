@@ -339,6 +339,17 @@ export interface ScriptExportPreview {
   message: string
 }
 
+export interface ExecutableCandidate {
+  entry: string
+  format: 'pe' | 'mach-o' | 'elf'
+  platform: 'win32' | 'darwin' | 'linux'
+  size: number
+}
+
+export type ScriptImportInspection =
+  | { kind: 'ready'; candidate?: ExecutableCandidate }
+  | { kind: 'select-executable'; candidates: ExecutableCandidate[] }
+
 export interface ScriptFileContent {
   path: string
   content: string
