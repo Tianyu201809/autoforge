@@ -2,7 +2,7 @@ import { contextBridge, ipcRenderer, type IpcRendererEvent } from 'electron'
 import pkg from '../../package.json'
 import { appEnv } from '../shared/app-env'
 import { IPC } from '../shared/ipc-channels'
-import { bindFilePathDropTarget, bindScriptDropImportZone, type DropImportHandlers } from './script-drop'
+import { bindFilePathDropTarget, getDroppedFilePath } from './script-drop'
 import type {
   AppConfig,
   AppWindowConfig,
@@ -170,8 +170,7 @@ const autoforge = {
       id: string,
       patch: { name?: string; icon?: ScriptIcon; category?: string; categoryLabel?: string; browser?: { headless?: boolean } }
     ): Promise<ScriptItem | null> => ipcRenderer.invoke(IPC.SCRIPTS_UPDATE_META, id, patch),
-    setupDropImportZone: (element: HTMLElement, handlers?: DropImportHandlers): (() => void) =>
-      bindScriptDropImportZone(element, handlers),
+    getDroppedFilePath,
   },
   files: {
     setupPathDropTarget: (element: HTMLInputElement | HTMLTextAreaElement): (() => void) =>

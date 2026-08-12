@@ -26,7 +26,7 @@ import {
 import type { CategoryDefinition, ScriptItem } from '../../../shared/types/script'
 import { buildCategoryTree } from '../../../shared/category-tree'
 import { describeCronExpression } from '../../../shared/cron-schedule'
-import { scriptLanguageBadge } from '../../../shared/script-language'
+import { scriptLanguageBadge, scriptLanguageTitle } from '../../../shared/script-language'
 import { resolveScriptIcon } from '../lib/script-icon-map'
 import { renameScript } from '../composables/useScriptRename'
 import {
@@ -112,7 +112,7 @@ const footerMetaCompact = computed(() => {
 })
 
 async function handleExport(): Promise<void> {
-  if (exporting.value) return
+  if (exporting.value || props.script.language === 'executable') return
   exporting.value = true
   closeMenu()
   try {
@@ -432,7 +432,7 @@ onUnmounted(() => {
         <span
           class="text-[10px] px-1.5 py-0.5 rounded border font-mono font-semibold tracking-wide shrink-0 whitespace-nowrap"
           :class="languageBadge.className"
-          :title="script.language === 'python' ? 'Python 脚本' : 'JavaScript 脚本'"
+          :title="scriptLanguageTitle(script.language)"
         >{{ languageBadge.label }}</span>
         <span class="text-[10px] sb-text-faint font-mono shrink-0 whitespace-nowrap">{{ script.version }}</span>
       </div>
@@ -561,7 +561,8 @@ onUnmounted(() => {
                 <button
                   type="button"
                   class="w-full flex items-center gap-2 px-3 py-1.5 text-[12px] sb-text-muted hover:sb-text-primary hover:sb-bg-hover text-left disabled:opacity-40"
-                  :disabled="exporting"
+                  :disabled="exporting || script.language === 'executable'"
+                  :title="script.language === 'executable' ? '原生程序包暂不支持导出' : '导出 ZIP'"
                   @click="handleExport"
                 >
                   <Download class="w-3.5 h-3.5" :stroke-width="1.5" />

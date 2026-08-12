@@ -300,6 +300,9 @@ function safeArchiveName(name: string, version: string): string {
 }
 
 export function buildScriptExportPlan(script: ScriptMeta, manifest: ScriptManifest): ScriptExportPlan {
+  if (script.language === 'executable' || manifest.language === 'executable') {
+    throw new Error('不支持导出原生程序包')
+  }
   const root = resolve(script.workspacePath)
   const pending = [MANIFEST_FILENAME, manifest.entry ?? script.entry ?? 'index.mjs']
   const readme = ['README.md', 'README'].find((name) => existsSync(join(root, name)))

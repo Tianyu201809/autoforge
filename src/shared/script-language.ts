@@ -55,3 +55,9 @@ export function scriptLanguageBadge(language: ScriptLanguage): ScriptLanguageBad
     className: 'text-amber-400/90 border-amber-500/25 bg-amber-500/10'
   }
 }
+
+export function scriptLanguageTitle(language: ScriptLanguage): string {
+  if (language === 'python') return 'Python 脚本'
+  if (language === 'executable') return '可执行程序'
+  return 'JavaScript 脚本'
+}

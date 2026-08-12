@@ -1,4 +1,4 @@
-import { existsSync, lstatSync, mkdtempSync, rmSync, statSync } from 'node:fs'
+import { existsSync, lstatSync, mkdtempSync, statSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { extname, join } from 'node:path'
 import type { ScriptLanguage } from '../../shared/script-language'
@@ -8,6 +8,7 @@ import { discoverExecutableCandidates, type ExecutableCandidate } from './execut
 import { inspectExecutable } from './executable-inspector'
 import { extractZipSecurely, resolveZipPackageRoot } from './safe-zip-package'
 import { hasManifest } from './script-workspace'
+import { removePathBestEffort } from './filesystem-cleanup'
 
 export interface PreparedImportSource {
   sourcePath: string
@@ -45,7 +46,7 @@ export function withPreparedImportSource<T>(
       const packageRoot = resolveZipPackageRoot(extractDir)
       return callback({ sourcePath, packageRoot, hasManifest: hasManifest(packageRoot) })
     } finally {
-      rmSync(tempDir, { recursive: true, force: true })
+      removePathBestEffort(tempDir)
     }
   }
 

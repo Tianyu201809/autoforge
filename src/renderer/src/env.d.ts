@@ -140,13 +140,7 @@ export interface AutoforgeApi {
       id: string,
       patch: { name?: string; icon?: ScriptIcon; category?: string; categoryLabel?: string; browser?: { headless?: boolean } }
     ) => Promise<ScriptItem | null>
-    setupDropImportZone: (
-      element: HTMLElement,
-      handlers?: {
-        onDone?: (script: ScriptItem) => void
-        onError?: (message: string) => void
-      }
-    ) => () => void
+    getDroppedFilePath: (file: File) => string
   }
   files: {
     setupPathDropTarget: (element: HTMLInputElement | HTMLTextAreaElement) => () => void

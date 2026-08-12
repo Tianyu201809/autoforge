@@ -20,7 +20,7 @@ describe('Detail panel responsive header', () => {
   it('shows the script language above the header actions', () => {
     assert.match(
       source,
-      /import\s*\{\s*scriptLanguageBadge\s*\}\s*from\s*['"]\.\.\/\.\.\/\.\.\/shared\/script-language['"]/
+      /import\s*\{[^}]*scriptLanguageBadge[^}]*scriptLanguageTitle[^}]*\}\s*from\s*['"]\.\.\/\.\.\/\.\.\/shared\/script-language['"]/s
     )
     assert.match(
       source,
@@ -28,7 +28,7 @@ describe('Detail panel responsive header', () => {
     )
     assert.match(source, /class="detail-panel-language-badge"/)
     assert.match(source, /\{\{ languageBadge\.label \}\}/)
-    assert.match(source, /script\.language === 'python' \? 'Python [^']+' : 'JavaScript [^']+'/)
+    assert.match(source, /scriptLanguageTitle\(script\.language\)/)
     assert.match(source, /\.detail-panel-language-badge\s*\{[^}]*width:\s*6rem/s)
     assert.match(source, /\.detail-panel-language-badge\s*\{[^}]*height:\s*3\.25rem/s)
     assert.match(source, /\.detail-panel-language-badge\s*\{[^}]*font-size:\s*1\.5rem/s)

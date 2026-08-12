@@ -20,6 +20,7 @@ import ToastHost from './components/ToastHost.vue'
 import ConfirmDialogHost from './components/ConfirmDialogHost.vue'
 import PromptDialogHost from './components/PromptDialogHost.vue'
 import ScratchpadPanel from './components/ScratchpadPanel.vue'
+import ExecutableEntryPickerModal from './components/ExecutableEntryPickerModal.vue'
 import { askConfirm } from './composables/useConfirmDialog'
 import { useScratchpad } from './composables/useScratchpad'
 import { useToast } from './composables/useToast'
@@ -45,8 +46,12 @@ const {
   showDevGuide,
   showExecutionHistory,
   showCategoryManager,
+  executablePickerOpen,
+  executableCandidates,
   refresh,
   importScript,
+  importFromPath,
+  resolveExecutableEntry,
   deleteScript,
   toggleStar,
   toggleArchive,
@@ -252,12 +257,14 @@ function viewScriptLog(script: ScriptItem): void {
 
 async function handleStart(scriptId: string): Promise<void> {
   const script = filteredScripts.value.find((s) => s.id === scriptId)
-  const confirmed = await askConfirm({
-    title: '运行脚本',
-    message: `确定运行「${script?.name ?? '此脚本'}」？`,
-    confirmLabel: '运行'
-  })
-  if (!confirmed) return
+  if (script?.language !== 'executable') {
+    const confirmed = await askConfirm({
+      title: '运行脚本',
+      message: `确定运行「${script?.name ?? '此脚本'}」？`,
+      confirmLabel: '运行'
+    })
+    if (!confirmed) return
+  }
 
   selectedScriptId.value = scriptId
   navigateDetailTab('params')
@@ -456,7 +463,7 @@ onUnmounted(() => {
               :sort-order="sortOrder"
               @select="selectScript($event)"
               @import="importScript"
-              @imported="refresh()"
+              @import-path="importFromPath"
               @start="(id) => void handleStart(id)"
               @stop="(id) => runner.stop(id).then(() => refresh())"
               @restart="(id) => runner.restart(id).then(() => refresh())"
@@ -526,6 +533,12 @@ onUnmounted(() => {
       :script="runResultModalScript"
       :session="runResultModalSession"
       @close="closeRunResultModal"
+    />
+    <ExecutableEntryPickerModal
+      :open="executablePickerOpen"
+      :candidates="executableCandidates"
+      @confirm="resolveExecutableEntry($event)"
+      @cancel="resolveExecutableEntry(null)"
     />
     <ToastHost />
     <ConfirmDialogHost />

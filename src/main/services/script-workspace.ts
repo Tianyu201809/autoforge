@@ -39,6 +39,8 @@ import {
   discoverExecutableCandidates,
   type ExecutableCandidate
 } from './executable-package-discovery'
+import { removePathBestEffort } from './filesystem-cleanup'
+import { copyPackageDirectory } from './safe-package-copy'
 
 export { MANIFEST_FILENAME }
 
@@ -336,7 +338,12 @@ export class ScriptWorkspace {
         mkdirSync(stagingDir, { recursive: true })
         copyFileSync(sourcePath, join(stagingDir, candidate.entry))
       } else {
-        cpSync(packageRoot, stagingDir, { recursive: true })
+        const copyResult = copyPackageDirectory(packageRoot, stagingDir, {
+          requiredEntry: candidate.entry
+        })
+        if (copyResult.skippedPaths.length > 0) {
+          console.warn(`[script-import] skipped special resources: ${copyResult.skippedPaths.join(', ')}`)
+        }
       }
       const manifest = createExecutableManifest(candidate)
       writeFileSync(
@@ -348,8 +355,8 @@ export class ScriptWorkspace {
       renameSync(stagingDir, targetDir)
       return this.manifestToMeta(scriptId, validated) as ScriptMeta
     } catch (error) {
-      rmSync(stagingDir, { recursive: true, force: true })
-      rmSync(targetDir, { recursive: true, force: true })
+      removePathBestEffort(stagingDir)
+      removePathBestEffort(targetDir)
       throw error
     }
   }
@@ -419,7 +426,7 @@ export class ScriptWorkspace {
     for (const dir of dirs) {
       if (!existsSync(dir)) continue
       try {
-        rmSync(dir, { recursive: true, force: true, maxRetries: 3, retryDelay: 100 })
+        removePathBestEffort(dir)
       } catch {
         /* 文件占用等情况下尽力清理，不因 rm 失败阻断 DB 删除结果 */
       }

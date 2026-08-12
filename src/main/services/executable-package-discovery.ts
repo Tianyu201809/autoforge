@@ -1,4 +1,4 @@
-import { lstatSync, readdirSync, type Stats } from 'node:fs'
+import type { Stats } from 'node:fs'
 import { basename, extname, join, relative, resolve } from 'node:path'
 import {
   AUTOFORGE_MANIFEST_VERSION,
@@ -9,6 +9,9 @@ import {
   type ExecutableFormat,
   type ExecutablePlatform
 } from './executable-inspector'
+import { rawFilesystem } from './raw-filesystem'
+
+const { lstatSync, readdirSync } = rawFilesystem
 
 export interface ExecutableCandidate {
   entry: string

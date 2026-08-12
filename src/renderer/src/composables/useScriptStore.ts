@@ -10,7 +10,8 @@ import type {
   ScriptListFilter,
   ScriptSortBy,
   ScriptSortOrder,
-  ScriptStats
+  ScriptStats,
+  ExecutableCandidate
 } from '../../../shared/types/script'
 
 const SORT_BY_STORAGE_KEY = 'scriptSortBy'
@@ -59,6 +60,9 @@ const showSettings = ref(false)
 const showDevGuide = ref(false)
 const showExecutionHistory = ref(false)
 const showCategoryManager = ref(false)
+const executablePickerOpen = ref(false)
+const executableCandidates = ref<ExecutableCandidate[]>([])
+let resolveExecutableChoice: ((entry: string | null) => void) | null = null
 const { pushToast } = useToast()
 let refreshGeneration = 0
 
@@ -206,13 +210,43 @@ async function importScript(): Promise<void> {
   if (!window.autoforge) return
   const sourcePath = await window.autoforge.scripts.openFileDialog()
   if (!sourcePath) return
-  await window.autoforge.scripts.import(sourcePath)
-  await refresh()
+  await importFromPath(sourcePath)
 }
 
 async function importFromPath(sourcePath: string): Promise<void> {
-  await window.autoforge.scripts.import(sourcePath)
-  await refresh()
+  try {
+    const inspection = await window.autoforge.scripts.inspectImport(sourcePath)
+    let selectedEntry = inspection.kind === 'ready' ? inspection.candidate?.entry : undefined
+    if (inspection.kind === 'select-executable') {
+      selectedEntry = (await chooseExecutableEntry(inspection.candidates)) ?? undefined
+      if (!selectedEntry) return
+    }
+    const imported = await window.autoforge.scripts.import(sourcePath, selectedEntry)
+    await refresh()
+    pushToast({
+      type: 'success',
+      title: '导入成功',
+      message: imported.name ? `已添加「${imported.name}」` : '脚本已添加到列表'
+    })
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error)
+    pushToast({ type: 'error', title: '导入失败', message })
+  }
+}
+
+function chooseExecutableEntry(candidates: ExecutableCandidate[]): Promise<string | null> {
+  resolveExecutableChoice?.(null)
+  executableCandidates.value = candidates
+  executablePickerOpen.value = true
+  return new Promise((resolve) => { resolveExecutableChoice = resolve })
+}
+
+function resolveExecutableEntry(entry: string | null): void {
+  const resolve = resolveExecutableChoice
+  resolveExecutableChoice = null
+  executablePickerOpen.value = false
+  executableCandidates.value = []
+  resolve?.(entry)
 }
 
 async function toggleStar(id: string): Promise<void> {
@@ -356,9 +390,12 @@ export function useScriptStore() {
     showDevGuide,
     showExecutionHistory,
     showCategoryManager,
+    executablePickerOpen,
+    executableCandidates,
     refresh,
     importScript,
     importFromPath,
+    resolveExecutableEntry,
     toggleStar,
     toggleArchive,
     deleteScript,

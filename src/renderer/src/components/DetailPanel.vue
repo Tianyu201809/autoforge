@@ -44,7 +44,7 @@ import { useManifestEditor } from '../composables/useManifestEditor'
 import { SCRIPT_README_EMPTY_MESSAGE, useScriptReadme } from '../composables/useScriptReadme'
 import { getStoredMainSidebarWidth } from '../constants/layout'
 import { isSafeHttpUrl } from '../lib/script-readme-markdown'
-import { scriptLanguageBadge } from '../../../shared/script-language'
+import { scriptLanguageBadge, scriptLanguageTitle } from '../../../shared/script-language'
 
 const { saveFeedback, showSaveFeedback, clearSaveFeedback } = usePanelSaveFeedback()
 
@@ -1246,7 +1246,7 @@ async function handleRename(): Promise<void> {
         <span
           class="detail-panel-language-badge"
           :class="languageBadge.className"
-          :title="script.language === 'python' ? 'Python 脚本' : 'JavaScript 脚本'"
+          :title="scriptLanguageTitle(script.language)"
         >{{ languageBadge.label }}</span>
         <div class="detail-panel-header-tools">
         <button
@@ -1423,7 +1423,7 @@ async function handleRename(): Promise<void> {
           </div>
         </div>
 
-        <div v-if="script.dependencies && Object.keys(script.dependencies).length">
+        <div v-if="script.language !== 'executable' && script.dependencies && Object.keys(script.dependencies).length">
           <label class="sb-field-label">依赖</label>
           <div class="mt-2 flex flex-wrap gap-1.5">
             <span v-for="(ver, pkg) in script.dependencies" :key="pkg" class="text-[11px] px-2 py-1 rounded-md sb-bg-inset sb-text-muted border sb-border-subtle font-mono">

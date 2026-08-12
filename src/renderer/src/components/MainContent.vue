@@ -16,8 +16,8 @@ import {
 import type { CategoryDefinition, ScriptItem, ScriptListFilter, ScriptSortBy, ScriptSortOrder } from '../../../shared/types/script'
 import { buildCategoryTree } from '../../../shared/category-tree'
 import ScriptCard from './ScriptCard.vue'
-import { useToast } from '../composables/useToast'
 import { buildPaginationItems, normalizePageInput } from '../utils/pagination'
+import { bindScriptDropImportZone } from '../lib/script-drop-import'
 
 const props = defineProps<{
   scripts: ScriptItem[]
@@ -53,7 +53,7 @@ const indentedFilterCategories = computed(() => {
 const emit = defineEmits<{
   select: [script: ScriptItem]
   import: []
-  imported: []
+  importPath: [sourcePath: string]
   start: [scriptId: string]
   stop: [sessionId: string]
   restart: [scriptId: string]
@@ -92,7 +92,6 @@ const sortWrapRef = ref<HTMLElement | null>(null)
 const mainRef = ref<HTMLElement | null>(null)
 const jumpPageInput = ref(String(props.listPage))
 const paginationItems = computed(() => buildPaginationItems(props.listPage, props.listTotalPages))
-const { pushToast } = useToast()
 
 let unbindDropZone: (() => void) | undefined
 
@@ -164,19 +163,11 @@ function onDocumentClick(e: MouseEvent): void {
 onMounted(() => {
   document.addEventListener('click', onDocumentClick)
   if (mainRef.value) {
-    unbindDropZone = window.autoforge.scripts.setupDropImportZone(mainRef.value, {
-      onDone: (script) => {
-        emit('imported')
-        pushToast({
-          type: 'success',
-          title: '导入成功',
-          message: script.name ? `已添加「${script.name}」` : '脚本已添加到列表'
-        })
-      },
-      onError: (message) => {
-        pushToast({ type: 'error', title: '导入失败', message })
-      }
-    })
+    unbindDropZone = bindScriptDropImportZone(
+      mainRef.value,
+      window.autoforge.scripts.getDroppedFilePath,
+      { onPath: (sourcePath) => emit('importPath', sourcePath) }
+    )
   }
 })
 onUnmounted(() => {

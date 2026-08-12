@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict'
 import AdmZip from 'adm-zip'
-import { mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, writeFileSync } from 'node:fs'
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, symlinkSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, test } from 'node:test'
@@ -57,7 +57,12 @@ test('imports a selected executable into a generated minimal package', async () 
   mkdirSync(scriptsRoot)
   ;(scriptWorkspace as unknown as { scriptsRoot: string }).scriptsRoot = scriptsRoot
   const source = root()
+  const outside = root()
+  mkdirSync(join(source, 'assets'))
   writeFileSync(join(source, 'tool.exe'), pe())
+  writeFileSync(join(source, 'assets', 'config.json'), '{}')
+  writeFileSync(join(outside, 'private.txt'), 'outside')
+  symlinkSync(outside, join(source, 'linked-dir'), 'junction')
 
   const meta = scriptWorkspace.importExecutableSource(source, source, 'tool.exe')
   const manifest = JSON.parse(
@@ -67,6 +72,8 @@ test('imports a selected executable into a generated minimal package', async () 
     autoforge: '1.0', name: 'tool', version: '1.0.0', entry: 'tool.exe',
     language: 'executable', env: [], params: []
   })
+  assert.equal(readFileSync(join(meta.workspacePath, 'assets', 'config.json'), 'utf8'), '{}')
+  assert.equal(existsSync(join(meta.workspacePath, 'linked-dir')), false)
 })
 
 test('rejects a stale selected executable without leaving a workspace', async () => {
