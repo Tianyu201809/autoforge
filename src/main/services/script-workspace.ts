@@ -4,11 +4,13 @@ import {
   cpSync,
   existsSync,
   mkdirSync,
+  lstatSync,
   readFileSync,
   readdirSync,
   renameSync,
   rmSync,
   statSync,
+  realpathSync,
   writeFileSync
 } from 'fs'
 import { basename, extname, join, relative, resolve } from 'path'
@@ -23,10 +25,15 @@ import {
   type ScriptIcon,
   type ScriptManifest
 } from '../../shared/script-contract'
-import { resolveScriptLanguage } from '../../shared/script-language'
+import {
+  inferScriptLanguageFromExtension,
+  resolveScriptLanguage
+} from '../../shared/script-language'
+import { assertExecutableParamKeys } from '../../shared/executable-environment'
 import type { CategoryDefinition, ScriptFileContent, ScriptMeta } from '../../shared/types/script'
 import { resolveCategoryForManifest } from './category-service'
 import { scriptStore } from './script-store'
+import { assertRunnableExecutable, inspectExecutable } from './executable-inspector'
 
 export { MANIFEST_FILENAME }
 
@@ -37,17 +44,35 @@ function toPosixPath(filePath: string): string {
   return filePath.replace(/\\/g, '/')
 }
 
-function resolveSafeWorkspaceFile(workspacePath: string, relativePath: string): string {
-  const normalized = toPosixPath(relativePath).replace(/^\/+/, '')
-  if (!normalized || normalized.includes('..')) {
+export function resolveSafeWorkspaceFile(workspacePath: string, relativePath: string): string {
+  const posixPath = toPosixPath(relativePath)
+  const parts = posixPath.split('/')
+  if (!posixPath || posixPath.startsWith('/') || /^[a-zA-Z]:/.test(posixPath) || parts.some((part) => part === '..')) {
     throw new Error(`非法路径: ${relativePath}`)
   }
-  const fullPath = resolve(workspacePath, normalized)
+  const fullPath = resolve(workspacePath, posixPath)
   const root = resolve(workspacePath)
-  if (!fullPath.startsWith(root)) {
+  if (fullPath !== root && !fullPath.startsWith(`${root}\\`) && !fullPath.startsWith(`${root}/`)) {
     throw new Error(`非法路径: ${relativePath}`)
   }
   return fullPath
+}
+
+export function resolveSafeExistingWorkspaceFile(workspacePath: string, relativePath: string): string {
+  const fullPath = resolveSafeWorkspaceFile(workspacePath, relativePath)
+  if (!existsSync(fullPath)) throw new Error(`入口文件不存在: ${relativePath}`)
+  const stat = lstatSync(fullPath)
+  if (stat.isSymbolicLink() || !stat.isFile()) throw new Error(`入口必须是普通文件: ${relativePath}`)
+  const rootRealPath = realpathSync(workspacePath)
+  const fileRealPath = realpathSync(fullPath)
+  if (
+    fileRealPath !== rootRealPath &&
+    !fileRealPath.startsWith(`${rootRealPath}\\`) &&
+    !fileRealPath.startsWith(`${rootRealPath}/`)
+  ) {
+    throw new Error(`非法路径: ${relativePath}`)
+  }
+  return fileRealPath
 }
 
 function isLikelyBinary(buffer: Buffer): boolean {
@@ -110,7 +135,40 @@ export class ScriptWorkspace {
     const raw = JSON.parse(readFileSync(manifestPath, UTF8))
     const result = validateManifest(raw)
     if (!result.ok) throw new Error(result.error)
-    return result.manifest
+    return this.resolveManifestLanguage(scriptDir, result.manifest)
+  }
+
+  resolveManifestLanguage(scriptDir: string, manifest: ScriptManifest): ScriptManifest {
+    const entry = manifest.entry ?? 'index.mjs'
+    const entryPath = resolveSafeExistingWorkspaceFile(scriptDir, entry)
+    if (manifest.language === 'executable') {
+      assertRunnableExecutable(entryPath)
+      if (Object.keys(manifest.dependencies ?? {}).length > 0) {
+        throw new Error('可执行程序不能声明 dependencies')
+      }
+      assertExecutableParamKeys(manifest.params ?? [])
+      return { ...manifest, language: 'executable' }
+    }
+
+    if (manifest.language === 'python' || manifest.language === 'javascript') {
+      if (inspectExecutable(entryPath)?.kind === 'executable') {
+        throw new Error(`入口文件与 language: ${manifest.language} 冲突`)
+      }
+      return manifest
+    }
+
+    const extensionLanguage = inferScriptLanguageFromExtension(entry)
+    if (extensionLanguage) return { ...manifest, language: extensionLanguage }
+    const inspection = inspectExecutable(entryPath)
+    const language = inspection?.kind === 'executable' ? 'executable' : 'javascript'
+    if (language === 'executable') {
+      assertRunnableExecutable(entryPath)
+      if (Object.keys(manifest.dependencies ?? {}).length > 0) {
+        throw new Error('可执行程序不能声明 dependencies')
+      }
+      assertExecutableParamKeys(manifest.params ?? [])
+    }
+    return { ...manifest, language }
   }
 
   validatePackageDirectory(scriptDir: string): ScriptManifest {
@@ -140,7 +198,7 @@ export class ScriptWorkspace {
       }
       const result = validateManifest(raw)
       if (!result.ok) throw new Error(result.error)
-      return result.manifest
+      return this.resolveManifestLanguage(scriptDir, result.manifest)
     }
   }
 
@@ -337,10 +395,11 @@ export class ScriptWorkspace {
   }
 
   writeManifestContent(script: ScriptMeta, content: string): void {
-    const manifestPath = join(script.workspacePath, MANIFEST_FILENAME)
-    writeFileSync(manifestPath, content, UTF8)
     const parsed = validateManifest(JSON.parse(content))
     if (!parsed.ok) throw new Error(parsed.error)
+    this.resolveManifestLanguage(script.workspacePath, parsed.manifest)
+    const manifestPath = join(script.workspacePath, MANIFEST_FILENAME)
+    writeFileSync(manifestPath, content, UTF8)
   }
 
   listWorkspaceFiles(script: ScriptMeta): string[] {
