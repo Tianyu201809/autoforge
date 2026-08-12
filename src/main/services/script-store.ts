@@ -97,6 +97,10 @@ export class ScriptStore {
     return repos.scripts.delete(id)
   }
 
+  deleteExecutableTrust(scriptId: string): void {
+    this.ensureInitialized().executableTrust.deleteForScript(scriptId)
+  }
+
   getScriptById(id: string): ScriptMeta | undefined {
     const repos = this.ensureInitialized()
     const script = repos.scripts.getById(id)

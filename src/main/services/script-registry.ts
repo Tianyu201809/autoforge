@@ -91,6 +91,7 @@ export class ScriptRegistry {
     }
 
     const workspacePath = script.workspacePath
+    scriptStore.deleteExecutableTrust(scriptId)
     const dbDeleted = scriptStore.deleteScript(scriptId)
     scriptWorkspace.deleteScript(scriptId, workspacePath)
     return dbDeleted || !scriptStore.getScriptById(scriptId)

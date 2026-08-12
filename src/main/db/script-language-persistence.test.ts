@@ -50,4 +50,8 @@ test('database persists executable language for extensionless entries', async ()
   })
 
   assert.equal(repos.scripts.getById('native-1')?.language, 'executable')
+  repos.executableTrust.grant('native-1', 'bin/tool', 'abc')
+  assert.equal(repos.executableTrust.has('native-1', 'bin/tool', 'abc'), true)
+  repos.executableTrust.deleteForScript('native-1')
+  assert.equal(repos.executableTrust.has('native-1', 'bin/tool', 'abc'), false)
 })

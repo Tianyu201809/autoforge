@@ -3,6 +3,7 @@ import { CategoryRepository } from './category-repository'
 import { ConfigRepository } from './config-repository'
 import { EnvironmentRepository } from './environment-repository'
 import { ExecutionRepository } from './execution-repository'
+import { ExecutableTrustRepository } from './executable-trust-repository'
 import { ScriptRepository } from './script-repository'
 
 export interface Repositories {
@@ -11,6 +12,7 @@ export interface Repositories {
   categories: CategoryRepository
   config: ConfigRepository
   execution: ExecutionRepository
+  executableTrust: ExecutableTrustRepository
 }
 
 export function createRepositories(db: SqliteDatabase): Repositories {
@@ -19,6 +21,7 @@ export function createRepositories(db: SqliteDatabase): Repositories {
     environments: new EnvironmentRepository(db),
     categories: new CategoryRepository(db),
     config: new ConfigRepository(db),
-    execution: new ExecutionRepository(db)
+    execution: new ExecutionRepository(db),
+    executableTrust: new ExecutableTrustRepository(db)
   }
 }
