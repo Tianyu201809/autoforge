@@ -386,7 +386,7 @@ export function registerIpcHandlers(
       const plainOptions = options
         ? (JSON.parse(JSON.stringify(options)) as typeof options)
         : undefined
-      return runner.start(scriptId, envId, plainParams, plainOptions)
+      return runner.start(scriptId, envId, plainParams, { ...plainOptions, interactive: true })
     }
   )
 

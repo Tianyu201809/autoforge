@@ -34,11 +34,24 @@ import { killPythonProcess, runPythonScript } from './python-script-runner'
 import { resolvePythonExecutable } from './python-resolver'
 import { MAX_CONCURRENT_SESSIONS_PER_SCRIPT } from '../../shared/instance-slots'
 import type { ScriptInstanceSlot } from '../../shared/types/script'
+import { buildExecutableEnvironment } from '../../shared/executable-environment'
+import {
+  ExecutableAuthorizationCancelledError,
+  type ExecutableAuthorization,
+  type ExecutableTrustService
+} from './executable-trust'
+import {
+  killExecutableProcess,
+  runExecutableScript,
+  type ExecutableRunInput
+} from './executable-script-runner'
 
 interface ActiveSession {
   session: RunSession
   abortController: AbortController
   childProcess?: ChildProcess
+  executableChild?: ChildProcess
+  executableAuthorization?: ExecutableAuthorization
   runTimeoutHandle?: ReturnType<typeof setTimeout>
   browserForRun?: ScriptMeta['browser']
 }
@@ -51,16 +64,41 @@ export type StartOptions = {
   browserOverride?: { headless?: boolean }
   /** 覆盖脚本 configByEnv（批量实例用；不写回偏好） */
   configOverride?: Record<string, string>
+  interactive?: boolean
+}
+
+export function runnerKindForScript(script: ScriptMeta): 'javascript' | 'python' | 'executable' {
+  return script.language
+}
+
+export function preflightExecutableStart<T>(
+  script: ScriptMeta,
+  interactive: boolean,
+  requireTrusted: (script: ScriptMeta) => T
+): T | undefined {
+  if (script.language !== 'executable' || interactive) return undefined
+  return requireTrusted(script)
+}
+
+interface ExecutableRunnerDependencies {
+  trust: ExecutableTrustService
+  run?: typeof runExecutableScript
+  kill?: typeof killExecutableProcess
 }
 
 export class ScriptRunnerService {
   private sessions = new Map<string, ActiveSession>()
   private getWindow: () => BrowserWindow | null
   private lifecycle: ScriptLifecycleBus
+  private executable?: ExecutableRunnerDependencies
 
-  constructor(getWindow: () => BrowserWindow | null) {
+  constructor(
+    getWindow: () => BrowserWindow | null,
+    executable?: ExecutableRunnerDependencies
+  ) {
     this.getWindow = getWindow
     this.lifecycle = new ScriptLifecycleBus(getWindow)
+    this.executable = executable
   }
 
   listSessions(): RunSession[] {
@@ -106,6 +144,14 @@ export class ScriptRunnerService {
       throw new Error(`脚本不存在: ${scriptId}`)
     }
 
+    const executableAuthorization = this.executable
+      ? preflightExecutableStart(
+          script,
+          options?.interactive === true,
+          (target) => this.executable!.trust.requireTrusted(target)
+        )
+      : undefined
+
     const resolvedEnvId = envId ?? script.defaultEnvId ?? scriptStore.getDefaultEnvironment().id
     const env = scriptStore.resolveEnvForScript(script, resolvedEnvId, options?.configOverride)
     const envError = scriptStore.validateEnvForScript(script, env)
@@ -139,7 +185,12 @@ export class ScriptRunnerService {
     }
 
     const abortController = new AbortController()
-    this.sessions.set(session.id, { session, abortController, browserForRun })
+    this.sessions.set(session.id, {
+      session,
+      abortController,
+      browserForRun,
+      executableAuthorization
+    })
     executionHistory.recordStart({
       sessionId: session.id,
       scriptId: script.id,
@@ -208,7 +259,8 @@ export class ScriptRunnerService {
         instanceSlotId: slot.id,
         instanceName: slot.name,
         browserOverride: slot.browser,
-        configOverride: slot.config
+        configOverride: slot.config,
+        interactive: false
       })
       started.push(session)
     }
@@ -231,8 +283,13 @@ export class ScriptRunnerService {
 
     this.setPhase(active.session, 'stopping', '正在停止…')
     active.abortController.abort()
-    killPythonProcess(active.childProcess)
+    if (active.executableChild) {
+      ;(this.executable?.kill ?? killExecutableProcess)(active.executableChild)
+    } else {
+      killPythonProcess(active.childProcess)
+    }
     active.childProcess = undefined
+    active.executableChild = undefined
     this.clearRunTimeout(sessionId)
 
     active.session.status = 'stopped'
@@ -254,10 +311,89 @@ export class ScriptRunnerService {
     params: Record<string, string>,
     abortController: AbortController
   ): Promise<void> {
-    if (script.language === 'python') {
+    if (runnerKindForScript(script) === 'python') {
       return this.executePythonPackage(session, script, env, params, abortController)
     }
+    if (runnerKindForScript(script) === 'executable') {
+      return this.executeExecutablePackage(session, script, env, params, abortController)
+    }
     return this.executeJsPackage(session, script, env, params, abortController)
+  }
+
+  private async executeExecutablePackage(
+    session: RunSession,
+    script: ScriptMeta,
+    env: Record<string, string>,
+    params: Record<string, string>,
+    abortController: AbortController
+  ): Promise<void> {
+    const active = (): ActiveSession | undefined => this.sessions.get(session.id)
+    const log = (level: LogLine['level'], message: string): void => {
+      this.pushLog(session.id, level, message)
+    }
+    try {
+      if (!this.executable) throw new Error('可执行程序运行器未初始化')
+      this.setPhase(session, 'validating', '校验可执行程序…')
+      let authorization = active()?.executableAuthorization
+      if (!authorization) {
+        this.setPhase(session, 'awaiting-confirmation', '等待运行授权…')
+        authorization = await this.executable.trust.authorize({
+          script,
+          interactive: true
+        })
+      }
+      this.executable.trust.assertCurrent(authorization)
+      this.setPhase(session, 'starting', '启动可执行程序…')
+      const childEnv = buildExecutableEnvironment({
+        baseEnv: process.env,
+        env,
+        params,
+        sessionId: session.id,
+        scriptId: script.id,
+        scriptDir: script.workspacePath
+      })
+      const runInput: ExecutableRunInput = {
+        entryPath: authorization.entryPath,
+        cwd: script.workspacePath,
+        env: childEnv
+      }
+      this.setPhase(session, 'running', '可执行程序运行中…')
+      this.armRunTimeout(session.id)
+      const outcome = await (this.executable.run ?? runExecutableScript)(runInput, {
+        log,
+        onPid: (pid) => {
+          session.pid = pid
+          this.broadcastSession(session)
+        },
+        onChild: (child) => {
+          const current = active()
+          if (current) current.executableChild = child
+        },
+        isAborted: () => abortController.signal.aborted
+      })
+      if (abortController.signal.aborted || outcome.aborted) {
+        this.stop(session.id)
+        return
+      }
+      session.exitCode = outcome.exitCode
+      if (outcome.ok) {
+        this.completeSession(session.id)
+        return
+      }
+      throw new Error(outcome.errorMessage ?? '可执行程序运行失败')
+    } catch (error) {
+      if (error instanceof ExecutableAuthorizationCancelledError) {
+        this.stop(session.id)
+        return
+      }
+      if (abortController.signal.aborted) {
+        this.stop(session.id)
+        return
+      }
+      const message = error instanceof Error ? error.message : String(error)
+      this.pushLog(session.id, 'ERROR', message)
+      this.failSession(session.id, message)
+    }
   }
 
   private async executeJsPackage(
@@ -619,6 +755,7 @@ function phaseLabel(phase: string): string {
   const map: Record<string, string> = {
     queued: '排队中',
     validating: '校验中',
+    'awaiting-confirmation': '等待授权',
     'installing-deps': '安装依赖',
     starting: '启动中',
     running: '运行中',

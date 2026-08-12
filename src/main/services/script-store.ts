@@ -101,6 +101,14 @@ export class ScriptStore {
     this.ensureInitialized().executableTrust.deleteForScript(scriptId)
   }
 
+  hasExecutableTrust(scriptId: string, entry: string, sha256: string): boolean {
+    return this.ensureInitialized().executableTrust.has(scriptId, entry, sha256)
+  }
+
+  grantExecutableTrust(scriptId: string, entry: string, sha256: string): void {
+    this.ensureInitialized().executableTrust.grant(scriptId, entry, sha256)
+  }
+
   getScriptById(id: string): ScriptMeta | undefined {
     const repos = this.ensureInitialized()
     const script = repos.scripts.getById(id)

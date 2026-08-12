@@ -190,7 +190,8 @@ class ControlFacade implements AutoforgeControlFacade {
   startScript(input: StartScriptInput): Promise<RunSession> {
     return this.runtime.runner.start(input.scriptId, input.envId, input.params, {
       persistParams: input.persistParams ?? false,
-      browserOverride: input.browserOverride
+      browserOverride: input.browserOverride,
+      interactive: false
     })
   }
 
