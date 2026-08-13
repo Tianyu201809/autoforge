@@ -1,10 +1,12 @@
 # 脚本包规范（autoforge.json）
 
-> 当前应用版本：**1.20.0** · 脚本清单规范：`autoforge` **1.0** · 详见 [v1.20.0 版本说明](./v1.20.0.md)
+> 当前应用版本：**1.27.0** · 脚本清单规范：`autoforge` **1.0** · 详见 [v1.27.0 版本说明](./v1.27.0.md)
 
 ## 概述
 
-Autoforge 脚本是一个**目录包**，必须包含 `autoforge.json` 清单和入口文件。入口文件必须导出 `run` 函数。
+Autoforge 脚本是一个**目录包**。导入完成后的工作区必须包含 `autoforge.json` 清单和入口文件。JavaScript 与 Python 入口实现 `run(ctx)` 契约；`language: "executable"` 的原生入口是独立程序，不导出 `run` 函数。
+
+本地导入无清单的原生单文件、目录或 ZIP 时，Autoforge 可以识别当前系统的可执行入口并自动生成最小清单。Hub 安装仍要求来源 ZIP 提供 `autoforge.json`。
 
 ## 最小示例
 
@@ -73,11 +75,14 @@ Autoforge Hub「添加到本地」等场景使用 **zip** 传递脚本包。解�
 |------|----------|
 | zip 根目录直接含 `autoforge.json` + 入口文件 | ✅ |
 | zip 内仅一层目录，该目录含 `autoforge.json` | ✅ |
-| 多顶层目录、或缺少 `autoforge.json` | ❌ |
+| 本地导入无清单 zip，且能发现当前平台原生入口 | ✅；唯一候选自动选中，多个候选手动选择 |
+| Hub 安装缺少 `autoforge.json` 的 zip | ❌ |
 
 不要把 `node_modules/`、`.venv/` 打进分发 zip；依赖由本机按清单安装。
 
-桌面端脚本卡片可直接选择“导出 ZIP”。导出器从 `entry` 递归分析静态本地依赖，只包含 `autoforge.json`、必要源码、README 和被引用资源。依赖目录、缓存、未被入口引用的运行产物、`.env`、密钥、数据库、表格及压缩包等业务数据会被强制排除。若 manifest 入口位于 `dist/` 等构建目录（例如 `dist/index.js`），入口及其静态代码依赖属于必要项目代码，可以导出，但不会因此批量包含整个构建目录。
+JavaScript 与 Python 脚本可在桌面端脚本卡片选择“导出 ZIP”。导出器从 `entry` 递归分析静态本地依赖，只包含 `autoforge.json`、必要源码、README 和被引用资源。依赖目录、缓存、未被入口引用的运行产物、`.env`、密钥、数据库、表格及压缩包等业务数据会被强制排除。若 manifest 入口位于 `dist/` 等构建目录（例如 `dist/index.js`），入口及其静态代码依赖属于必要项目代码，可以导出，但不会因此批量包含整个构建目录。
+
+`language: "executable"` 的原生程序包暂不支持导出 ZIP；界面禁用导出，主进程也会拒绝预览或导出请求。
 
 动态拼接路径读取的模板或资源无法静态识别时，可显式补充：
 
@@ -102,13 +107,13 @@ Autoforge Hub「添加到本地」等场景使用 **zip** 传递脚本包。解�
 | `description` | string | | 描述 |
 | `version` | string | | 语义化版本，默认 `1.0.0` |
 | `entry` | string | | 入口文件，默认 `index.mjs` |
-| `language` | string | | 脚本语言：`javascript`（默认）或 `python`；省略时按 entry 扩展名推断 |
+| `language` | string | | 入口类型：`javascript`（默认）、`python` 或 `executable`；省略时先按扩展名推断脚本，其他入口再按 PE/Mach-O/ELF 文件头识别 |
 | `category` | string | | 分类 key：`browser` / `local` / `scrape` / `file` / `system` |
 | `categoryLabel` | string | | 分类显示名 |
 | `icon` | string | | UI 图标 |
 | `env` | EnvVarDefinition[] | | 环境变量 schema（固定环境配置） |
 | `params` | ParamDefinition[] | | 运行业务参数 schema（每次运行可不同） |
-| `dependencies` | Record<string,string> | | 依赖：JS 脚本为 npm 包；Python 脚本为 pip 包（运行前自动安装至脚本 `.venv`） |
+| `dependencies` | Record<string,string> | | 依赖：JS 脚本为 npm 包；Python 脚本为 pip 包（运行前自动安装至脚本 `.venv`）；原生程序不得声明此字段 |
 | `browser` | `{ headless?: boolean }` | | 浏览器启动选项；`headless: true` 为无头模式，默认 `false` |
 | `export.include` | string[] | | ZIP 导出时显式补充无法静态发现的必要资源；受安全白名单约束 |
 
@@ -632,6 +637,93 @@ async def run(ctx):
 | `ctx.sdk.browser` | `await ctx.sdk.browser.launch()`，需 `dependencies` 含 `playwright`；启动参数与 JS 侧一致 |
 | `dependencies` | pip 安装至脚本目录 `.venv`；也可在设置页安装全局 Python 依赖 |
 
+## 原生可执行程序
+
+`language: "executable"` 用于直接运行当前操作系统的原生主程序。原生入口不实现 `run(ctx)`，而是由 Autoforge 作为受托管子进程启动。
+
+### 最小清单
+
+```json
+{
+  "autoforge": "1.0",
+  "name": "本地工具",
+  "version": "1.0.0",
+  "entry": "bin/tool.exe",
+  "language": "executable",
+  "env": [],
+  "params": []
+}
+```
+
+| 约束 | 说明 |
+|------|------|
+| 入口格式 | Windows PE、macOS Mach-O 或 Linux ELF 主程序；按文件头识别，不依赖扩展名 |
+| 平台 | 入口目标平台必须等于当前 `process.platform` |
+| 文件类型 | 必须是包根内的普通文件；目录、符号链接、DLL 和动态/共享库均不接受 |
+| `entry` | 单个相对路径字符串；不支持在同一清单中声明多平台入口映射 |
+| `dependencies` | 禁止声明；Autoforge 不安装 DLL、共享库、系统运行库或其他原生依赖 |
+| `browser` | 不适用；原生程序不使用 Autoforge 浏览器 SDK |
+| `export` | 原生程序包暂不支持从 Autoforge 导出 ZIP |
+
+Autoforge 会在导入和每次运行前重新校验入口文件头及目标平台。识别结果包含 CPU 架构信息，但当前版本不在启动前阻止架构不兼容的程序，具体启动错误由操作系统报告。macOS `.app` 应用包目录暂不支持。
+
+### 无清单本地导入
+
+本地单文件、目录或 ZIP 可以不包含 `autoforge.json`。Autoforge 会递归发现当前系统的原生主程序候选：
+
+1. 唯一候选自动选中。
+2. 多个候选显示相对路径、格式和文件大小，由用户单选入口。
+3. 选定后复制完整来源目录到 Autoforge 工作区，再生成最小清单。
+4. 没有候选或用户取消时不创建脚本记录，并清理临时目录。
+
+自动生成的清单使用入口文件名（移除最后一个扩展名）作为 `name`，`version` 为 `1.0.0`，`env` 与 `params` 为空数组。扫描不跟随符号链接，跳过 `.git`、`.svn`、`.venv`、`.cache`、`__pycache__`、`node_modules` 和 `release`，并限制最多检查 2,000 个文件系统条目。
+
+> 此无清单流程只适用于本地导入。Hub「添加到本地」仍要求 ZIP 根目录或唯一一层子目录中包含 `autoforge.json`。
+
+### 环境变量与运行参数
+
+原生程序不接收 Autoforge 命令行参数。清单 `env` 和 `params` 统一通过子进程环境变量传入：
+
+| 环境变量 | 值 |
+|----------|----|
+| 清单 `env` 的原始键名 | 当前环境 Profile 中解析后的字符串值 |
+| `AUTOFORGE_PARAM_<NORMALIZED_KEY>` | 单个参数值；参数键转为大写，非 ASCII 字母和数字替换为 `_` |
+| `AUTOFORGE_PARAMS_JSON` | 完整参数对象的 JSON 字符串，保留原始键名 |
+| `AUTOFORGE_SESSION_ID` | 当前运行会话 ID |
+| `AUTOFORGE_SCRIPT_ID` | 当前脚本 ID |
+| `AUTOFORGE_SCRIPT_DIR` | 导入后的脚本包根目录 |
+
+示例：参数 `order-id` 以 `AUTOFORGE_PARAM_ORDER_ID` 传入，同时保留在 `AUTOFORGE_PARAMS_JSON` 中。若两个参数键规范化后相同，例如 `order-id` 与 `order_id`，清单校验失败。
+
+平台保留变量具有最高优先级：清单 `env` 不能覆盖 `AUTOFORGE_SESSION_ID`、`AUTOFORGE_SCRIPT_ID` 或 `AUTOFORGE_SCRIPT_DIR` 的最终值。
+
+### SHA-256 运行授权
+
+原生程序以当前用户权限访问本机文件与网络，不运行在沙箱中。首次从 Autoforge 界面运行时，主进程显示程序名、入口相对路径、来源和完整 SHA-256；用户确认后才保存信任并启动。
+
+- 信任绑定脚本 ID、规范化入口路径和入口文件 SHA-256。
+- 入口字节发生变化后必须重新确认。
+- 用户确认期间入口发生变化时，本次运行失败且不保存信任。
+- 定时任务、批量运行和 MCP 属于非交互调用，不能弹窗或授予信任；它们只能运行已在 Autoforge 中手动确认且内容未变化的入口。
+- 删除脚本时清除其原生入口信任记录。
+
+### 进程与生命周期
+
+```text
+queued -> validating -> awaiting-confirmation -> starting -> running
+                                                        |-> completed
+                                                        |-> failed
+                                                        `-> stopped
+```
+
+- 使用入口绝对路径直接创建子进程，`shell: false`，工作目录为脚本包根目录。
+- stdout 以 `INFO`、stderr 以 `ERROR` 按 UTF-8 行写入执行日志。
+- 退出码 `0` 为成功；非零退出码为失败，并记录退出码和错误信息。
+- GUI 程序在窗口存活期间保持 `running`；程序退出后会话才进入终态。
+- 停止或运行超时会终止入口进程及其子进程树。
+- macOS/Linux 在授权后为入口补充当前用户执行位。
+- Windows 不隐藏 GUI 程序主窗口，Electron 等桌面应用可正常显示界面。
+
 ## 平台数据目录
 
 脚本通过 `ctx.sdk.paths.userData` / `user_data` 访问平台根目录（Windows `%APPDATA%/` 下）：
@@ -646,7 +738,8 @@ async def run(ctx):
 ## 上传方式
 
 1. **脚本包目录**：包含 `autoforge.json` 的文件夹
-2. **单文件**：`.js` / `.mjs` / `.cjs` / `.py`，会自动包装为脚本包
+2. **脚本单文件**：`.js` / `.mjs` / `.cjs` / `.py`，会自动包装为脚本包
+3. **原生程序**：有清单程序包，或无清单的当前平台可执行单文件、目录与本地 ZIP
 
 ## 示例
 
