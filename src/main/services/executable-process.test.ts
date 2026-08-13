@@ -3,7 +3,10 @@ import { mkdtempSync, rmSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { after, test } from 'node:test'
-import { runExecutableScript } from './executable-script-runner'
+import {
+  createExecutableSpawnOptions,
+  runExecutableScript
+} from './executable-script-runner'
 
 const root = mkdtempSync(join(tmpdir(), 'autoforge-executable-process-'))
 after(() => rmSync(root, { recursive: true, force: true }))
@@ -18,6 +21,20 @@ const callbacks = {
   onChild() {},
   isAborted: () => false
 }
+
+test('keeps Windows GUI executable windows visible', () => {
+  const env = { PATH: 'keep' }
+  const options = createExecutableSpawnOptions({
+    entryPath: join(root, 'tool.exe'),
+    cwd: root,
+    env
+  })
+
+  assert.equal(options.cwd, root)
+  assert.equal(options.env, env)
+  assert.equal(options.shell, false)
+  assert.equal(options.windowsHide, false)
+})
 
 test('streams stdout and stderr and returns exit code zero', async () => {
   const logs: Array<[string, string]> = []

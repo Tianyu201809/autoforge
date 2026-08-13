@@ -1,4 +1,4 @@
-import { spawn, type ChildProcess } from 'node:child_process'
+import { spawn, type ChildProcess, type SpawnOptions } from 'node:child_process'
 import { chmodSync, statSync } from 'node:fs'
 import { StringDecoder } from 'node:string_decoder'
 import type { LogLine } from '../../shared/types/script'
@@ -24,6 +24,16 @@ export interface ExecutableRunOutcome {
   signal?: NodeJS.Signals
   errorMessage?: string
   aborted?: boolean
+}
+
+export function createExecutableSpawnOptions(input: ExecutableRunInput): SpawnOptions {
+  return {
+    cwd: input.cwd,
+    env: input.env,
+    shell: false,
+    windowsHide: false,
+    detached: process.platform !== 'win32'
+  }
 }
 
 function attachLineStream(
@@ -83,13 +93,11 @@ export async function runExecutableScript(
     chmodSync(input.entryPath, mode | 0o100)
   }
 
-  const child = spawn(input.entryPath, input.argsForTest ?? [], {
-    cwd: input.cwd,
-    env: input.env,
-    shell: false,
-    windowsHide: true,
-    detached: process.platform !== 'win32'
-  })
+  const child = spawn(
+    input.entryPath,
+    input.argsForTest ?? [],
+    createExecutableSpawnOptions(input)
+  )
   callbacks.onChild(child)
   if (child.pid) callbacks.onPid(child.pid)
 
