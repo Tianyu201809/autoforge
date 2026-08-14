@@ -2,6 +2,7 @@ export type DroppedFilePathResolver = (file: File) => string
 
 export interface ScriptDropImportHandlers {
   onPath: (sourcePath: string) => void
+  onDragStateChange?: (active: boolean) => void
 }
 
 function dirname(filePath: string): string {
@@ -39,22 +40,49 @@ export function bindScriptDropImportZone(
   resolveFilePath: DroppedFilePathResolver,
   handlers: ScriptDropImportHandlers
 ): () => void {
+  let dragDepth = 0
+
+  const hasFilePayload = (event: DragEvent): boolean => {
+    const types = Array.from(event.dataTransfer?.types ?? [])
+    return types.includes('Files') || Boolean(event.dataTransfer?.files.length)
+  }
+  const clearDragState = (): void => {
+    if (dragDepth > 0) handlers.onDragStateChange?.(false)
+    dragDepth = 0
+  }
+  const onDragEnter = (event: DragEvent): void => {
+    if (!hasFilePayload(event)) return
+    event.preventDefault()
+    dragDepth += 1
+    if (dragDepth === 1) handlers.onDragStateChange?.(true)
+  }
   const onDragOver = (event: DragEvent): void => {
+    if (!hasFilePayload(event)) return
     event.preventDefault()
     if (event.dataTransfer) event.dataTransfer.dropEffect = 'copy'
+  }
+  const onDragLeave = (event: DragEvent): void => {
+    if (!hasFilePayload(event)) return
+    dragDepth = Math.max(0, dragDepth - 1)
+    if (dragDepth === 0) handlers.onDragStateChange?.(false)
   }
   const onDrop = (event: DragEvent): void => {
     event.preventDefault()
     event.stopPropagation()
+    clearDragState()
     const files = Array.from(event.dataTransfer?.files ?? [])
     const sourcePath = resolveDropImportPath(files.map(resolveFilePath))
     if (sourcePath) handlers.onPath(sourcePath)
   }
 
+  element.addEventListener('dragenter', onDragEnter)
   element.addEventListener('dragover', onDragOver)
+  element.addEventListener('dragleave', onDragLeave)
   element.addEventListener('drop', onDrop)
   return () => {
+    element.removeEventListener('dragenter', onDragEnter)
     element.removeEventListener('dragover', onDragOver)
+    element.removeEventListener('dragleave', onDragLeave)
     element.removeEventListener('drop', onDrop)
   }
 }

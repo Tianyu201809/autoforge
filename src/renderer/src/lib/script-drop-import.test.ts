@@ -34,3 +34,35 @@ test('binds drop events in the renderer and forwards the resolved path', () => {
   unbind()
   assert.equal(listeners.size, 0)
 })
+
+test('tracks nested file drag events and clears state after drop', () => {
+  const listeners = new Map<string, EventListener>()
+  const states: boolean[] = []
+  const element = {
+    addEventListener(name: string, listener: EventListener) { listeners.set(name, listener) },
+    removeEventListener(name: string) { listeners.delete(name) }
+  } as unknown as HTMLElement
+  const file = { name: 'script' } as File
+  const event = {
+    dataTransfer: { files: [file], types: ['Files'] },
+    preventDefault() {},
+    stopPropagation() {}
+  } as unknown as DragEvent
+
+  const unbind = bindScriptDropImportZone(
+    element,
+    () => 'C:\\scripts\\script',
+    {
+      onPath() {},
+      onDragStateChange: (active) => states.push(active)
+    }
+  )
+
+  listeners.get('dragenter')!(event)
+  listeners.get('dragenter')!(event)
+  listeners.get('dragleave')!(event)
+  listeners.get('drop')!(event)
+
+  assert.deepEqual(states, [true, false])
+  unbind()
+})
