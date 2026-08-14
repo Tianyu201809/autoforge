@@ -13,7 +13,7 @@
 - Keep the existing default skins: `forge` for dark mode and `sand` for light mode.
 - Store the selected skin under the existing `autoforge-skin` key.
 - Use `graphite` for the dark skin and `snow` for the light skin; display them as “石墨” and “净白”.
-- Keep the main UI monochrome, with only low-saturation semantic status and syntax colors.
+- Keep the application chrome and card surfaces monochrome; preserve category icons, category labels, language badges, sidebar category dots, and low-saturation semantic colors.
 - Do not add dependencies, alter application layout, or theme the floating ball.
 - Do not change the appearance of the six existing skins.
 
@@ -529,6 +529,7 @@ Select “石墨” in Settings > 窗口与外观. Inspect the main list, detail
 
 - Main surfaces are neutral gray only.
 - Active controls use light-on-dark inversion without gradients or glow.
+- Card category icons, category labels, language badges, and sidebar category dots retain their existing identity colors.
 - Status and syntax colors are subdued but distinguishable.
 - The four-column picker has no clipping or text overlap.
 
