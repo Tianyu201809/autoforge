@@ -6,7 +6,9 @@ Align top-level category rows with the category heading while retaining indentat
 
 ## Layout
 
-The category tree list container will no longer offset its rows to compensate for a scrollbar. A top-level category row will therefore begin on the same left edge as the category heading. `CategoryTreeNodes` continues to calculate child padding from its existing `depth * 12px` rule, preserving the current hierarchy treatment.
+The alignment target is the category dot, not only the row boundary. Each top-level category dot will begin on the same left edge as the category heading. `CategoryTreeNodes` will remove the fixed root padding and will render an expansion control only for categories that have children. That control is positioned to the left of the dot, so it cannot shift the category label.
+
+Child categories retain the existing `depth * 12px` indentation. The expansion control remains available for parent categories and retains its current toggle behavior.
 
 ## Category Management Control
 
@@ -14,4 +16,4 @@ The existing category-management button keeps its position, tooltip, color, dime
 
 ## Scope And Verification
 
-Only the sidebar category presentation changes. Category selection, expand/collapse, context-menu actions, and category management behavior remain unchanged. A focused source assertion will guard the alignment container classes and pencil icon; lint and a production build will confirm the renderer still compiles.
+Only the sidebar category presentation changes. Category selection, expand/collapse, context-menu actions, and category management behavior remain unchanged. Focused source assertions will guard the root alignment, child indentation, conditional expansion control, and pencil icon; lint and a production build will confirm the renderer still compiles.
