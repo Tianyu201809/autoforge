@@ -1,7 +1,15 @@
 import { computed, readonly, ref } from 'vue'
 
 export type ColorMode = 'dark' | 'light'
-export type SkinId = 'forge' | 'obsidian' | 'forest' | 'sand' | 'ivory' | 'blossom'
+export type SkinId =
+  | 'forge'
+  | 'obsidian'
+  | 'forest'
+  | 'graphite'
+  | 'sand'
+  | 'ivory'
+  | 'blossom'
+  | 'snow'
 
 /** @deprecated 兼容旧引用，等同于 SkinId */
 export type ThemeId = SkinId
@@ -38,6 +46,13 @@ export const SKIN_PRESETS: SkinPreset[] = [
     preview: { base: '#f0faf5', panel: '#f5fdf9', accent: '#059669' }
   },
   {
+    id: 'graphite',
+    name: '石墨',
+    tagline: '近黑灰阶，克制专注',
+    mode: 'dark',
+    preview: { base: '#111110', panel: '#20201f', accent: '#e7e7e2' }
+  },
+  {
     id: 'sand',
     name: '暖纸',
     tagline: '砂纸米色，温和书写',
@@ -57,6 +72,13 @@ export const SKIN_PRESETS: SkinPreset[] = [
     tagline: '淡粉柔和，轻盈界面',
     mode: 'light',
     preview: { base: '#faf5f5', panel: '#fdf8f8', accent: '#e11d48' }
+  },
+  {
+    id: 'snow',
+    name: '净白',
+    tagline: '纸白墨色，清晰纯粹',
+    mode: 'light',
+    preview: { base: '#f7f7f4', panel: '#ffffff', accent: '#1c1c1b' }
   }
 ]
 
@@ -64,13 +86,15 @@ const SKIN_STORAGE_KEY = 'autoforge-skin'
 const LEGACY_THEME_KEYS = ['autoforge-theme', 'scriptbox-theme'] as const
 
 /** 深浅模式切换时，同系列皮肤成对切换 */
-const SKIN_PAIRS: Record<SkinId, SkinId> = {
+export const SKIN_PAIRS: Record<SkinId, SkinId> = {
   forge: 'sand',
   sand: 'forge',
   obsidian: 'ivory',
   ivory: 'obsidian',
   forest: 'blossom',
-  blossom: 'forest'
+  blossom: 'forest',
+  graphite: 'snow',
+  snow: 'graphite'
 }
 
 const DEFAULT_SKIN: Record<ColorMode, SkinId> = {
