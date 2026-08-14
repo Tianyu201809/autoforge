@@ -273,7 +273,7 @@ onUnmounted(() => {
           <Pencil class="w-3.5 h-3.5" :stroke-width="1.5" />
         </button>
       </div>
-      <div class="flex-1 min-h-0 overflow-y-auto overscroll-contain">
+      <div class="flex-1 min-h-0 overflow-y-auto overscroll-contain -mx-1">
         <CategoryTreeList
           :items="categories"
           :active-key="activeCategoryKey ?? null"

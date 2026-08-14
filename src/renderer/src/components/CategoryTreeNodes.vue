@@ -33,14 +33,14 @@ export default {
           ? 'sb-category-active sb-text-primary font-medium'
           : 'sb-text-muted hover:sb-text-secondary sb-bg-hover'
       "
-      :style="{ paddingLeft: `${depth * 12}px`, paddingRight: '8px' }"
+      :style="{ paddingLeft: `${4 + depth * 12}px`, paddingRight: '8px' }"
       @click="emit('select', node.category.key)"
       @contextmenu="emit('context', node.category, $event)"
     >
       <span
         v-if="node.children.length"
         class="absolute w-3.5 h-3.5 flex items-center justify-center"
-        :style="{ left: `${depth * 12 - 14}px` }"
+        :style="{ left: `${depth * 12 - 10}px` }"
         @click="emit('toggle', node.category.id, $event)"
       >
         <ChevronDown
