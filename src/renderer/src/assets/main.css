@@ -279,49 +279,49 @@ body {
 }
 
 .detail-panel-run-toggle.is-idle {
-  color: #34d399;
+  color: var(--sb-status-success, #34d399);
   background: linear-gradient(
     180deg,
-    color-mix(in srgb, #34d399 16%, var(--sb-bg-panel)) 0%,
-    color-mix(in srgb, #34d399 8%, var(--sb-bg-inset)) 100%
+    color-mix(in srgb, var(--sb-status-success, #34d399) 16%, var(--sb-bg-panel)) 0%,
+    color-mix(in srgb, var(--sb-status-success, #34d399) 8%, var(--sb-bg-inset)) 100%
   );
-  border-color: color-mix(in srgb, #34d399 28%, var(--sb-border-subtle));
+  border-color: color-mix(in srgb, var(--sb-status-success, #34d399) 28%, var(--sb-border-subtle));
   box-shadow:
     inset 0 1px 0 color-mix(in srgb, white 22%, transparent),
-    0 2px 6px color-mix(in srgb, #34d399 14%, transparent);
+    0 2px 6px color-mix(in srgb, var(--sb-status-success, #34d399) 14%, transparent);
 }
 
 .detail-panel-run-toggle.is-idle:hover {
-  color: #6ee7b7;
+  color: var(--sb-status-success-hover, #6ee7b7);
   background: linear-gradient(
     180deg,
-    color-mix(in srgb, #34d399 24%, var(--sb-bg-panel)) 0%,
-    color-mix(in srgb, #34d399 12%, var(--sb-bg-inset)) 100%
+    color-mix(in srgb, var(--sb-status-success, #34d399) 24%, var(--sb-bg-panel)) 0%,
+    color-mix(in srgb, var(--sb-status-success, #34d399) 12%, var(--sb-bg-inset)) 100%
   );
-  border-color: color-mix(in srgb, #34d399 38%, var(--sb-border-subtle));
+  border-color: color-mix(in srgb, var(--sb-status-success, #34d399) 38%, var(--sb-border-subtle));
 }
 
 .detail-panel-run-toggle.is-running {
-  color: #f87171;
+  color: var(--sb-status-error, #f87171);
   background: linear-gradient(
     180deg,
-    color-mix(in srgb, #f87171 16%, var(--sb-bg-panel)) 0%,
-    color-mix(in srgb, #f87171 8%, var(--sb-bg-inset)) 100%
+    color-mix(in srgb, var(--sb-status-error, #f87171) 16%, var(--sb-bg-panel)) 0%,
+    color-mix(in srgb, var(--sb-status-error, #f87171) 8%, var(--sb-bg-inset)) 100%
   );
-  border-color: color-mix(in srgb, #f87171 28%, var(--sb-border-subtle));
+  border-color: color-mix(in srgb, var(--sb-status-error, #f87171) 28%, var(--sb-border-subtle));
   box-shadow:
     inset 0 1px 0 color-mix(in srgb, white 18%, transparent),
-    0 2px 6px color-mix(in srgb, #f87171 14%, transparent);
+    0 2px 6px color-mix(in srgb, var(--sb-status-error, #f87171) 14%, transparent);
 }
 
 .detail-panel-run-toggle.is-running:hover {
-  color: #fca5a5;
+  color: var(--sb-status-error-hover, #fca5a5);
   background: linear-gradient(
     180deg,
-    color-mix(in srgb, #f87171 24%, var(--sb-bg-panel)) 0%,
-    color-mix(in srgb, #f87171 12%, var(--sb-bg-inset)) 100%
+    color-mix(in srgb, var(--sb-status-error, #f87171) 24%, var(--sb-bg-panel)) 0%,
+    color-mix(in srgb, var(--sb-status-error, #f87171) 12%, var(--sb-bg-inset)) 100%
   );
-  border-color: color-mix(in srgb, #f87171 38%, var(--sb-border-subtle));
+  border-color: color-mix(in srgb, var(--sb-status-error, #f87171) 38%, var(--sb-border-subtle));
 }
 
 .detail-panel-close {
@@ -349,33 +349,33 @@ body {
 .detail-panel-status.is-running {
   background: linear-gradient(
     90deg,
-    color-mix(in srgb, #34d399 10%, var(--sb-bg-panel)) 0%,
-    color-mix(in srgb, #34d399 4%, var(--sb-bg-panel)) 100%
+    color-mix(in srgb, var(--sb-status-success, #34d399) 10%, var(--sb-bg-panel)) 0%,
+    color-mix(in srgb, var(--sb-status-success, #34d399) 4%, var(--sb-bg-panel)) 100%
   );
-  box-shadow: inset 3px 0 0 color-mix(in srgb, #34d399 65%, transparent);
+  box-shadow: inset 3px 0 0 color-mix(in srgb, var(--sb-status-success, #34d399) 65%, transparent);
 }
 
 .detail-panel-status.is-save-success {
   background: linear-gradient(
     90deg,
-    color-mix(in srgb, #34d399 10%, var(--sb-bg-panel)) 0%,
-    color-mix(in srgb, #34d399 4%, var(--sb-bg-panel)) 100%
+    color-mix(in srgb, var(--sb-status-success, #34d399) 10%, var(--sb-bg-panel)) 0%,
+    color-mix(in srgb, var(--sb-status-success, #34d399) 4%, var(--sb-bg-panel)) 100%
   );
-  box-shadow: inset 3px 0 0 color-mix(in srgb, #34d399 65%, transparent);
+  box-shadow: inset 3px 0 0 color-mix(in srgb, var(--sb-status-success, #34d399) 65%, transparent);
 }
 
 .detail-panel-status.is-save-success .detail-panel-status-icon {
-  background: color-mix(in srgb, #34d399 12%, var(--sb-bg-inset));
-  border-color: color-mix(in srgb, #34d399 22%, var(--sb-border-subtle));
+  background: color-mix(in srgb, var(--sb-status-success, #34d399) 12%, var(--sb-bg-inset));
+  border-color: color-mix(in srgb, var(--sb-status-success, #34d399) 22%, var(--sb-border-subtle));
 }
 
 .detail-panel-status.is-error {
   background: linear-gradient(
     90deg,
-    color-mix(in srgb, #f87171 10%, var(--sb-bg-panel)) 0%,
-    color-mix(in srgb, #f87171 4%, var(--sb-bg-panel)) 100%
+    color-mix(in srgb, var(--sb-status-error, #f87171) 10%, var(--sb-bg-panel)) 0%,
+    color-mix(in srgb, var(--sb-status-error, #f87171) 4%, var(--sb-bg-panel)) 100%
   );
-  box-shadow: inset 3px 0 0 color-mix(in srgb, #f87171 55%, transparent);
+  box-shadow: inset 3px 0 0 color-mix(in srgb, var(--sb-status-error, #f87171) 55%, transparent);
 }
 
 .detail-panel-status.is-idle {
@@ -394,13 +394,13 @@ body {
 }
 
 .detail-panel-status.is-running .detail-panel-status-icon {
-  background: color-mix(in srgb, #34d399 12%, var(--sb-bg-inset));
-  border-color: color-mix(in srgb, #34d399 22%, var(--sb-border-subtle));
+  background: color-mix(in srgb, var(--sb-status-success, #34d399) 12%, var(--sb-bg-inset));
+  border-color: color-mix(in srgb, var(--sb-status-success, #34d399) 22%, var(--sb-border-subtle));
 }
 
 .detail-panel-status.is-error .detail-panel-status-icon {
-  background: color-mix(in srgb, #f87171 12%, var(--sb-bg-inset));
-  border-color: color-mix(in srgb, #f87171 22%, var(--sb-border-subtle));
+  background: color-mix(in srgb, var(--sb-status-error, #f87171) 12%, var(--sb-bg-inset));
+  border-color: color-mix(in srgb, var(--sb-status-error, #f87171) 22%, var(--sb-border-subtle));
 }
 
 /* 底部终端面板 — 与编辑器 / 面板同色系 */
@@ -650,7 +650,7 @@ body {
 }
 
 .terminal-log-level-error {
-  color: #ef4444;
+  color: var(--sb-status-error, #ef4444);
 }
 
 .terminal-log-progress {
@@ -658,7 +658,7 @@ body {
 }
 
 [data-theme='dark'] .terminal-log-level-error {
-  color: #f87171;
+  color: var(--sb-status-error, #f87171);
 }
 
 .terminal-sidebar {

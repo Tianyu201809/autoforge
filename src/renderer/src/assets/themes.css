@@ -356,6 +356,134 @@
   --sb-hl-key: #881337;
 }
 
+/* ── 石墨（深色黑白）── */
+[data-theme='dark'][data-skin='graphite'] {
+  color-scheme: dark;
+
+  --sb-bg-base: #111110;
+  --sb-bg-panel: #151514;
+  --sb-bg-surface: rgba(255, 255, 255, 0.035);
+  --sb-bg-elevated: #20201f;
+  --sb-bg-input: #1b1b1a;
+  --sb-bg-card: #191918;
+  --sb-bg-card-hover: #232321;
+  --sb-bg-log: #0d0d0c;
+  --sb-bg-hover: rgba(255, 255, 255, 0.07);
+  --sb-bg-muted: rgba(255, 255, 255, 0.045);
+  --sb-bg-inset: rgba(255, 255, 255, 0.08);
+
+  --sb-text-primary: #f2f2ef;
+  --sb-text-secondary: #c7c7c2;
+  --sb-text-muted: #969691;
+  --sb-text-faint: #676763;
+  --sb-text-label: #deded9;
+  --sb-text-inverse: #111110;
+
+  --sb-border: #545450;
+  --sb-border-subtle: #363633;
+  --sb-border-input: #62625d;
+
+  --sb-accent-bg: #e7e7e2;
+  --sb-accent-solid: #e7e7e2;
+  --sb-accent-text: #111110;
+  --sb-accent-hover: #ffffff;
+
+  --sb-titlebar: rgba(17, 17, 16, 0.94);
+  --sb-logo-bg: #edede9;
+  --sb-logo-text: #111110;
+  --sb-ring: #a8a8a2;
+
+  --sb-grain-opacity: 0;
+  --sb-glow: transparent;
+
+  --sb-editor-bg: #0f0f0e;
+  --sb-editor-toolbar: #151514;
+  --sb-editor-gutter: #121211;
+  --sb-editor-gutter-text: #5d5d59;
+  --sb-editor-gutter-active: #b6b6b0;
+  --sb-editor-line-active: rgba(255, 255, 255, 0.045);
+  --sb-editor-badge: #232321;
+  --sb-editor-text: #d2d2cd;
+  --sb-editor-caret: #ffffff;
+  --sb-editor-selection-bg: rgba(255, 255, 255, 0.15);
+  --sb-hl-keyword: #c8b88c;
+  --sb-hl-string: #91ad96;
+  --sb-hl-comment: #676763;
+  --sb-hl-number: #b89b87;
+  --sb-hl-boolean: #a49eb8;
+  --sb-hl-fn: #92a9b3;
+  --sb-hl-key: #beb89d;
+
+  --sb-status-success: #7f9f87;
+  --sb-status-success-hover: #9ab5a0;
+  --sb-status-error: #b77f7f;
+  --sb-status-error-hover: #c99a9a;
+}
+
+/* ── 净白（浅色黑白）── */
+[data-theme='light'][data-skin='snow'] {
+  color-scheme: light;
+
+  --sb-bg-base: #f7f7f4;
+  --sb-bg-panel: #fbfbf9;
+  --sb-bg-surface: rgba(255, 255, 255, 0.86);
+  --sb-bg-elevated: #ffffff;
+  --sb-bg-input: #ffffff;
+  --sb-bg-card: rgba(255, 255, 255, 0.92);
+  --sb-bg-card-hover: #ffffff;
+  --sb-bg-log: #ecece8;
+  --sb-bg-hover: rgba(17, 17, 16, 0.055);
+  --sb-bg-muted: rgba(17, 17, 16, 0.035);
+  --sb-bg-inset: rgba(17, 17, 16, 0.05);
+
+  --sb-text-primary: #171716;
+  --sb-text-secondary: #4b4b48;
+  --sb-text-muted: #73736f;
+  --sb-text-faint: #a1a19b;
+  --sb-text-label: #292927;
+  --sb-text-inverse: #ffffff;
+
+  --sb-border: #b7b7b1;
+  --sb-border-subtle: #d4d4ce;
+  --sb-border-input: #9f9f99;
+
+  --sb-accent-bg: #1c1c1b;
+  --sb-accent-solid: #1c1c1b;
+  --sb-accent-text: #ffffff;
+  --sb-accent-hover: #000000;
+
+  --sb-titlebar: rgba(251, 251, 249, 0.94);
+  --sb-logo-bg: #1c1c1b;
+  --sb-logo-text: #ffffff;
+  --sb-ring: #777772;
+
+  --sb-grain-opacity: 0;
+  --sb-glow: transparent;
+
+  --sb-editor-bg: #f4f4f1;
+  --sb-editor-toolbar: #ecece8;
+  --sb-editor-gutter: #efefeb;
+  --sb-editor-gutter-text: #a1a19b;
+  --sb-editor-gutter-active: #555551;
+  --sb-editor-line-active: rgba(17, 17, 16, 0.045);
+  --sb-editor-badge: rgba(17, 17, 16, 0.06);
+  --sb-editor-text: #383836;
+  --sb-editor-caret: #000000;
+  --sb-editor-selection-bg: rgba(17, 17, 16, 0.13);
+  --sb-hl-keyword: #75653e;
+  --sb-hl-string: #52705a;
+  --sb-hl-comment: #969691;
+  --sb-hl-number: #805e49;
+  --sb-hl-boolean: #655f7c;
+  --sb-hl-fn: #4f6871;
+  --sb-hl-key: #6d6748;
+
+  --sb-status-success: #58745f;
+  --sb-status-success-hover: #405e48;
+  --sb-status-error: #915f5f;
+  --sb-status-error-hover: #774747;
+}
+
 /* 终端变量 — 各皮肤共用结构 */
 [data-theme='dark'] {
   --sb-terminal-bg: var(--sb-editor-bg);
