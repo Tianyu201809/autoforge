@@ -18,6 +18,10 @@ const SORT_BY_STORAGE_KEY = 'scriptSortBy'
 const SORT_ORDER_STORAGE_KEY = 'scriptSortOrder'
 const LIST_PAGE_SIZE = 12
 
+type ScriptImportOptions = {
+  onBeforeExecutableSelection?: () => void
+}
+
 function readStoredSortBy(): ScriptSortBy {
   const stored = localStorage.getItem(SORT_BY_STORAGE_KEY)
   if (stored === 'name' || stored === 'recentRun' || stored === 'importedAt') return stored
@@ -213,11 +217,12 @@ async function importScript(): Promise<void> {
   await importFromPath(sourcePath)
 }
 
-async function importFromPath(sourcePath: string): Promise<void> {
+async function importFromPath(sourcePath: string, options: ScriptImportOptions = {}): Promise<void> {
   try {
     const inspection = await window.autoforge.scripts.inspectImport(sourcePath)
     let selectedEntry = inspection.kind === 'ready' ? inspection.candidate?.entry : undefined
     if (inspection.kind === 'select-executable') {
+      options.onBeforeExecutableSelection?.()
       selectedEntry = (await chooseExecutableEntry(inspection.candidates)) ?? undefined
       if (!selectedEntry) return
     }

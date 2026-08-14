@@ -112,6 +112,7 @@ const logConsoleMode = ref<LogConsoleDisplayMode>('hidden')
 const logConsoleActiveSessionId = ref<string | undefined>()
 const trackedSessionIds = ref<string[]>([])
 const terminalDetached = ref(false)
+const dropImporting = ref(false)
 
 const selectedScript = computed(
   () => filteredScripts.value.find((s) => s.id === selectedScriptId.value) ?? null
@@ -276,6 +277,19 @@ async function handleStart(scriptId: string): Promise<void> {
     openLogConsoleNormal()
   }
   await refresh()
+}
+
+async function handleDroppedImport(sourcePath: string): Promise<void> {
+  dropImporting.value = true
+  try {
+    await importFromPath(sourcePath, {
+      onBeforeExecutableSelection: () => {
+        dropImporting.value = false
+      }
+    })
+  } finally {
+    dropImporting.value = false
+  }
 }
 
 function handleCloseTerminal(sessionId: string): void {
@@ -461,9 +475,10 @@ onUnmounted(() => {
               :category-definitions="categoryDefinitions"
               :sort-by="sortBy"
               :sort-order="sortOrder"
+              :drop-importing="dropImporting"
               @select="selectScript($event)"
               @import="importScript"
-              @import-path="importFromPath"
+              @import-path="handleDroppedImport"
               @start="(id) => void handleStart(id)"
               @stop="(id) => runner.stop(id).then(() => refresh())"
               @restart="(id) => runner.restart(id).then(() => refresh())"
