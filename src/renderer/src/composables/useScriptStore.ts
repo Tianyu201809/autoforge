@@ -20,6 +20,7 @@ const LIST_PAGE_SIZE = 12
 
 type ScriptImportOptions = {
   onBeforeExecutableSelection?: () => void
+  categoryKey?: string
 }
 
 function readStoredSortBy(): ScriptSortBy {
@@ -217,25 +218,31 @@ async function importScript(): Promise<void> {
   await importFromPath(sourcePath)
 }
 
-async function importFromPath(sourcePath: string, options: ScriptImportOptions = {}): Promise<void> {
+async function importFromPath(sourcePath: string, options: ScriptImportOptions = {}): Promise<ScriptItem | null> {
   try {
     const inspection = await window.autoforge.scripts.inspectImport(sourcePath)
     let selectedEntry = inspection.kind === 'ready' ? inspection.candidate?.entry : undefined
     if (inspection.kind === 'select-executable') {
       options.onBeforeExecutableSelection?.()
       selectedEntry = (await chooseExecutableEntry(inspection.candidates)) ?? undefined
-      if (!selectedEntry) return
+      if (!selectedEntry) return null
     }
     const imported = await window.autoforge.scripts.import(sourcePath, selectedEntry)
+    const categorized = options.categoryKey === undefined
+      ? imported
+      : await window.autoforge.scripts.updateMeta(imported.id, { category: options.categoryKey })
+    if (!categorized) throw new Error('导入成功，但未能设置脚本分类')
     await refresh()
     pushToast({
       type: 'success',
       title: '导入成功',
-      message: imported.name ? `已添加「${imported.name}」` : '脚本已添加到列表'
+      message: categorized.name ? `已添加「${categorized.name}」` : '脚本已添加到列表'
     })
+    return categorized
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error)
     pushToast({ type: 'error', title: '导入失败', message })
+    return null
   }
 }
 
