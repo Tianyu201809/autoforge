@@ -9,8 +9,10 @@ import {
   ChevronRight,
   Columns2,
   Columns3,
+  LoaderCircle,
   Plus,
   SlidersHorizontal,
+  Upload,
   X
 } from 'lucide-vue-next'
 import type { CategoryDefinition, ScriptItem, ScriptListFilter, ScriptSortBy, ScriptSortOrder } from '../../../shared/types/script'
@@ -31,6 +33,7 @@ const props = defineProps<{
   categoryDefinitions: CategoryDefinition[]
   sortBy: ScriptSortBy
   sortOrder: ScriptSortOrder
+  dropImporting: boolean
 }>()
 
 const indentedFilterCategories = computed(() => {
@@ -90,6 +93,7 @@ const sortOpen = ref(false)
 const filterWrapRef = ref<HTMLElement | null>(null)
 const sortWrapRef = ref<HTMLElement | null>(null)
 const mainRef = ref<HTMLElement | null>(null)
+const dropActive = ref(false)
 const jumpPageInput = ref(String(props.listPage))
 const paginationItems = computed(() => buildPaginationItems(props.listPage, props.listTotalPages))
 
@@ -166,7 +170,10 @@ onMounted(() => {
     unbindDropZone = bindScriptDropImportZone(
       mainRef.value,
       window.autoforge.scripts.getDroppedFilePath,
-      { onPath: (sourcePath) => emit('importPath', sourcePath) }
+      {
+        onPath: (sourcePath) => emit('importPath', sourcePath),
+        onDragStateChange: (active) => (dropActive.value = active)
+      }
     )
   }
 })
@@ -177,7 +184,7 @@ onUnmounted(() => {
 </script>
 
 <template>
-  <main ref="mainRef" class="@container flex-1 flex flex-col min-w-0 min-h-0 overflow-hidden sb-bg-base">
+  <main ref="mainRef" class="@container relative flex-1 flex flex-col min-w-0 min-h-0 overflow-hidden sb-bg-base">
     <div class="flex-shrink-0 flex flex-col gap-3 px-5 py-3 border-b sb-border-subtle @lg:flex-row @lg:items-center @lg:justify-between">
       <div class="min-w-0">
         <h1 class="text-xl font-semibold sb-text-primary tracking-tight truncate">{{ title ?? '全部脚本' }}</h1>
@@ -461,6 +468,37 @@ onUnmounted(() => {
             跳转
           </button>
         </form>
+      </div>
+    </div>
+
+    <div
+      v-if="dropActive || dropImporting"
+      class="absolute inset-0 z-40 flex items-center justify-center bg-[color-mix(in_srgb,var(--sb-bg-base)_82%,transparent)] p-5 backdrop-blur-[5px]"
+      role="status"
+      aria-live="polite"
+      aria-atomic="true"
+    >
+      <div
+        class="w-full max-w-sm rounded-lg border bg-[var(--sb-bg-panel)] px-7 py-8 text-center shadow-2xl"
+        :style="{
+          borderColor: 'color-mix(in srgb, var(--sb-accent-solid) 72%, var(--sb-border))',
+          boxShadow: '0 0 0 5px color-mix(in srgb, var(--sb-accent-solid) 12%, transparent), 0 24px 48px rgba(0, 0, 0, 0.28)'
+        }"
+      >
+        <template v-if="dropImporting">
+          <div class="mx-auto mb-4 flex h-11 w-11 items-center justify-center rounded-lg bg-[color-mix(in_srgb,var(--sb-accent-solid)_14%,transparent)]">
+            <LoaderCircle class="h-5 w-5 animate-spin text-[var(--sb-accent-solid)]" :stroke-width="1.8" />
+          </div>
+          <p class="text-[15px] font-semibold sb-text-primary">正在上传脚本</p>
+          <p class="mt-2 text-[12px] sb-text-muted">正在检查并导入文件，请稍候</p>
+        </template>
+        <template v-else>
+          <div class="mx-auto mb-4 flex h-11 w-11 items-center justify-center rounded-lg bg-[color-mix(in_srgb,var(--sb-accent-solid)_14%,transparent)]">
+            <Upload class="h-5 w-5 text-[var(--sb-accent-solid)]" :stroke-width="1.8" />
+          </div>
+          <p class="text-[15px] font-semibold sb-text-primary">松开鼠标上传脚本</p>
+          <p class="mt-2 text-[12px] sb-text-muted">支持脚本文件夹与压缩包</p>
+        </template>
       </div>
     </div>
   </main>
