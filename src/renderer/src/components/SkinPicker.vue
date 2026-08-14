@@ -23,7 +23,7 @@ function previewBackground(item: SkinPreset): string {
   <div class="skin-picker space-y-4">
     <div class="space-y-2">
       <p class="text-[11px] font-semibold tracking-wider uppercase sb-text-faint">深色皮肤</p>
-      <div class="grid grid-cols-3 gap-2">
+      <div class="skin-picker__grid">
         <button
           v-for="item in darkSkins"
           :key="item.id"
@@ -55,7 +55,7 @@ function previewBackground(item: SkinPreset): string {
 
     <div class="space-y-2">
       <p class="text-[11px] font-semibold tracking-wider uppercase sb-text-faint">浅色皮肤</p>
-      <div class="grid grid-cols-3 gap-2">
+      <div class="skin-picker__grid">
         <button
           v-for="item in lightSkins"
           :key="item.id"
@@ -88,6 +88,12 @@ function previewBackground(item: SkinPreset): string {
 </template>
 
 <style scoped>
+.skin-picker__grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 0.5rem;
+}
+
 .skin-card {
   position: relative;
   display: flex;
@@ -166,5 +172,11 @@ function previewBackground(item: SkinPreset): string {
   border-radius: 9999px;
   background: var(--sb-accent-solid);
   color: var(--sb-accent-text);
+}
+
+@media (max-width: 760px) {
+  .skin-picker__grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
 }
 </style>

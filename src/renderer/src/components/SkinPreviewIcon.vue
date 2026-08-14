@@ -104,6 +104,42 @@ defineProps<{
     <rect x="38" y="30" width="16" height="2" rx="0.5" fill="#93c5fd" opacity="0.5" />
   </svg>
 
+  <!-- 石墨：近黑工作台线框与反色焦点 -->
+  <svg
+    v-else-if="skinId === 'graphite'"
+    class="skin-preview-icon"
+    viewBox="0 0 72 52"
+    fill="none"
+    xmlns="http://www.w3.org/2000/svg"
+    aria-hidden="true"
+  >
+    <rect x="11" y="7" width="50" height="38" rx="2" fill="#191918" stroke="#545450" stroke-width="0.8" />
+    <path d="M11 16 H61" stroke="#363633" />
+    <path d="M25 16 V45" stroke="#363633" />
+    <rect x="29" y="21" width="25" height="7" rx="1" fill="#232321" stroke="#676763" stroke-width="0.7" />
+    <rect x="29" y="32" width="25" height="7" rx="1" fill="#20201f" stroke="#545450" stroke-width="0.7" />
+    <path d="M15 21 H21 M15 27 H21 M15 33 H21" stroke="#969691" stroke-width="1.2" stroke-linecap="round" />
+    <rect x="48" y="10" width="8" height="3" rx="0.5" fill="#e7e7e2" />
+  </svg>
+
+  <!-- 净白：纸白工作台线框与墨色焦点 -->
+  <svg
+    v-else-if="skinId === 'snow'"
+    class="skin-preview-icon"
+    viewBox="0 0 72 52"
+    fill="none"
+    xmlns="http://www.w3.org/2000/svg"
+    aria-hidden="true"
+  >
+    <rect x="11" y="7" width="50" height="38" rx="2" fill="#ffffff" stroke="#b7b7b1" stroke-width="0.8" />
+    <path d="M11 16 H61" stroke="#d4d4ce" />
+    <path d="M25 16 V45" stroke="#d4d4ce" />
+    <rect x="29" y="21" width="25" height="7" rx="1" fill="#f7f7f4" stroke="#b7b7b1" stroke-width="0.7" />
+    <rect x="29" y="32" width="25" height="7" rx="1" fill="#fbfbf9" stroke="#d4d4ce" stroke-width="0.7" />
+    <path d="M15 21 H21 M15 27 H21 M15 33 H21" stroke="#73736f" stroke-width="1.2" stroke-linecap="round" />
+    <rect x="48" y="10" width="8" height="3" rx="0.5" fill="#1c1c1b" />
+  </svg>
+
   <!-- 浅樱：飘落花瓣与柔和粉调 -->
   <svg
     v-else-if="skinId === 'blossom'"
