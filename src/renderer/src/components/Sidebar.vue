@@ -11,8 +11,8 @@ import {
   Clock,
   History,
   LayoutGrid,
+  Pencil,
   PlayCircle,
-  Plus,
   Search,
   Settings,
   Star,
@@ -270,10 +270,10 @@ onUnmounted(() => {
           title="管理分类"
           @click="emit('manageCategories')"
         >
-          <Plus class="w-3.5 h-3.5" :stroke-width="1.5" />
+          <Pencil class="w-3.5 h-3.5" :stroke-width="1.5" />
         </button>
       </div>
-      <div class="flex-1 min-h-0 overflow-y-auto overscroll-contain -mx-1 px-1">
+      <div class="flex-1 min-h-0 overflow-y-auto overscroll-contain">
         <CategoryTreeList
           :items="categories"
           :active-key="activeCategoryKey ?? null"

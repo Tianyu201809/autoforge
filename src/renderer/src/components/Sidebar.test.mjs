@@ -9,4 +9,12 @@ describe('Sidebar category actions', () => {
     assert.match(sidebarSource, /import \{ askPrompt \} from '\.\.\/composables\/usePromptDialog'/)
     assert.doesNotMatch(sidebarSource, /window\.prompt/)
   })
+
+  it('aligns top-level categories and uses a pencil for management', () => {
+    assert.match(sidebarSource, /import \{[^}]*Pencil[^}]*\} from 'lucide-vue-next'/)
+    assert.doesNotMatch(sidebarSource, /import \{[^}]*Plus[^}]*\} from 'lucide-vue-next'/)
+    assert.match(sidebarSource, /<Pencil class="w-3\.5 h-3\.5" :stroke-width="1\.5" \/>/)
+    assert.match(sidebarSource, /flex-1 min-h-0 overflow-y-auto overscroll-contain/)
+    assert.doesNotMatch(sidebarSource, /overflow-y-auto overscroll-contain -mx-1 px-1/)
+  })
 })
