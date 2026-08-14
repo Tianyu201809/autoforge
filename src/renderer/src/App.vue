@@ -32,11 +32,13 @@ const {
   pagedScripts,
   listPage,
   listTotalPages,
+  listPageSize,
   stats,
   navItems,
   categories,
   categoryDefinitions,
   searchQuery,
+  activeCategoryKey,
   breadcrumb,
   listFilter,
   hasActiveListFilter,
@@ -280,13 +282,35 @@ async function handleStart(scriptId: string): Promise<void> {
 }
 
 async function handleDroppedImport(sourcePath: string): Promise<void> {
+  const categoryKey = activeCategoryKey.value
   dropImporting.value = true
   try {
-    await importFromPath(sourcePath, {
+    const imported = await importFromPath(sourcePath, {
+      categoryKey: categoryKey ?? 'local',
       onBeforeExecutableSelection: () => {
         dropImporting.value = false
       }
     })
+    if (!imported) return
+
+    setNavFilter('all')
+    searchQuery.value = ''
+    if (categoryKey) {
+      setListFilter({
+        status: 'all',
+        categoryKey,
+        starredOnly: false,
+        scheduledOnly: false
+      })
+    } else {
+      resetListFilter()
+    }
+
+    const importedIndex = filteredScripts.value.findIndex((script) => script.id === imported.id)
+    if (importedIndex >= 0) {
+      setListPage(Math.floor(importedIndex / listPageSize.value) + 1)
+    }
+    selectScript(imported)
   } finally {
     dropImporting.value = false
   }
