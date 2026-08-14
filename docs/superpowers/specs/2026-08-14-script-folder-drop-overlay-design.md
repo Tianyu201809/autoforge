@@ -30,13 +30,13 @@ The overlay belongs to the main content panel. It covers the script list and its
 
 ## Component Boundaries
 
-`MainContent` owns native drag event tracking and renders the visual overlay because it defines the main-content boundary.
+`MainContent` owns the visual overlay because it defines the main-content boundary. It receives active/inactive drag transitions from the existing drop binding.
 
 `App` coordinates import execution. It receives the dropped path, marks the import active before awaiting the existing store import function, and clears loading in `finally`.
 
 `useScriptStore` continues to own inspection, import, refresh, picker handling, and toast results. Its import method returns a completion signal so callers can distinguish completed/cancelled flows without duplicating import behavior.
 
-`script-drop-import` keeps path resolution as a pure helper. Event binding moves out of this helper so `MainContent` can represent drag state without a second listener set.
+`script-drop-import` continues to own native drag binding and path resolution. It tracks nested drag depth and reports active/inactive state so `MainContent` can render the overlay without registering a second listener set.
 
 ## Accessibility And Visual Rules
 
