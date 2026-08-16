@@ -12,8 +12,10 @@ import {
   X
 } from 'lucide-vue-next'
 import type { HubPlugin, HubScope, HubTeam, HubSession } from '../../../shared/hub-types'
+import { askConfirm } from '../composables/useConfirmDialog'
 import { useToast } from '../composables/useToast'
 import { renderScriptReadmeMarkdown } from '../lib/script-readme-markdown'
+import appIcon from '@build/icon.png?url'
 
 const props = defineProps<{ open: boolean }>()
 const emit = defineEmits<{ close: [] }>()
@@ -32,12 +34,12 @@ const selected = ref<HubPlugin | null>(null)
 
 const scopeMeta = computed(() => {
   if (scope.value === 'personal') {
-    return { title: '我的插件', subtitle: '仅供你使用的自动化能力', icon: PackageOpen }
+    return { title: '我的脚本', subtitle: '仅供你使用的自动化能力', icon: PackageOpen }
   }
   if (scope.value === 'team') {
-    return { title: '团队插件', subtitle: '从协作工作区获取共享工具', icon: Users }
+    return { title: '团队脚本', subtitle: '从协作工作区获取共享工具', icon: Users }
   }
-  return { title: '插件市场', subtitle: '探索可直接安装的自动化工具', icon: Store }
+  return { title: '脚本市场', subtitle: '探索可直接安装的自动化工具', icon: Store }
 })
 
 const selectedReadmeHtml = computed(() => {
@@ -110,6 +112,13 @@ async function cancelAuthorization(): Promise<void> {
 }
 
 async function logout(): Promise<void> {
+  const confirmed = await askConfirm({
+    title: '退出 AutoforgeHub',
+    message: '退出后将无法访问脚本市场、个人空间和团队脚本，已安装到本地的脚本不会受影响。',
+    confirmLabel: '退出登录'
+  })
+  if (!confirmed) return
+
   await window.autoforge.hub.logout()
   session.value = { authenticated: false, persistent: false, user: null }
   items.value = []
@@ -123,7 +132,7 @@ async function install(plugin: HubPlugin): Promise<void> {
     if (result.status !== 'duplicate_cancelled') {
       pushToast({
         type: 'success',
-        title: result.status === 'updated' ? '插件已更新' : '插件已安装',
+        title: result.status === 'updated' ? '脚本已更新' : '脚本已安装',
         message: result.name
       })
     }
@@ -159,11 +168,11 @@ onUnmounted(offAuthorized)
   <div v-if="open" class="hub-shell">
     <header class="hub-topbar">
       <div class="hub-brand">
-        <span class="hub-mark">AF</span>
-        <span class="hub-brand__title">插件中心</span>
+        <img :src="appIcon" alt="Autoforge" class="hub-mark" draggable="false" />
+        <span class="hub-brand__title">脚本中心</span>
         <span class="hub-brand__source">AutoforgeHub</span>
       </div>
-      <button class="hub-icon-button" aria-label="关闭插件中心" title="关闭" @click="emit('close')">
+      <button class="hub-icon-button" aria-label="关闭脚本中心" title="关闭" @click="emit('close')">
         <X :size="18" />
       </button>
     </header>
@@ -172,9 +181,9 @@ onUnmounted(offAuthorized)
       <div class="hub-auth-card">
         <div class="hub-auth-card__icon"><Boxes :size="25" /></div>
         <p class="hub-kicker">AUTOFORGEHUB CONNECTION</p>
-        <h1>连接你的插件工作区</h1>
+        <h1>连接你的脚本工作区</h1>
         <p class="hub-auth-card__copy">
-          在浏览器中确认授权后，可直接访问插件市场、个人空间和团队共享工具。
+          在浏览器中确认授权后，可直接访问脚本市场、个人空间和团队共享工具。
         </p>
         <button v-if="!authorizing" class="hub-primary-button" @click="beginAuthorization">
           连接 AutoforgeHub
@@ -196,20 +205,23 @@ onUnmounted(offAuthorized)
             <b>{{ session.user?.displayName }}</b>
             <span>{{ session.user?.email }}</span>
           </div>
+          <button class="hub-profile__logout" title="退出 AutoforgeHub" aria-label="退出 AutoforgeHub" @click="logout">
+            <LogOut :size="15" />
+          </button>
         </div>
 
-        <nav class="hub-navigation" aria-label="插件来源">
+        <nav class="hub-navigation" aria-label="脚本来源">
           <button :class="{ active: scope === 'marketplace' }" @click="switchScope('marketplace')">
             <Store :size="16" />
-            <span>插件市场</span>
+            <span>脚本市场</span>
           </button>
           <button :class="{ active: scope === 'personal' }" @click="switchScope('personal')">
             <PackageOpen :size="16" />
-            <span>我的插件</span>
+            <span>我的脚本</span>
           </button>
           <button :class="{ active: scope === 'team' }" @click="switchScope('team')">
             <Users :size="16" />
-            <span>团队插件</span>
+            <span>团队脚本</span>
             <em v-if="session.user?.teamCount">{{ session.user.teamCount }}</em>
           </button>
         </nav>
@@ -220,8 +232,6 @@ onUnmounted(offAuthorized)
             <option v-for="team in teams" :key="team.id" :value="team.id">{{ team.name }}</option>
           </select>
         </label>
-
-        <button class="hub-logout" @click="logout"><LogOut :size="15" />退出登录</button>
       </aside>
 
       <section class="hub-content">
@@ -234,19 +244,19 @@ onUnmounted(offAuthorized)
             </div>
             <p>{{ scopeMeta.subtitle }}</p>
           </div>
-          <button class="hub-icon-button hub-refresh" title="刷新插件列表" aria-label="刷新插件列表" @click="load">
+          <button class="hub-icon-button hub-refresh" title="刷新脚本列表" aria-label="刷新脚本列表" @click="load">
             <RefreshCw :size="16" :class="{ 'hub-spin': loading }" />
           </button>
         </div>
 
         <p v-if="error" class="hub-error">{{ error }}</p>
-        <div v-else-if="loading" class="hub-loading-grid" aria-label="正在加载插件">
+        <div v-else-if="loading" class="hub-loading-grid" aria-label="正在加载脚本">
           <div v-for="index in 6" :key="index" class="hub-skeleton-card" />
         </div>
         <div v-else-if="!items.length" class="hub-empty-state">
           <FileText :size="26" />
-          <strong>这里还没有插件</strong>
-          <span>切换来源或前往 AutoforgeHub 发布第一个插件。</span>
+          <strong>这里还没有脚本</strong>
+          <span>切换来源或前往 AutoforgeHub 发布第一个脚本。</span>
         </div>
         <div v-else class="hub-grid">
           <article
@@ -288,10 +298,10 @@ onUnmounted(offAuthorized)
         </div>
       </section>
 
-      <aside v-if="selected" class="hub-detail" aria-label="插件详情">
+      <aside v-if="selected" class="hub-detail" aria-label="脚本详情">
         <header class="hub-detail__header">
           <div>
-            <p class="hub-kicker">插件详情</p>
+            <p class="hub-kicker">脚本详情</p>
             <h2>{{ selected.title }}</h2>
           </div>
           <button class="hub-icon-button" aria-label="关闭详情" title="关闭详情" @click="selected = null">
@@ -347,7 +357,6 @@ onUnmounted(offAuthorized)
 .hub-heading__title,
 .hub-profile,
 .hub-navigation button,
-.hub-logout,
 .hub-primary-button,
 .hub-authorizing,
 .hub-detail__header,
@@ -361,16 +370,11 @@ onUnmounted(offAuthorized)
 
 .hub-brand { gap: 8px; font-size: 12px; }
 .hub-mark {
-  display: grid;
+  display: block;
   width: 24px;
   height: 24px;
-  place-items: center;
   border-radius: 5px;
-  background: var(--sb-accent-solid);
-  color: #fff;
-  font-family: var(--font-mono);
-  font-size: 9px;
-  font-weight: 700;
+  object-fit: cover;
 }
 .hub-brand__title { font-weight: 700; }
 .hub-brand__source { color: var(--sb-text-faint); font-family: var(--font-mono); font-size: 10px; }
@@ -427,10 +431,12 @@ onUnmounted(offAuthorized)
 .hub-sidebar { display: flex; flex-direction: column; min-width: 0; padding: 14px 10px 12px; border-right: 1px solid var(--hub-rule); background: var(--hub-surface); }
 .hub-profile { gap: 10px; min-width: 0; padding: 6px 7px 18px; border-bottom: 1px solid var(--hub-rule); }
 .hub-avatar { display: grid; width: 32px; height: 32px; flex: 0 0 auto; place-items: center; border-radius: 5px; background: var(--hub-accent-soft); color: var(--sb-accent-solid); font-family: var(--font-mono); font-size: 10px; font-weight: 700; }
-.hub-profile__text { min-width: 0; }
+.hub-profile__text { min-width: 0; flex: 1; }
 .hub-profile__text b, .hub-profile__text span { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .hub-profile__text b { color: var(--sb-text-primary); font-size: 12px; }
 .hub-profile__text span { margin-top: 3px; color: var(--sb-text-faint); font-size: 10px; }
+.hub-profile__logout { display: inline-grid; width: 27px; height: 27px; flex: 0 0 auto; place-items: center; border: 1px solid transparent; border-radius: 4px; color: var(--sb-text-faint); transition: background .15s ease, color .15s ease; }
+.hub-profile__logout:hover { background: var(--sb-bg-hover); color: var(--sb-text-primary); }
 .hub-navigation { display: grid; gap: 3px; margin-top: 15px; }
 .hub-navigation button { min-height: 34px; gap: 9px; width: 100%; padding: 0 8px; border-radius: 4px; color: var(--sb-text-muted); font-size: 12px; text-align: left; transition: background .15s ease, color .15s ease; }
 .hub-navigation button:hover { background: var(--sb-bg-hover); color: var(--sb-text-primary); }
@@ -438,8 +444,6 @@ onUnmounted(offAuthorized)
 .hub-navigation em { min-width: 17px; height: 17px; margin-left: auto; padding: 0 4px; border-radius: 9px; background: var(--sb-bg-inset); color: var(--sb-text-faint); font-family: var(--font-mono); font-size: 9px; font-style: normal; line-height: 17px; text-align: center; }
 .hub-team-picker { display: grid; gap: 6px; margin: 14px 7px 0; color: var(--sb-text-faint); font-family: var(--font-mono); font-size: 9px; letter-spacing: .05em; }
 .hub-team-picker select { width: 100%; height: 31px; padding: 0 8px; border: 1px solid var(--hub-rule); border-radius: 4px; background: var(--sb-bg-inset); color: var(--sb-text-secondary); font-size: 11px; }
-.hub-logout { gap: 7px; margin-top: auto; padding: 8px 7px; color: var(--sb-text-faint); font-size: 11px; }
-.hub-logout:hover { color: var(--sb-text-primary); }
 
 .hub-content { min-width: 0; overflow: auto; padding: 28px clamp(20px, 3vw, 42px) 42px; }
 .hub-heading { display: flex; align-items: flex-start; justify-content: space-between; gap: 20px; padding-bottom: 22px; border-bottom: 1px solid var(--hub-rule); }
@@ -468,13 +472,13 @@ onUnmounted(offAuthorized)
 .hub-empty-state svg { margin-bottom: 5px; color: var(--sb-text-muted); }
 .hub-empty-state strong { color: var(--sb-text-secondary); font-size: 13px; }
 
-.hub-detail { display: flex; min-width: 0; flex-direction: column; border-left: 1px solid var(--hub-rule); background: var(--hub-surface); }
+.hub-detail { display: flex; min-width: 0; min-height: 0; flex-direction: column; border-left: 1px solid var(--hub-rule); background: var(--hub-surface); }
 .hub-detail__header { flex: 0 0 auto; justify-content: space-between; gap: 14px; padding: 22px 22px 14px; border-bottom: 1px solid var(--hub-rule); }
 .hub-detail h2 { overflow: hidden; margin: 6px 0 0; color: var(--sb-text-primary); font-size: 18px; line-height: 1.3; text-overflow: ellipsis; white-space: nowrap; }
 .hub-detail__meta { flex: 0 0 auto; flex-wrap: wrap; gap: 5px; padding: 12px 22px; border-bottom: 1px solid var(--hub-rule); }
 .hub-detail__meta span { padding: 3px 6px; border: 1px solid var(--hub-rule); border-radius: 3px; color: var(--sb-text-faint); font-family: var(--font-mono); font-size: 9px; }
 .hub-detail__meta span:last-child { border: 0; padding-left: 0; font-family: inherit; }
-.hub-markdown { min-width: 0; flex: 1; overflow: auto; padding: 20px 22px 34px; color: var(--sb-text-secondary); font-size: 12px; line-height: 1.75; overflow-wrap: anywhere; }
+.hub-markdown { min-width: 0; min-height: 0; flex: 1; overflow: auto; overscroll-behavior: contain; padding: 20px 22px 34px; color: var(--sb-text-secondary); font-size: 12px; line-height: 1.75; overflow-wrap: anywhere; }
 .hub-detail__footer { flex: 0 0 auto; padding: 14px 22px 18px; border-top: 1px solid var(--hub-rule); background: color-mix(in srgb, var(--hub-surface) 92%, var(--sb-bg-inset)); }
 .hub-detail__footer .hub-primary-button { width: 100%; }
 

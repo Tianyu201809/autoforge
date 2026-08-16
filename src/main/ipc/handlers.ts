@@ -122,9 +122,13 @@ export function registerIpcHandlers(
     if (typeof id !== 'string' || !id.trim()) throw new Error('invalid Hub plugin id')
     return hubClient.getPlugin(id.trim())
   })
-  ipcMain.handle(IPC.HUB_INSTALL_PLUGIN, (_event, id: unknown) => {
+  ipcMain.handle(IPC.HUB_INSTALL_PLUGIN, async (_event, id: unknown) => {
     if (typeof id !== 'string' || !id.trim()) throw new Error('invalid Hub plugin id')
-    return hubClient.installPlugin(id.trim())
+    const result = await hubClient.installPlugin(id.trim())
+    if (result.status !== 'duplicate_cancelled') {
+      broadcastToRenderers(IPC.EVENT_HUB_SCRIPT_INSTALLED, result)
+    }
+    return result
   })
 
   ipcMain.handle(IPC.SCRIPTS_LIST, () => {

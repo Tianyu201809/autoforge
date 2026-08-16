@@ -1,8 +1,8 @@
-# AutoforgeHub 原生插件中心 Implementation Plan
+# AutoforgeHub 原生脚本中心 Implementation Plan
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** 在 Autoforge 内登录 AutoforgeHub，浏览市场、个人和团队插件，并安全地一键安装或更新本地脚本。
+**Goal:** 在 Autoforge 内登录 AutoforgeHub，浏览市场、个人和团队脚本，并安全地一键安装或更新本地脚本。
 
 **Architecture:** Autoforge 主进程加密持有 Hub JWT，经受限 IPC 返回脱敏会话、查询和安装结果。安装复用现有 ZIP 安装器；Hub 服务端仅补齐团队列表成员资格校验。
 
@@ -52,7 +52,7 @@ test('rejects outsider and malformed members', () => {
 
 - [ ] **Step 2: 验证其失败**
 
-Run: `node --test server/utils/team-membership.test.mjs` in `D:/myProject/AutoforgeHub`.  
+Run: `node --test server/utils/team-membership.test.mjs` in `D:/myProject/AutoforgeHub`.
 Expected: FAIL because the module does not exist.
 
 - [ ] **Step 3: 实现和接入**
@@ -112,7 +112,7 @@ test('persists encrypted data and clears it', () => {
 
 - [ ] **Step 2: 验证其失败**
 
-Run: `node --import tsx --test src/main/services/hub-credential-store.test.ts`.  
+Run: `node --import tsx --test src/main/services/hub-credential-store.test.ts`.
 Expected: FAIL because the store does not exist.
 
 - [ ] **Step 3: 实现安全存储**
@@ -162,7 +162,7 @@ test('login saves token but returns a token-free session', async () => {
 
 - [ ] **Step 2: 验证其失败**
 
-Run: `node --import tsx --test src/main/services/hub-client.test.ts`.  
+Run: `node --import tsx --test src/main/services/hub-client.test.ts`.
 Expected: FAIL because the client does not exist.
 
 - [ ] **Step 3: 实现主进程客户端**
@@ -219,12 +219,12 @@ test('Hub preload exposes no token getter', () => {
 
 - [ ] **Step 2: 验证其失败**
 
-Run: `node --test src/preload/hub-api.test.mjs`.  
+Run: `node --test src/preload/hub-api.test.mjs`.
 Expected: FAIL because no `hub` preload object exists.
 
 - [ ] **Step 3: 实现受限 API**
 
-在 `IPC` 新增 `HUB_SESSION/HUB_LOGIN/HUB_LOGOUT/HUB_LIST_TEAMS/HUB_LIST_PLUGINS/HUB_GET_PLUGIN/HUB_INSTALL_PLUGIN`。在 `registerIpcHandlers` 创建单一 Hub client，URL 从 `scriptStore.getConfig().hub?.url ?? ''` 读取，安装器为现有 `installScriptFromHubZip`。handlers 校验 email/password、插件 ID 和查询对象。
+在 `IPC` 新增 `HUB_SESSION/HUB_LOGIN/HUB_LOGOUT/HUB_LIST_TEAMS/HUB_LIST_PLUGINS/HUB_GET_PLUGIN/HUB_INSTALL_PLUGIN`。在 `registerIpcHandlers` 创建单一 Hub client，URL 从 `scriptStore.getConfig().hub?.url ?? ''` 读取，安装器为现有 `installScriptFromHubZip`。handlers 校验 email/password、脚本 ID 和查询对象。
 
 `CONFIG_SET` 保存后比较规范化前后 origin；不同时调用 `hubClient.logout()`。preload 的 `hub` 对象将七个方法逐一映射 `ipcRenderer.invoke`，绝不增加 token 或临时 URL getter。
 
@@ -239,7 +239,7 @@ git add src/shared/ipc-channels.ts src/main/ipc/handlers.ts src/preload/index.ts
 git commit -m "feat: expose safe Hub IPC API"
 ```
 
-### Task 5: 构建原生插件中心 UI
+### Task 5: 构建原生脚本中心 UI
 
 **Files:**
 - Create: `src/renderer/src/composables/useHubPluginCenter.ts`
@@ -261,9 +261,9 @@ import { readFileSync } from 'node:fs'
 
 test('plugin center contains required sources and guarded install', () => {
   const source = readFileSync(new URL('./HubPluginCenterPanel.vue', import.meta.url), 'utf8')
-  assert.match(source, /插件市场/)
-  assert.match(source, /我的插件/)
-  assert.match(source, /团队插件/)
+  assert.match(source, /脚本市场/)
+  assert.match(source, /我的脚本/)
+  assert.match(source, /团队脚本/)
   assert.match(source, /:disabled="installingId !== null"/)
   assert.match(source, /window\.autoforge\.hub\.installPlugin/)
 })
@@ -271,16 +271,16 @@ test('plugin center contains required sources and guarded install', () => {
 
 - [ ] **Step 2: 验证其失败**
 
-Run: `node --test src/renderer/src/components/HubPluginCenterPanel.test.mjs`.  
+Run: `node --test src/renderer/src/components/HubPluginCenterPanel.test.mjs`.
 Expected: FAIL because the panel does not exist.
 
 - [ ] **Step 3: 实现状态和界面**
 
 组合式函数状态固定为 `open/session/scope/teamId/teams/items/loading/installingId/error/page/hasMore/filters`。`refresh()` 先读 session，认证后读取 teams 和当前来源。`loadPage(reset)` 使用 `pageSize: 30`；来源、团队或筛选变化时重置第一页；仅加载更多时追加。`install(id)` 使用 `installingId` 防并发，对安装/更新成功 Toast，对 `duplicate_cancelled` 保持中性，并在 finally 清状态。
 
-全屏面板复用 `SettingsPanel.vue` 结构：未登录为邮箱、密码、登录、注册/找回密码外链；已登录为分段“插件市场 / 我的插件 / 团队插件”、团队选择器、搜索、分类、语言、排序、紧凑卡片、README 详情及加载/空/重试状态。使用 Lucide `Download/ExternalLink/KeyRound/LogOut/RefreshCw/Search/X`；图标按钮必须含 tooltip 和 aria-label，安装按钮固定 `:disabled="installingId !== null"`，窄窗口将筛选收进工具菜单。
+全屏面板复用 `SettingsPanel.vue` 结构：未登录为邮箱、密码、登录、注册/找回密码外链；已登录为分段“脚本市场 / 我的脚本 / 团队脚本”、团队选择器、搜索、分类、语言、排序、紧凑卡片、README 详情及加载/空/重试状态。使用 Lucide `Download/ExternalLink/KeyRound/LogOut/RefreshCw/Search/X`；图标按钮必须含 tooltip 和 aria-label，安装按钮固定 `:disabled="installingId !== null"`，窄窗口将筛选收进工具菜单。
 
-Sidebar 将 `openAutoforgeHub` 改为 `pluginCenter` emit 和“插件中心”标签。`App.vue` 管理 `showHubPluginCenter` 并挂载面板，保留 `onHubScriptInstalled` 以复用本地列表刷新与选中。SettingsPanel 说明更改 Hub 地址将退出当前会话，不添加 token 字段。
+Sidebar 将 `openAutoforgeHub` 改为 `pluginCenter` emit 和“脚本中心”标签。`App.vue` 管理 `showHubPluginCenter` 并挂载面板，保留 `onHubScriptInstalled` 以复用本地列表刷新与选中。SettingsPanel 说明更改 Hub 地址将退出当前会话，不添加 token 字段。
 
 - [ ] **Step 4: 验证、人工验收并提交**
 
@@ -305,7 +305,7 @@ git commit -m "feat: add native Hub plugin center"
 
 - [ ] **Step 1: 更新文档**
 
-README 增加插件中心能力。架构文档描述主进程 `hub-client`、私有加密凭据及 token 不跨 preload。变更日志记录插件中心和团队列表授权修复。
+README 增加脚本中心能力。架构文档描述主进程 `hub-client`、私有加密凭据及 token 不跨 preload。变更日志记录脚本中心和团队列表授权修复。
 
 - [ ] **Step 2: 完整验证**
 

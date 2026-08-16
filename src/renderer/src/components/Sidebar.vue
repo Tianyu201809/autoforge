@@ -283,7 +283,7 @@ onUnmounted(() => {
         <button
           type="button"
           class="w-8 h-8 flex items-center justify-center rounded-md hover:bg-violet-500/10 transition-colors"
-          title="插件中心"
+          title="脚本中心"
           @click="openAutoforgeHub"
         >
           <Store class="w-4 h-4 text-violet-500" :stroke-width="1.5" />

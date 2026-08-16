@@ -91,7 +91,7 @@ export function createHubClient(options: {
       const body = await request(`/api/scripts/${encodeURIComponent(id)}/install-token`, { method: 'POST' }) as Record<string, unknown>
       if (typeof body.zipUrl !== 'string' || typeof body.scriptName !== 'string' || typeof body.hubScriptId !== 'string') throw new HubClientError('invalid_response', 'AutoforgeHub 安装响应无效')
       try { return await options.install({ zipUrl: body.zipUrl, scriptName: body.scriptName, hubScriptId: body.hubScriptId }) }
-      catch (error) { throw new HubClientError('install_failed', error instanceof Error ? error.message : '插件安装失败') }
+      catch (error) { throw new HubClientError('install_failed', error instanceof Error ? error.message : '脚本安装失败') }
     }
   }
 }
