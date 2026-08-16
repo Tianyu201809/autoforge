@@ -1,4 +1,5 @@
 import { dialog, ipcMain, shell, type BrowserWindow } from 'electron'
+import { createHash, randomBytes } from 'crypto'
 import { existsSync, statSync } from 'fs'
 import { IPC } from '../../shared/ipc-channels'
 import { appEnv } from '../../shared/app-env'
@@ -26,6 +27,8 @@ import { scriptWorkspace } from '../services/script-workspace'
 import { createHubCredentialStore } from '../services/hub-credential-store'
 import { createHubClient } from '../services/hub-client'
 import { installScriptFromHubZip } from '../services/hub-script-installer'
+import { setHubAuthorizationCallback } from '../services/hub-bridge-server'
+import { broadcastToRenderers } from '../services/window-broadcast'
 import type { HubPluginQuery } from '../../shared/hub-types'
 import { createRuntimeContainer, type AutoforgeRuntime } from '../services/runtime-container'
 import { getConfiguredMcpControlServer, getMcpClientConfig, getMcpControlStatus, rotateMcpToken, startMcpControlServer, stopMcpControlServer } from '../services/mcp-control-server'
@@ -80,12 +83,35 @@ export function registerIpcHandlers(
     request: (url, init) => fetch(url, init),
     install: installScriptFromHubZip
   })
+  let pendingAuthorization: { state: string; verifier: string; expiresAt: number } | null = null
+  setHubAuthorizationCallback(async (code, state) => {
+    const pending = pendingAuthorization
+    pendingAuthorization = null
+    if (!pending || pending.state !== state || pending.expiresAt < Date.now()) throw new Error('invalid authorization state')
+    const session = await hubClient.exchangeAuthorizationCode(code, state, pending.verifier)
+    broadcastToRenderers(IPC.EVENT_HUB_AUTHORIZED, session)
+  })
 
   ipcMain.handle(IPC.HUB_SESSION, () => hubClient.session())
   ipcMain.handle(IPC.HUB_LOGIN, (_event, email: unknown, password: unknown) => {
     if (typeof email !== 'string' || typeof password !== 'string') throw new Error('invalid Hub login input')
     return hubClient.login(email, password)
   })
+  ipcMain.handle(IPC.HUB_BEGIN_AUTHORIZATION, async () => {
+    const state = randomBytes(32).toString('base64url')
+    const verifier = randomBytes(32).toString('base64url')
+    const challenge = createHash('sha256').update(verifier).digest('base64url')
+    const base = scriptStore.getConfig().hub?.url?.trim()
+    if (!base) throw new Error('请先在设置中配置 AutoforgeHub 地址')
+    const url = new URL('/autoforge/authorize', base)
+    url.searchParams.set('state', state)
+    url.searchParams.set('code_challenge', challenge)
+    url.searchParams.set('code_challenge_method', 'S256')
+    url.searchParams.set('redirect_uri', 'http://127.0.0.1:19276/auth/callback')
+    pendingAuthorization = { state, verifier, expiresAt: Date.now() + 120_000 }
+    await shell.openExternal(url.toString())
+  })
+  ipcMain.handle(IPC.HUB_CANCEL_AUTHORIZATION, () => { pendingAuthorization = null })
   ipcMain.handle(IPC.HUB_LOGOUT, () => hubClient.logout())
   ipcMain.handle(IPC.HUB_LIST_TEAMS, () => hubClient.listTeams())
   ipcMain.handle(IPC.HUB_LIST_PLUGINS, (_event, query: unknown) => {

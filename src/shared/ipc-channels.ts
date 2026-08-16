@@ -88,6 +88,8 @@ export const IPC = {
 
   HUB_SESSION: 'hub:session',
   HUB_LOGIN: 'hub:login',
+  HUB_BEGIN_AUTHORIZATION: 'hub:begin-authorization',
+  HUB_CANCEL_AUTHORIZATION: 'hub:cancel-authorization',
   HUB_LOGOUT: 'hub:logout',
   HUB_LIST_TEAMS: 'hub:list-teams',
   HUB_LIST_PLUGINS: 'hub:list-plugins',
@@ -171,6 +173,7 @@ export const IPC = {
   EVENT_WINDOW_MODE: 'event:window-mode',
 
   EVENT_HUB_SCRIPT_INSTALLED: 'event:hub-script-installed',
+  EVENT_HUB_AUTHORIZED: 'event:hub-authorized',
 
   EVENT_MCP_STATUS: 'event:mcp-status'
 

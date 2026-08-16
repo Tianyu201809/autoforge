@@ -67,6 +67,14 @@ export function createHubClient(options: {
       options.credentials.save(body.token)
       return { authenticated: true, persistent: options.credentials.isPersistent(), user }
     },
+    async exchangeAuthorizationCode(code: string, state: string, verifier: string): Promise<HubSession> {
+      const body = await request('/api/autoforge/token', { method: 'POST', body: JSON.stringify({ code, state, code_verifier: verifier, redirect_uri: 'http://127.0.0.1:19276/auth/callback' }) }, false) as { token?: unknown; user?: unknown }
+      if (typeof body.token !== 'string') throw new HubClientError('invalid_response', 'AutoforgeHub 授权响应无效')
+      const user = toUser(body.user)
+      if (!user) throw new HubClientError('invalid_response', 'AutoforgeHub 授权响应无效')
+      options.credentials.save(body.token)
+      return { authenticated: true, persistent: options.credentials.isPersistent(), user }
+    },
     logout(): void { options.credentials.clear() },
     async listTeams(): Promise<HubTeam[]> { return await request('/api/teams') as HubTeam[] },
     async listPlugins(query: HubPluginQuery): Promise<HubPluginListResult> {

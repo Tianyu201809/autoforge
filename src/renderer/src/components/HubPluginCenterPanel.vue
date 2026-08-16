@@ -9,6 +9,7 @@ const emit = defineEmits<{ close: [] }>()
 const { pushToast } = useToast()
 const email = ref('')
 const password = ref('')
+const authorizing = ref(false)
 const session = ref({ authenticated: false, persistent: false, user: null as { displayName: string } | null })
 const scope = ref<HubScope>('marketplace')
 const teams = ref<HubTeam[]>([])
@@ -31,15 +32,18 @@ async function load(): Promise<void> {
   finally { loading.value = false }
 }
 async function login(): Promise<void> { try { session.value = await window.autoforge.hub.login(email.value, password.value); password.value = ''; await load() } catch (err) { error.value = err instanceof Error ? err.message : '登录失败' } }
+async function beginAuthorization(): Promise<void> { authorizing.value = true; error.value = ''; try { await window.autoforge.hub.beginAuthorization() } catch (err) { authorizing.value = false; error.value = err instanceof Error ? err.message : '无法打开浏览器授权' } }
+async function cancelAuthorization(): Promise<void> { await window.autoforge.hub.cancelAuthorization(); authorizing.value = false }
 async function logout(): Promise<void> { await window.autoforge.hub.logout(); session.value = { authenticated: false, persistent: false, user: null }; items.value = [] }
 async function install(id: string): Promise<void> { installingId.value = id; try { const result = await window.autoforge.hub.installPlugin(id); if (result.status !== 'duplicate_cancelled') pushToast({ type: 'success', title: result.status === 'updated' ? '插件已更新' : '插件已安装', message: result.name }) } catch (err) { pushToast({ type: 'error', title: '安装失败', message: err instanceof Error ? err.message : '请稍后重试' }) } finally { installingId.value = null } }
 watch(() => props.open, (open) => { if (open) void load() })
+window.autoforge.onHubAuthorized?.((next) => { session.value = next; authorizing.value = false; void load() })
 </script>
 
 <template>
   <div v-if="open" class="fixed inset-0 z-50 flex flex-col sb-bg-panel">
     <header class="h-12 px-4 flex items-center justify-between border-b sb-border-subtle"><div><b class="text-[13px] sb-text-primary">插件中心</b><span class="ml-2 text-[10px] sb-text-faint">AutoforgeHub</span></div><div class="flex gap-1"><button v-if="session.authenticated" class="hub-icon" title="退出" aria-label="退出 AutoforgeHub" @click="logout"><LogOut :size="16" /></button><button class="hub-icon" title="关闭" aria-label="关闭插件中心" @click="emit('close')"><X :size="18" /></button></div></header>
-    <form v-if="!session.authenticated" class="m-auto w-80 space-y-3" @submit.prevent="login"><h1 class="text-[20px] sb-text-primary">登录 AutoforgeHub</h1><input v-model="email" class="hub-input" type="email" placeholder="邮箱" required><input v-model="password" class="hub-input" type="password" placeholder="密码" required><button class="hub-primary">登录</button><p v-if="error" class="text-[11px] text-rose-500">{{ error }}</p></form>
+    <section v-if="!session.authenticated" class="m-auto w-80 space-y-3"><h1 class="text-[20px] sb-text-primary">连接 AutoforgeHub</h1><p class="text-[12px] sb-text-muted">使用浏览器安全授权后，即可访问你的插件和团队工作区。</p><button v-if="!authorizing" class="hub-primary" @click="beginAuthorization">使用 AutoforgeHub 登录</button><div v-else class="space-y-3 rounded-md border sb-border p-4"><p class="text-[12px] sb-text-secondary">正在等待浏览器授权…</p><button class="hub-link" @click="cancelAuthorization">取消授权</button></div><p v-if="error" class="text-[11px] text-rose-500">{{ error }}</p></section>
     <main v-else class="flex flex-1 min-h-0"><aside class="w-44 p-3 border-r sb-border-subtle"><p class="px-2 text-[11px] sb-text-muted">{{ session.user?.displayName }}</p><button v-for="item in ([['marketplace','插件市场'],['personal','我的插件'],['team','团队插件']] as const)" :key="item[0]" class="hub-scope" :class="{ active: scope === item[0] }" @click="scope=item[0]; void load()">{{ item[1] }}</button><select v-if="scope === 'team'" v-model="teamId" class="hub-input mt-2" @change="load"><option v-for="team in teams" :key="team.id" :value="team.id">{{ team.name }}</option></select></aside><section class="flex-1 overflow-y-auto p-5"><p v-if="error" class="text-rose-500 text-[12px]">{{ error }}</p><p v-else-if="loading" class="sb-text-muted text-[12px]">正在加载插件…</p><div v-else class="hub-grid"><article v-for="plugin in items" :key="plugin.id" class="hub-card"><div><h2>{{ plugin.title }}</h2><p>{{ plugin.description || '暂无说明' }}</p><small>{{ plugin.language || '未标注' }} · {{ plugin.category || '其他' }}</small></div><button class="hub-icon" :disabled="installingId !== null" :aria-label="`安装 ${plugin.title}`" title="安装" @click="install(plugin.id)"><Download :size="16" /></button></article></div></section></main>
   </div>
 </template>

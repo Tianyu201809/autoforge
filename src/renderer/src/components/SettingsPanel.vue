@@ -47,6 +47,7 @@ const emit = defineEmits<{
 
 const browserPath = ref('')
 const autoforgeHubUrl = ref('')
+const hubSession = ref<Awaited<ReturnType<typeof window.autoforge.hub.session>>>({ authenticated: false, persistent: false, user: null })
 const pythonPath = ref('')
 const pipIndexUrl = ref('')
 const runTimeoutSeconds = ref(0)
@@ -163,6 +164,7 @@ async function initializeSettings(): Promise<void> {
     mcpStatus.value = await window.autoforge.mcp.getStatus()
     mcpClientConfig.value = await window.autoforge.mcp.getClientConfig()
     autoforgeHubUrl.value = config.hub?.url ?? ''
+    hubSession.value = await window.autoforge.hub.session()
     browserPath.value = config.browser?.executablePath ?? ''
     pythonPath.value = config.python?.executablePath ?? ''
     pipIndexUrl.value = config.python?.pipIndexUrl ?? ''
@@ -248,6 +250,20 @@ function buildConfigPatch(): Partial<AppConfig> {
     externalEditor: { executablePath: externalEditorPath.value.trim() || undefined },
     logLevel: logLevel.value
   }
+}
+
+async function beginHubAuthorization(): Promise<void> {
+  await window.autoforge.hub.beginAuthorization()
+}
+
+async function logoutHub(): Promise<void> {
+  await window.autoforge.hub.logout()
+  hubSession.value = { authenticated: false, persistent: false, user: null }
+}
+
+async function openHubProfile(): Promise<void> {
+  const url = autoforgeHubUrl.value.trim()
+  if (url) await window.autoforge.system.openExternal(new URL('/workspace/profile', url).toString())
 }
 
 async function saveConfigNow(): Promise<void> {
@@ -696,6 +712,14 @@ async function removeGlobalPythonDep(name: string): Promise<void> {
                   <h2 class="settings-section-title">AutoforgeHub</h2>
                 </div>
                 <p class="text-[11px] sb-text-faint">配置后可从侧边栏直接进入 AutoforgeHub。</p>
+                <div class="rounded-lg border sb-border sb-bg-surface px-4 py-3 space-y-2">
+                  <div v-if="hubSession.authenticated" class="flex items-center justify-between gap-3">
+                    <div class="min-w-0"><p class="text-[13px] sb-text-secondary truncate">{{ hubSession.user?.displayName }}</p><p class="text-[11px] sb-text-faint truncate">{{ hubSession.user?.email }} · {{ hubSession.user?.teamCount }} 个团队</p></div>
+                    <div class="flex gap-2"><button type="button" class="text-[11px] sb-text-muted hover:sb-text-secondary" @click="openHubProfile">管理账户</button><button type="button" class="text-[11px] text-rose-500" @click="logoutHub">退出</button></div>
+                  </div>
+                  <button v-else type="button" class="text-[12px] sb-text-primary hover:text-[var(--sb-accent-solid)]" @click="beginHubAuthorization">使用 AutoforgeHub 登录</button>
+                  <p class="text-[10px] sb-text-faint">更改地址会退出当前桌面端会话。</p>
+                </div>
                 <div>
                   <label class="text-[12px] sb-text-muted">AutoforgeHub 地址</label>
                   <input

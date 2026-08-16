@@ -256,6 +256,13 @@ const autoforge = {
   hub: {
     session: (): Promise<HubSession> => ipcRenderer.invoke(IPC.HUB_SESSION),
     login: (email: string, password: string): Promise<HubSession> => ipcRenderer.invoke(IPC.HUB_LOGIN, email, password),
+    beginAuthorization: (): Promise<void> => ipcRenderer.invoke(IPC.HUB_BEGIN_AUTHORIZATION),
+    cancelAuthorization: (): Promise<void> => ipcRenderer.invoke(IPC.HUB_CANCEL_AUTHORIZATION),
+    onHubAuthorized: (callback: (session: HubSession) => void): (() => void) => {
+      const handler = (_event: IpcRendererEvent, session: HubSession) => callback(session)
+      ipcRenderer.on(IPC.EVENT_HUB_AUTHORIZED, handler)
+      return () => ipcRenderer.removeListener(IPC.EVENT_HUB_AUTHORIZED, handler)
+    },
     logout: (): Promise<void> => ipcRenderer.invoke(IPC.HUB_LOGOUT),
     listTeams: (): Promise<HubTeam[]> => ipcRenderer.invoke(IPC.HUB_LIST_TEAMS),
     listPlugins: (query: HubPluginQuery): Promise<HubPluginListResult> => ipcRenderer.invoke(IPC.HUB_LIST_PLUGINS, query),

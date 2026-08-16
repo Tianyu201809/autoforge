@@ -11,6 +11,11 @@ const MAX_BODY_BYTES = 64 * 1024
 let server: http.Server | null = null
 let installing = false
 let onInstalled: ((payload: { scriptId: string; name: string; status: 'installed' | 'updated' }) => void) | null = null
+let onAuthorizationCallback: ((code: string, state: string) => Promise<void>) | null = null
+
+export function setHubAuthorizationCallback(callback: ((code: string, state: string) => Promise<void>) | null): void {
+  onAuthorizationCallback = callback
+}
 
 function setCors(res: http.ServerResponse): void {
   res.setHeader('Access-Control-Allow-Origin', '*')
@@ -161,6 +166,25 @@ function handleRequest(req: http.IncomingMessage, res: http.ServerResponse): voi
 
   if (req.method === 'POST' && pathname === '/install') {
     void handleInstall(req, res)
+    return
+  }
+
+  if (req.method === 'GET' && pathname === '/auth/callback') {
+    const url = new URL(req.url ?? '/', `http://${host}`)
+    const code = url.searchParams.get('code')
+    const state = url.searchParams.get('state')
+    if (!code || !state || !onAuthorizationCallback) {
+      res.writeHead(400, { 'Content-Type': 'text/html; charset=utf-8' })
+      res.end('<h1>授权请求无效</h1>')
+      return
+    }
+    void onAuthorizationCallback(code, state).then(() => {
+      res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' })
+      res.end('<main style="font-family:system-ui;padding:48px"><h1>Autoforge 已连接</h1><p>可以关闭此页面并返回桌面端。</p></main>')
+    }).catch(() => {
+      res.writeHead(400, { 'Content-Type': 'text/html; charset=utf-8' })
+      res.end('<h1>授权失败或已过期</h1>')
+    })
     return
   }
 
