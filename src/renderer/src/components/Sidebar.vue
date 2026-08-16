@@ -45,6 +45,7 @@ const emit = defineEmits<{
   devGuide: []
   executionHistory: []
   categoriesChanged: []
+  pluginCenter: []
 }>()
 
 const navIcons = {
@@ -65,24 +66,7 @@ function onKeydown(e: KeyboardEvent): void {
 }
 
 async function openAutoforgeHub(): Promise<void> {
-  try {
-    const config = await window.autoforge.config.get()
-    const url = config.hub?.url?.trim()
-    if (!url) {
-      pushToast({ type: 'info', title: 'AutoforgeHub', message: 'AutoforgeHub地址未设置' })
-      return
-    }
-    const opened = await window.autoforge.system.openExternal(url)
-    if (!opened) {
-      pushToast({ type: 'error', title: '打开失败', message: 'AutoforgeHub地址无效' })
-    }
-  } catch (err) {
-    pushToast({
-      type: 'error',
-      title: '打开失败',
-      message: err instanceof Error ? err.message : '无法打开AutoforgeHub'
-    })
-  }
+  emit('pluginCenter')
 }
 
 async function onCreateChild(item: CategoryItem): Promise<void> {
@@ -299,7 +283,7 @@ onUnmounted(() => {
         <button
           type="button"
           class="w-8 h-8 flex items-center justify-center rounded-md hover:bg-violet-500/10 transition-colors"
-          title="进入 AutoforgeHub"
+          title="插件中心"
           @click="openAutoforgeHub"
         >
           <Store class="w-4 h-4 text-violet-500" :stroke-width="1.5" />

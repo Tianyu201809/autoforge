@@ -36,6 +36,7 @@ import type {
 import type { ScriptIcon, ScriptLifecycleEvent } from '../shared/script-contract'
 import type { ScriptLanguage } from '../shared/script-language'
 import type { McpClientConfig, McpStatus } from '../shared/mcp-types'
+import type { HubPlugin, HubPluginListResult, HubPluginQuery, HubSession, HubTeam } from '../shared/hub-types'
 
 export interface EditorFileStatePayload {
   content: string
@@ -251,6 +252,15 @@ const autoforge = {
   config: {
     get: (): Promise<AppConfig> => ipcRenderer.invoke(IPC.CONFIG_GET),
     set: (config: Partial<AppConfig>): Promise<AppConfig> => ipcRenderer.invoke(IPC.CONFIG_SET, config)
+  },
+  hub: {
+    session: (): Promise<HubSession> => ipcRenderer.invoke(IPC.HUB_SESSION),
+    login: (email: string, password: string): Promise<HubSession> => ipcRenderer.invoke(IPC.HUB_LOGIN, email, password),
+    logout: (): Promise<void> => ipcRenderer.invoke(IPC.HUB_LOGOUT),
+    listTeams: (): Promise<HubTeam[]> => ipcRenderer.invoke(IPC.HUB_LIST_TEAMS),
+    listPlugins: (query: HubPluginQuery): Promise<HubPluginListResult> => ipcRenderer.invoke(IPC.HUB_LIST_PLUGINS, query),
+    getPlugin: (id: string): Promise<HubPlugin> => ipcRenderer.invoke(IPC.HUB_GET_PLUGIN, id),
+    installPlugin: (id: string): Promise<{ scriptId: string; name: string; status: 'installed' | 'updated' | 'duplicate_cancelled' }> => ipcRenderer.invoke(IPC.HUB_INSTALL_PLUGIN, id)
   },
   mcp: {
     getStatus: (): Promise<McpStatus> => ipcRenderer.invoke(IPC.MCP_GET_STATUS),

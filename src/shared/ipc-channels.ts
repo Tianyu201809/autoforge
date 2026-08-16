@@ -86,6 +86,14 @@ export const IPC = {
 
   CONFIG_SET: 'config:set',
 
+  HUB_SESSION: 'hub:session',
+  HUB_LOGIN: 'hub:login',
+  HUB_LOGOUT: 'hub:logout',
+  HUB_LIST_TEAMS: 'hub:list-teams',
+  HUB_LIST_PLUGINS: 'hub:list-plugins',
+  HUB_GET_PLUGIN: 'hub:get-plugin',
+  HUB_INSTALL_PLUGIN: 'hub:install-plugin',
+
   MCP_GET_STATUS: 'mcp:get-status',
 
   MCP_SET_ENABLED: 'mcp:set-enabled',

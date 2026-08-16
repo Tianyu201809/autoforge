@@ -23,6 +23,10 @@ import {
 import { scriptRegistry } from '../services/script-registry'
 import { scriptStore } from '../services/script-store'
 import { scriptWorkspace } from '../services/script-workspace'
+import { createHubCredentialStore } from '../services/hub-credential-store'
+import { createHubClient } from '../services/hub-client'
+import { installScriptFromHubZip } from '../services/hub-script-installer'
+import type { HubPluginQuery } from '../../shared/hub-types'
 import { createRuntimeContainer, type AutoforgeRuntime } from '../services/runtime-container'
 import { getConfiguredMcpControlServer, getMcpClientConfig, getMcpControlStatus, rotateMcpToken, startMcpControlServer, stopMcpControlServer } from '../services/mcp-control-server'
 import { executionHistory } from '../services/execution-history'
@@ -70,6 +74,32 @@ export function registerIpcHandlers(
 ): void {
   runner = runtime.runner
   scheduler = runtime.scheduler
+  const hubClient = createHubClient({
+    getHubUrl: () => scriptStore.getConfig().hub?.url ?? '',
+    credentials: createHubCredentialStore(),
+    request: (url, init) => fetch(url, init),
+    install: installScriptFromHubZip
+  })
+
+  ipcMain.handle(IPC.HUB_SESSION, () => hubClient.session())
+  ipcMain.handle(IPC.HUB_LOGIN, (_event, email: unknown, password: unknown) => {
+    if (typeof email !== 'string' || typeof password !== 'string') throw new Error('invalid Hub login input')
+    return hubClient.login(email, password)
+  })
+  ipcMain.handle(IPC.HUB_LOGOUT, () => hubClient.logout())
+  ipcMain.handle(IPC.HUB_LIST_TEAMS, () => hubClient.listTeams())
+  ipcMain.handle(IPC.HUB_LIST_PLUGINS, (_event, query: unknown) => {
+    if (!query || typeof query !== 'object') throw new Error('invalid Hub plugin query')
+    return hubClient.listPlugins(query as HubPluginQuery)
+  })
+  ipcMain.handle(IPC.HUB_GET_PLUGIN, (_event, id: unknown) => {
+    if (typeof id !== 'string' || !id.trim()) throw new Error('invalid Hub plugin id')
+    return hubClient.getPlugin(id.trim())
+  })
+  ipcMain.handle(IPC.HUB_INSTALL_PLUGIN, (_event, id: unknown) => {
+    if (typeof id !== 'string' || !id.trim()) throw new Error('invalid Hub plugin id')
+    return hubClient.installPlugin(id.trim())
+  })
 
   ipcMain.handle(IPC.SCRIPTS_LIST, () => {
     const sessions = runner.listSessions()
@@ -449,7 +479,9 @@ export function registerIpcHandlers(
   })
 
   ipcMain.handle(IPC.CONFIG_SET, (_event, config: Partial<AppConfig>) => {
+    const previousHubUrl = scriptStore.getConfig().hub?.url?.trim()
     const saved = scriptStore.setConfig(config)
+    if (config.hub && previousHubUrl !== saved.hub?.url?.trim()) hubClient.logout()
     if (config.window) {
       applyWindowMode()
     }

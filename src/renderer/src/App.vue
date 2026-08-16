@@ -21,6 +21,7 @@ import ConfirmDialogHost from './components/ConfirmDialogHost.vue'
 import PromptDialogHost from './components/PromptDialogHost.vue'
 import ScratchpadPanel from './components/ScratchpadPanel.vue'
 import ExecutableEntryPickerModal from './components/ExecutableEntryPickerModal.vue'
+import HubPluginCenterPanel from './components/HubPluginCenterPanel.vue'
 import { askConfirm } from './composables/useConfirmDialog'
 import { useScratchpad } from './composables/useScratchpad'
 import { useToast } from './composables/useToast'
@@ -115,6 +116,7 @@ const logConsoleActiveSessionId = ref<string | undefined>()
 const trackedSessionIds = ref<string[]>([])
 const terminalDetached = ref(false)
 const dropImporting = ref(false)
+const showHubPluginCenter = ref(false)
 
 const selectedScript = computed(
   () => filteredScripts.value.find((s) => s.id === selectedScriptId.value) ?? null
@@ -463,6 +465,7 @@ onUnmounted(() => {
         @dev-guide="openDevGuide"
         @execution-history="openExecutionHistory"
         @categories-changed="refresh()"
+        @plugin-center="showHubPluginCenter = true"
       />
       <CategoryManagerModal
         :open="showCategoryManager"
@@ -583,5 +586,6 @@ onUnmounted(() => {
     <ConfirmDialogHost />
     <PromptDialogHost />
     <ScratchpadPanel />
+    <HubPluginCenterPanel :open="showHubPluginCenter" @close="showHubPluginCenter = false" />
   </div>
 </template>
