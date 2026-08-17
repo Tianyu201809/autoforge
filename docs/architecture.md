@@ -1,6 +1,6 @@
 # Autoforge 架构说明
 
-> 当前应用版本：**1.26.0** · 详见 [v1.26.0 版本说明](./v1.26.0.md)
+> 当前应用版本：**1.30.0** · 详见 [v1.30.0 版本说明](./v1.30.0.md)
 
 ## 设计原则
 
@@ -69,6 +69,9 @@ userData/                     # autoforge-development 或 autoforge-production
 | `log-bus` / `script-lifecycle` | 日志广播与生命周期事件 |
 | `hub-bridge-server` | 本机 HTTP 桥（`127.0.0.1:19276`）：`/health`、`/install`、CORS、安装锁 |
 | `hub-script-installer` | Hub zip 下载、解压、定位 `autoforge.json` 包根、调用 registry 导入 |
+| `hub-credential-store` | 主进程保存和清理 Hub 凭据；隔离 token 访问，向渲染进程提供脱敏账户信息 |
+| `hub-client` | 调用 Hub 登录、脚本列表、搜索和分类接口；统一处理 `q`、`category`、分页与错误状态 |
+| `HubPluginCenterPanel` | 原生脚本中心 UI：插件市场、我的脚本、团队脚本、详情 Markdown、安装/更新操作 |
 | `mcp-control-server` | 本地 Named Pipe / Unix Socket 控制面、握手、认证、请求路由与连接限制 |
 | `mcp/control-client` | MCP adapter 到主进程的 descriptor 发现、握手和断线重连 |
 | `mcp/tool-definitions` / `resource-definitions` | Agent 工具、只读 Resources、结果封装和错误转换 |
@@ -130,7 +133,31 @@ run(ctx) → log / stage / progress / result → UI
 
 JS 与 Python 共用 `shared/script-progress.ts` 定义的控制协议；取消时 JS 通过 `AbortSignal`，Python 通过终止子进程。
 
-## 已交付能力（截至 v1.24.0）
+## Hub 授权与脚本中心数据流
+
+```
+Autoforge 渲染进程
+    └─ preload.loginHub()
+        └─ 主进程生成 state + PKCE
+            └─ 系统浏览器打开 Hub 授权页
+                └─ 127.0.0.1:19276/auth/callback
+                    └─ 校验 state / code / PKCE
+                        └─ hub-credential-store 保存凭据
+                            └─ 返回脱敏账户信息
+
+脚本中心
+    └─ hub-client.listScripts({ scope, q, category, page })
+        └─ Hub 返回 distributions.category 与脚本元数据
+            └─ 卡片/详情渲染 README（markdown-it → DOMPurify）
+                └─ hub-bridge-server /install
+                    └─ hub-script-installer 导入 registry
+                        └─ EVENT_HUB_SCRIPT_INSTALLED
+                            └─ 主页面刷新并选中新脚本
+```
+
+授权回调只接受本机回环请求；凭据不通过页面脚本直接持有。脚本安装完成事件由主进程广播，保证脚本中心和主页面共享最新 registry 状态。
+
+## 已交付能力（截至 v1.30.0）
 
 | 能力 | 模块 / 入口 |
 |------|-------------|
@@ -190,7 +217,8 @@ JS 与 Python 共用 `shared/script-progress.ts` 定义的控制协议；取消�
 
 | 文档 | 内容 |
 |------|------|
-| [v1.26.0 版本说明](./v1.26.0.md) | 当前版本（脚本分页跳转、文本输入路径拖入） |
+| [v1.30.0 版本说明](./v1.30.0.md) | 当前版本（Hub 授权、脚本中心、搜索筛选、一键安装、账户设置） |
+| [v1.26.0 版本说明](./v1.26.0.md) | 脚本分页跳转、文本输入路径拖入 |
 | [v1.24.0 版本说明](./v1.24.0.md) | 当前版本（本地 MCP、Agent 接入与安全控制） |
 | [MCP 使用文档](./mcp.md) | 客户端配置、Token、安全与工具范围 |
 | [v1.20.0 版本说明](./v1.20.0.md) | 分类树、多实例批量 |
