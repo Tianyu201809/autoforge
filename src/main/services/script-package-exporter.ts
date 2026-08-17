@@ -77,13 +77,54 @@ const BLOCKED_EXTENSIONS = new Set([
   '.crt',
   '.cer'
 ])
-const MAX_EXPORT_BYTES = 50 * 1024 * 1024
-const MAX_FILE_BYTES = 10 * 1024 * 1024
+/** 原生包常见的运行资源；入口二进制在 Windows 之外通常没有扩展名 */
+const EXECUTABLE_EXTENSIONS = new Set([
+  '',
+  '.exe',
+  '.com',
+  '.bin',
+  '.dll',
+  '.so',
+  '.dylib',
+  '.node',
+  '.pyd',
+  '.a',
+  '.lib',
+  '.dat',
+  '.pak',
+  '.res',
+  '.ini',
+  '.cfg',
+  '.conf',
+  '.properties',
+  '.toml',
+  '.yaml',
+  '.yml',
+  '.xml',
+  '.manifest',
+  '.ttf',
+  '.otf',
+  '.woff',
+  '.woff2',
+  '.ico',
+  '.icns',
+  '.bmp',
+  '.wav',
+  '.mp3'
+])
+/** 形如 libfoo.so.1.2 的版本化共享库 */
+const VERSIONED_LIBRARY_PATTERN = /\.(?:so|dylib)(?:\.\d+)+$/i
+const MAX_EXPORT_BYTES = 500 * 1024 * 1024
+const MAX_FILE_BYTES = 500 * 1024 * 1024
+const MAX_BYTES_LABEL = '500 MB'
+
+export type ScriptExportLanguage = 'executable' | 'source'
 
 export interface ScriptExportPlan {
   files: string[]
   totalBytes: number
   defaultFileName: string
+  language: ScriptExportLanguage
 }
 
 function toPosixPath(filePath: string): string {
@@ -124,10 +165,12 @@ function isGeneratedExportPath(relativePath: string): boolean {
     .some((part) => GENERATED_DIR_NAMES.has(part))
 }
 
-function isAllowedExportFile(relativePath: string): boolean {
+function isAllowedExportFile(relativePath: string, language: ScriptExportLanguage): boolean {
   if (relativePath === MANIFEST_FILENAME || isReadme(relativePath)) return true
   const extension = extname(relativePath).toLowerCase()
-  return CODE_EXTENSIONS.has(extension) || RESOURCE_EXTENSIONS.has(extension)
+  if (CODE_EXTENSIONS.has(extension) || RESOURCE_EXTENSIONS.has(extension)) return true
+  if (language !== 'executable') return false
+  return EXECUTABLE_EXTENSIONS.has(extension) || VERSIONED_LIBRARY_PATTERN.test(relativePath)
 }
 
 function resolveWorkspacePath(root: string, relativePath: string): string {
@@ -140,12 +183,12 @@ function resolveWorkspacePath(root: string, relativePath: string): string {
   return fullPath
 }
 
-function assertSafeFile(root: string, relativePath: string): string {
+function assertSafeFile(root: string, relativePath: string, language: ScriptExportLanguage): string {
   const normalized = normalizeRelativePath(relativePath)
   if (isBlockedExportPath(normalized)) {
     throw new Error(`导出规则禁止包含文件: ${normalized}`)
   }
-  if (!isAllowedExportFile(normalized)) {
+  if (!isAllowedExportFile(normalized, language)) {
     throw new Error(`文件类型不在导出白名单中: ${normalized}`)
   }
   const fullPath = resolveWorkspacePath(root, normalized)
@@ -272,7 +315,11 @@ function listWorkspaceFiles(root: string): string[] {
   return files
 }
 
-function resolveExplicitIncludes(root: string, patterns: string[]): string[] {
+function resolveExplicitIncludes(
+  root: string,
+  patterns: string[],
+  language: ScriptExportLanguage
+): string[] {
   if (!patterns.length) return []
   const workspaceFiles = listWorkspaceFiles(root)
   const included = new Set<string>()
@@ -282,7 +329,7 @@ function resolveExplicitIncludes(root: string, patterns: string[]): string[] {
     const matches = workspaceFiles.filter((file) => matcher.test(file))
     if (!matches.length) throw new Error(`export.include 未匹配任何文件: ${rawPattern}`)
     for (const match of matches) {
-      assertSafeFile(root, match)
+      assertSafeFile(root, match, language)
       included.add(match)
     }
   }
@@ -299,64 +346,82 @@ function safeArchiveName(name: string, version: string): string {
   return `${cleaned || 'autoforge-script'}.zip`
 }
 
-export function buildScriptExportPlan(script: ScriptMeta, manifest: ScriptManifest): ScriptExportPlan {
-  if (script.language === 'executable' || manifest.language === 'executable') {
-    throw new Error('不支持导出原生程序包')
+function exportLanguageOf(script: ScriptMeta, manifest: ScriptManifest): ScriptExportLanguage {
+  return script.language === 'executable' || manifest.language === 'executable'
+    ? 'executable'
+    : 'source'
+}
+
+function collectSourceDependencies(root: string, relativePath: string, fullPath: string): string[] {
+  const extension = extname(relativePath).toLowerCase()
+  if (!CODE_EXTENSIONS.has(extension)) return []
+  const content = readFileSync(fullPath, UTF8)
+  const resolved: string[] = []
+  if (extension === '.py') {
+    for (const dependency of extractPythonModules(content)) {
+      const resolvedDependency = resolvePythonDependency(root, relativePath, dependency.module)
+      if (resolvedDependency) resolved.push(resolvedDependency)
+      else if (dependency.required) {
+        throw new Error(`无法解析本地 Python 依赖: ${dependency.module} (${relativePath})`)
+      }
+    }
+    return resolved
   }
+  for (const specifier of extractJsSpecifiers(content)) {
+    const resolvedDependency = resolveJsDependency(root, relativePath, specifier)
+    if (resolvedDependency) resolved.push(resolvedDependency)
+    else if (specifier.startsWith('.')) {
+      throw new Error(`无法解析本地 JavaScript 依赖: ${specifier} (${relativePath})`)
+    }
+  }
+  return resolved
+}
+
+export function buildScriptExportPlan(script: ScriptMeta, manifest: ScriptManifest): ScriptExportPlan {
+  const language = exportLanguageOf(script, manifest)
   const root = resolve(script.workspacePath)
-  const pending = [MANIFEST_FILENAME, manifest.entry ?? script.entry ?? 'index.mjs']
+  const entry = manifest.entry ?? script.entry ?? (language === 'executable' ? '' : 'index.mjs')
+  if (!entry) throw new Error('清单缺少入口文件')
+  const pending = [MANIFEST_FILENAME, entry]
   const readme = ['README.md', 'README'].find((name) => existsSync(join(root, name)))
   if (readme) pending.push(readme)
-  pending.push(...resolveExplicitIncludes(root, manifest.export?.include ?? []))
+  pending.push(...resolveExplicitIncludes(root, manifest.export?.include ?? [], language))
 
   const files = new Set<string>()
   while (pending.length) {
     const relativePath = normalizeRelativePath(pending.shift()!)
     if (files.has(relativePath)) continue
-    const fullPath = assertSafeFile(root, relativePath)
+    const fullPath = assertSafeFile(root, relativePath, language)
     files.add(relativePath)
-
-    const extension = extname(relativePath).toLowerCase()
-    if (!CODE_EXTENSIONS.has(extension)) continue
-    const content = readFileSync(fullPath, UTF8)
-    if (extension === '.py') {
-      for (const dependency of extractPythonModules(content)) {
-        const resolvedDependency = resolvePythonDependency(root, relativePath, dependency.module)
-        if (resolvedDependency) pending.push(resolvedDependency)
-        else if (dependency.required) {
-          throw new Error(`无法解析本地 Python 依赖: ${dependency.module} (${relativePath})`)
-        }
-      }
-    } else {
-      for (const specifier of extractJsSpecifiers(content)) {
-        const resolvedDependency = resolveJsDependency(root, relativePath, specifier)
-        if (resolvedDependency) pending.push(resolvedDependency)
-        else if (specifier.startsWith('.')) {
-          throw new Error(`无法解析本地 JavaScript 依赖: ${specifier} (${relativePath})`)
-        }
-      }
-    }
+    // 原生包不读取二进制内容，运行时资源只能通过 export.include 声明
+    if (language === 'executable') continue
+    pending.push(...collectSourceDependencies(root, relativePath, fullPath))
   }
 
   let totalBytes = 0
   for (const relativePath of files) {
     const size = statSync(resolveWorkspacePath(root, relativePath)).size
-    if (size > MAX_FILE_BYTES) throw new Error(`单个导出文件超过 10 MB: ${relativePath}`)
+    if (size > MAX_FILE_BYTES) {
+      throw new Error(`单个导出文件超过 ${MAX_BYTES_LABEL}: ${relativePath}`)
+    }
     totalBytes += size
   }
-  if (totalBytes > MAX_EXPORT_BYTES) throw new Error('导出文件总大小超过 50 MB')
+  if (totalBytes > MAX_EXPORT_BYTES) {
+    throw new Error(`导出文件总大小超过 ${MAX_BYTES_LABEL}`)
+  }
 
   return {
     files: [...files].sort((left, right) => left.localeCompare(right, 'zh-CN')),
     totalBytes,
-    defaultFileName: safeArchiveName(manifest.name, manifest.version ?? script.version ?? '1.0.0')
+    defaultFileName: safeArchiveName(manifest.name, manifest.version ?? script.version ?? '1.0.0'),
+    language
   }
 }
 
 export function writeScriptExportZip(script: ScriptMeta, plan: ScriptExportPlan, destination: string): void {
   const zip = new AdmZip()
   for (const relativePath of plan.files) {
-    const fullPath = assertSafeFile(script.workspacePath, relativePath)
+    const fullPath = assertSafeFile(script.workspacePath, relativePath, plan.language)
     zip.addFile(relativePath, readFileSync(fullPath))
   }
   zip.writeZip(destination)
@@ -364,6 +429,9 @@ export function writeScriptExportZip(script: ScriptMeta, plan: ScriptExportPlan,
 
 export function describeExportPlan(plan: ScriptExportPlan): string {
   const sizeMb = (plan.totalBytes / 1024 / 1024).toFixed(2)
+  if (plan.language === 'executable') {
+    return `将导出 ${plan.files.length} 个文件（${sizeMb} MB），包含清单、入口程序与显式声明的运行资源。原生包不做依赖分析，密钥、证书、数据库和业务数据不会包含在 ZIP 中。`
+  }
   return `将导出 ${plan.files.length} 个必要文件（${sizeMb} MB）。依赖包、运行产物、密钥和业务数据不会包含在 ZIP 中。`
 }
 

@@ -1,6 +1,6 @@
 # 脚本包规范（autoforge.json）
 
-> 当前应用版本：**1.27.0** · 脚本清单规范：`autoforge` **1.0** · 详见 [v1.27.0 版本说明](./v1.27.0.md)
+> 当前应用版本：**1.31.0** · 脚本清单规范：`autoforge` **1.0** · 详见 [v1.31.0 版本说明](./v1.31.0.md)
 
 ## 概述
 
@@ -82,7 +82,9 @@ Autoforge Hub「添加到本地」等场景使用 **zip** 传递脚本包。解�
 
 JavaScript 与 Python 脚本可在桌面端脚本卡片选择“导出 ZIP”。导出器从 `entry` 递归分析静态本地依赖，只包含 `autoforge.json`、必要源码、README 和被引用资源。依赖目录、缓存、未被入口引用的运行产物、`.env`、密钥、数据库、表格及压缩包等业务数据会被强制排除。若 manifest 入口位于 `dist/` 等构建目录（例如 `dist/index.js`），入口及其静态代码依赖属于必要项目代码，可以导出，但不会因此批量包含整个构建目录。
 
-`language: "executable"` 的原生程序包暂不支持导出 ZIP；界面禁用导出，主进程也会拒绝预览或导出请求。
+`language: "executable"` 的原生程序包同样可以导出 ZIP。导出器不解析二进制内容，只固定包含 `autoforge.json`、清单声明的入口程序、README 以及 `export.include` 匹配到的文件；运行时动态加载的 DLL、动态库、配置和数据文件必须在 `export.include` 中显式声明。
+
+单个文件和全部文件的未压缩总大小上限均为 500 MB，超出时导出会被拒绝。
 
 动态拼接路径读取的模板或资源无法静态识别时，可显式补充：
 
@@ -115,7 +117,7 @@ JavaScript 与 Python 脚本可在桌面端脚本卡片选择“导出 ZIP”。
 | `params` | ParamDefinition[] | | 运行业务参数 schema（每次运行可不同） |
 | `dependencies` | Record<string,string> | | 依赖：JS 脚本为 npm 包；Python 脚本为 pip 包（运行前自动安装至脚本 `.venv`）；原生程序不得声明此字段 |
 | `browser` | `{ headless?: boolean }` | | 浏览器启动选项；`headless: true` 为无头模式，默认 `false` |
-| `export.include` | string[] | | ZIP 导出时显式补充无法静态发现的必要资源；受安全白名单约束 |
+| `export.include` | string[] | | ZIP 导出时显式补充无法静态发现的必要资源；原生程序的动态库与配置必须在此声明；受安全白名单约束 |
 
 ### 浏览器无头模式
 
@@ -663,7 +665,7 @@ async def run(ctx):
 | `entry` | 单个相对路径字符串；不支持在同一清单中声明多平台入口映射 |
 | `dependencies` | 禁止声明；Autoforge 不安装 DLL、共享库、系统运行库或其他原生依赖 |
 | `browser` | 不适用；原生程序不使用 Autoforge 浏览器 SDK |
-| `export` | 原生程序包暂不支持从 Autoforge 导出 ZIP |
+| `export` | 支持导出 ZIP；入口以外的动态库、配置和数据文件必须写进 `export.include` |
 
 Autoforge 会在导入和每次运行前重新校验入口文件头及目标平台。识别结果包含 CPU 架构信息，但当前版本不在启动前阻止架构不兼容的程序，具体启动错误由操作系统报告。macOS `.app` 应用包目录暂不支持。
 

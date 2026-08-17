@@ -112,7 +112,7 @@ const footerMetaCompact = computed(() => {
 })
 
 async function handleExport(): Promise<void> {
-  if (exporting.value || props.script.language === 'executable') return
+  if (exporting.value) return
   exporting.value = true
   closeMenu()
   try {
@@ -561,8 +561,8 @@ onUnmounted(() => {
                 <button
                   type="button"
                   class="w-full flex items-center gap-2 px-3 py-1.5 text-[12px] sb-text-muted hover:sb-text-primary hover:sb-bg-hover text-left disabled:opacity-40"
-                  :disabled="exporting || script.language === 'executable'"
-                  :title="script.language === 'executable' ? '原生程序包暂不支持导出' : '导出 ZIP'"
+                  :disabled="exporting"
+                  title="导出 ZIP"
                   @click="handleExport"
                 >
                   <Download class="w-3.5 h-3.5" :stroke-width="1.5" />

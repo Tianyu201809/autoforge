@@ -1,6 +1,6 @@
 # Autoforge 架构说明
 
-> 当前应用版本：**1.30.0** · 详见 [v1.30.0 版本说明](./v1.30.0.md)
+> 当前应用版本：**1.31.0** · 详见 [v1.31.0 版本说明](./v1.31.0.md)
 
 ## 设计原则
 
@@ -53,6 +53,11 @@ userData/                     # autoforge-development 或 autoforge-production
 | `python-resolver` | 解释器路径解析、版本检测、`autoforge_runtime` 根目录 |
 | `python-dependency-manager` | 脚本 `.venv`、pip install、requirements 生成 |
 | `python-isolated-env` | Python 子进程隔离环境变量（UTF-8、PYTHONPATH 等） |
+| `executable-inspector` | 按文件头识别 PE / Mach-O / ELF、判断主程序候选与目标平台 |
+| `executable-package-discovery` | 扫描无清单来源，返回零个、一个或多个原生入口候选 |
+| `executable-script-runner` | 原生子进程环境变量构建、执行位修复、启动、输出采集与进程树终止 |
+| `executable-trust-store` | 按 `scriptId + 入口路径 + SHA-256` 持久化原生程序运行授权 |
+| `script-package-exporter` | 导出计划与 ZIP 写出：JS / Python 静态依赖收集、`executable` 清单 + 入口 + `export.include`、安全过滤与 500 MB 上限 |
 | `execution-history` | 运行记录持久化、按日查询、详情弹窗、重启后 reconcile |
 | `script-param-inputs` | 运行参数附件 staging 与缓存清理 |
 | `dependency-manager` | 依赖安装门面：按 `language` 委托 npm 或 pip |
@@ -133,6 +138,40 @@ run(ctx) → log / stage / progress / result → UI
 
 JS 与 Python 共用 `shared/script-progress.ts` 定义的控制协议；取消时 JS 通过 `AbortSignal`，Python 通过终止子进程。
 
+### 原生程序
+
+```
+（同上 env 解析与校验）
+    ↓
+校验入口路径、普通文件、非符号链接、工作区边界
+    ↓ executable-inspector 重新识别文件头与当前平台
+executable-trust-store 校验 SHA-256 授权
+    ↓ 未授权且 interactive 时 awaiting-confirmation
+spawn(entry, [], { cwd: scriptDir, shell: false })
+    ↓ env 注入 AUTOFORGE_PARAM_* / AUTOFORGE_PARAMS_JSON
+stdout / stderr 增量分行 → 日志总线 → UI
+```
+
+原生程序不实现 `run(ctx)`，不使用控制协议，输入统一通过环境变量传递。停止与超时终止整个进程树。
+
+## 脚本导出数据流
+
+```
+脚本卡片「导出 ZIP」
+    ↓
+buildScriptExportPlan(script, manifest)
+    ├─ javascript / python：入口递归静态依赖 + export.include
+    └─ executable：清单 + 入口 + README + export.include（不解析二进制）
+    ↓ 路径规范化、工作区边界、非符号链接、强制排除、500 MB 上限
+预览确认 → 保存对话框
+    ↓
+writeScriptExportZip()（复用同一套语言白名单校验）
+    ↓
+返回文件名、文件数与总大小
+```
+
+导出计划与写盘阶段共享 `assertSafeFile`，预览通过的文件集合与最终落盘内容一致。导出不携带原生程序的信任记录，目标机器首次运行仍须重新授权。
+
 ## Hub 授权与脚本中心数据流
 
 ```
@@ -157,7 +196,7 @@ Autoforge 渲染进程
 
 授权回调只接受本机回环请求；凭据不通过页面脚本直接持有。脚本安装完成事件由主进程广播，保证脚本中心和主页面共享最新 registry 状态。
 
-## 已交付能力（截至 v1.30.0）
+## 已交付能力（截至 v1.31.0）
 
 | 能力 | 模块 / 入口 |
 |------|-------------|
@@ -170,6 +209,8 @@ Autoforge 渲染进程
 | SQLite 持久化 | `db` · v1.2+ 自 JSON 自动迁移 |
 | JavaScript 脚本 | `script-runner` · 主进程 `import()` |
 | Python 脚本 | `python-script-runner` · 子进程 + `autoforge_runtime` |
+| 原生可执行程序 | `executable-inspector` / `executable-script-runner` / `executable-trust-store` · v1.27+ PE / Mach-O / ELF，SHA-256 运行授权 |
+| 脚本包 ZIP 导出 | `script-package-exporter` · 卡片「导出 ZIP」；v1.31+ 支持原生包，上限 500 MB |
 | 多类型 schema | `script-contract` · env/params：`text`、`textarea`、`number`、`select`、`radio`、`checkbox`、`boolean`、`attachment` |
 | 参数按环境绑定 | `script-store` · `paramsByEnv` |
 | 运行进度回显 | `script-progress` · `ctx.stage()` / `ctx.progress()` |
@@ -204,7 +245,7 @@ Autoforge 渲染进程
 | 导入校验 UI | 上传前预览 manifest、依赖冲突 | 中 |
 | 并发限制 | 同一脚本 / 全局最大并发数 | 中 |
 | 脚本模板 | 应用内脚手架一键创建新脚本 | 中 |
-| 应用内脚本市场 | 侧边栏目录浏览与安装（当前仍为占位；Hub 网站安装已交付） | 低 |
+| 脚本中心离线浏览 | 脚本中心需要联网；无网络时不缓存已浏览过的列表与详情 | 低 |
 | Hub 安装鉴权 / 去重更新 | 签名 URL、按 `hubScriptId` 覆盖更新 | 中 |
 
 ## 迁移说明
@@ -217,9 +258,11 @@ Autoforge 渲染进程
 
 | 文档 | 内容 |
 |------|------|
-| [v1.30.0 版本说明](./v1.30.0.md) | 当前版本（Hub 授权、脚本中心、搜索筛选、一键安装、账户设置） |
+| [v1.31.0 版本说明](./v1.31.0.md) | 当前版本（原生脚本导出 ZIP、500 MB 导出上限） |
+| [v1.30.0 版本说明](./v1.30.0.md) | Hub 授权、脚本中心、搜索筛选、一键安装、账户设置 |
+| [v1.27.0 版本说明](./v1.27.0.md) | 原生可执行程序导入、运行授权与进程托管 |
 | [v1.26.0 版本说明](./v1.26.0.md) | 脚本分页跳转、文本输入路径拖入 |
-| [v1.24.0 版本说明](./v1.24.0.md) | 当前版本（本地 MCP、Agent 接入与安全控制） |
+| [v1.24.0 版本说明](./v1.24.0.md) | 本地 MCP、Agent 接入与安全控制 |
 | [MCP 使用文档](./mcp.md) | 客户端配置、Token、安全与工具范围 |
 | [v1.20.0 版本说明](./v1.20.0.md) | 分类树、多实例批量 |
 | [v1.19.0 版本说明](./v1.19.0.md) | AutoforgeHub 入口 |

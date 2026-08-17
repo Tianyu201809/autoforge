@@ -4,7 +4,8 @@ import { test } from 'node:test'
 
 const source = readFileSync(new URL('./ScriptCard.vue', import.meta.url), 'utf8')
 
-test('disables native export before invoking preview', () => {
-  assert.match(source, /script\.language === 'executable'/)
-  assert.match(source, /原生程序包暂不支持导出/)
+test('keeps the export action available for native packages', () => {
+  assert.doesNotMatch(source, /原生程序包暂不支持导出/)
+  assert.match(source, /:disabled="exporting"/)
+  assert.match(source, /if \(exporting\.value\) return/)
 })

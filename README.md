@@ -4,10 +4,10 @@
 
 ### 自动化脚本散落在各处，环境配置重复录入，运行结果难以追溯——Autoforge 把它们收进一个本机桌面工作台。
 
-[![Version](https://img.shields.io/badge/version-1.30.0-blue)](docs/v1.30.0.md)
+[![Version](https://img.shields.io/badge/version-1.31.0-blue)](docs/v1.31.0.md)
 [![License](https://img.shields.io/badge/license-MIT-green)](LICENSE)
 
-[快速开始](#install) · [看示例](#see-it-work) · [脚本开发](#脚本开发) · [版本说明](docs/v1.30.0.md) · [更新日志](docs/CHANGELOG.md)
+[快速开始](#install) · [看示例](#see-it-work) · [脚本开发](#脚本开发) · [版本说明](docs/v1.31.0.md) · [更新日志](docs/CHANGELOG.md)
 
 </div>
 
@@ -18,7 +18,7 @@
 >
 > | 关注点 | 说明 |
 > |--------|------|
-> | 会执行什么 | 你导入的 JS / Python 脚本；可调用 Playwright 启动浏览器 |
+> | 会执行什么 | 你导入的 JS / Python 脚本；可调用 Playwright 启动浏览器。导入的原生程序以当前用户权限运行，首次运行及入口内容变化后须按 SHA-256 重新确认 |
 > | 会写哪些文件 | `%APPDATA%/autoforge-development/`（dev）或 `autoforge-production/`（安装包/preview）下的 SQLite、脚本与依赖 |
 > | 会访问网络吗 | 安装 npm / pip 依赖、脚本自身请求，以及从 Hub 一键安装时下载脚本 zip；应用运行时在本机 `127.0.0.1:19276` 提供安装桥（不对外网开放） |
 > | Python | 调用你本机已安装的 Python 3.9+，应用不捆绑解释器 |
@@ -194,9 +194,15 @@ interface ScriptRunContext {
 
 1. **脚本包目录** — 包含 `autoforge.json` 的文件夹（侧边栏导入或拖拽）
 2. **单文件** — `.js` / `.mjs` / `.cjs` / `.py`，平台自动包装为脚本包
-3. **Autoforge Hub** — 本机已启动 Autoforge 时，在 Hub 点击「添加到本地」；桌面端从公开 zip URL 下载并导入（`127.0.0.1:19276`）
+3. **原生程序** — Windows PE、macOS Mach-O、Linux ELF 主程序；单文件、目录或 zip 均可，无清单时按文件头发现入口并生成最小清单（详见 [v1.27.0](docs/v1.27.0.md)）
+4. **Autoforge Hub** — 本机已启动 Autoforge 时，在 Hub 点击「添加到本地」；桌面端从公开 zip URL 下载并导入（`127.0.0.1:19276`）
 
 Hub 契约见 [桌面端规格](docs/superpowers/specs/2026-07-11-hub-local-install-design.md) 与 [Hub 端规格](docs/superpowers/specs/2026-07-11-hub-local-install-hub-side-design.md)。
+
+### 导出方式
+
+脚本卡片菜单「导出 ZIP」可将任意语言的脚本包导出为可重新导入的 zip。JavaScript / Python 从入口递归收集静态本地依赖；原生程序包含清单与入口程序，动态加载的 DLL、配置和资源需在 `export.include` 中声明。单文件与合计未压缩上限均为 500 MB；依赖目录、缓存、密钥、证书和业务数据强制排除（详见 [v1.31.0](docs/v1.31.0.md)）。
+
 ### 内置示例
 
 | 示例 | 说明 |
@@ -264,9 +270,11 @@ Electron 34 · Vue 3 · TypeScript · Tailwind CSS 4 · Playwright Core · sql.j
 
 | 文档 | 内容 |
 |------|------|
-| [v1.30.0 版本说明](docs/v1.30.0.md) | 当前版本：Hub 授权登录、脚本中心、搜索筛选、一键安装与账户设置 |
+| [v1.31.0 版本说明](docs/v1.31.0.md) | 当前版本：原生脚本导出 ZIP、500 MB 导出上限 |
+| [v1.30.0 版本说明](docs/v1.30.0.md) | Hub 授权登录、脚本中心、搜索筛选、一键安装与账户设置 |
+| [v1.27.0 版本说明](docs/v1.27.0.md) | 原生可执行程序导入、运行授权与进程托管 |
 | [v1.26.0 版本说明](docs/v1.26.0.md) | 脚本分页跳转、文本输入路径拖入 |
-| [v1.24.0 版本说明](docs/v1.24.0.md) | 当前版本：本地 MCP、Agent 接入与安全控制 |
+| [v1.24.0 版本说明](docs/v1.24.0.md) | 本地 MCP、Agent 接入与安全控制 |
 | [v1.20.0 版本说明](docs/v1.20.0.md) | 无限嵌套分类树、单脚本多实例批量 |
 | [v1.19.0 版本说明](docs/v1.19.0.md) | AutoforgeHub 入口 |
 | [v1.15.0 版本说明](docs/v1.15.0.md) | Hub 一键安装到本地 |

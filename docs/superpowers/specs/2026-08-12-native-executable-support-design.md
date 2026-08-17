@@ -1,5 +1,8 @@
 # 原生可执行程序支持设计
 
+> [!NOTE]
+> 本文的「ZIP 导入与导出」「模块边界」和「验收标准」中关于禁止导出原生程序包的条目已被 [原生可执行脚本 ZIP 导出设计](./2026-08-17-executable-zip-export-design.md) 取代（v1.31.0 实现）。其余内容仍然有效。
+
 ## 背景
 
 Autoforge 当前将脚本包定义为 `autoforge.json` 加 JavaScript 或 Python 入口。JavaScript 由 Electron 主进程动态导入，Python 由独立子进程执行，两者都要求入口实现 `run(ctx)` 契约。用户还需要直接导入并运行 Windows PE、macOS Mach-O 和 Linux ELF 程序，包括不含 `autoforge.json` 的普通目录或 ZIP 包。
