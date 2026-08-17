@@ -1,12 +1,16 @@
 <script setup lang="ts">
 import { computed, onUnmounted, ref, watch } from 'vue'
 import {
+  ArrowLeft,
   Boxes,
   Download,
   FileText,
   LogOut,
   PackageOpen,
   RefreshCw,
+  Search,
+  Settings,
+  SlidersHorizontal,
   Store,
   Users,
   X
@@ -31,6 +35,17 @@ const authorizing = ref(false)
 const installingId = ref<string | null>(null)
 const error = ref('')
 const selected = ref<HubPlugin | null>(null)
+const view = ref<'catalog' | 'settings'>('catalog')
+const searchQuery = ref('')
+const selectedCategory = ref('')
+const categoryCounts = ref<Record<string, number>>({})
+let searchTimer: ReturnType<typeof setTimeout> | undefined
+
+const availableCategories = computed(() =>
+  Object.entries(categoryCounts.value)
+    .filter(([category]) => category.trim())
+    .sort(([left], [right]) => left.localeCompare(right, 'zh-CN'))
+)
 
 const scopeMeta = computed(() => {
   if (scope.value === 'personal') {
@@ -66,8 +81,10 @@ async function load(): Promise<void> {
     if (!session.value.authenticated) {
       items.value = []
       selected.value = null
+      categoryCounts.value = {}
       return
     }
+    if (view.value === 'settings') return
     teams.value = await window.autoforge.hub.listTeams()
     if (!teamId.value) teamId.value = teams.value[0]?.id ?? ''
     const result = await window.autoforge.hub.listPlugins({
@@ -75,9 +92,12 @@ async function load(): Promise<void> {
       teamId: scope.value === 'team' ? teamId.value : undefined,
       page: 1,
       pageSize: 30,
+      q: searchQuery.value.trim() || undefined,
+      category: selectedCategory.value || undefined,
       sort: scope.value === 'marketplace' ? 'newest' : 'name'
     })
     items.value = result.items
+    categoryCounts.value = result.distributions.category
     if (selected.value && !items.value.some((item) => item.id === selected.value?.id)) {
       selected.value = null
     }
@@ -89,10 +109,38 @@ async function load(): Promise<void> {
 }
 
 async function switchScope(nextScope: HubScope): Promise<void> {
+  view.value = 'catalog'
   if (scope.value === nextScope && items.value.length) return
   scope.value = nextScope
+  selectedCategory.value = ''
   selected.value = null
   await load()
+}
+
+function openSettings(): void {
+  view.value = 'settings'
+  selected.value = null
+  error.value = ''
+}
+
+function setCategory(category: string): void {
+  selectedCategory.value = category
+  selected.value = null
+  void load()
+}
+
+function scheduleSearch(): void {
+  if (searchTimer) window.clearTimeout(searchTimer)
+  searchTimer = window.setTimeout(() => {
+    selected.value = null
+    void load()
+  }, 260)
+}
+
+function clearSearch(): void {
+  if (!searchQuery.value) return
+  searchQuery.value = ''
+  scheduleSearch()
 }
 
 async function beginAuthorization(): Promise<void> {
@@ -161,12 +209,18 @@ watch(
   { immediate: true }
 )
 
-onUnmounted(offAuthorized)
+onUnmounted(() => {
+  offAuthorized()
+  if (searchTimer) window.clearTimeout(searchTimer)
+})
 </script>
 
 <template>
   <div v-if="open" class="hub-shell">
     <header class="hub-topbar">
+      <button class="hub-back-button" aria-label="返回 Autoforge" title="返回" @click="emit('close')">
+        <ArrowLeft :size="17" />
+      </button>
       <div class="hub-brand">
         <img :src="appIcon" alt="Autoforge" class="hub-mark" draggable="false" />
         <span class="hub-brand__title">脚本中心</span>
@@ -197,7 +251,7 @@ onUnmounted(offAuthorized)
       </div>
     </section>
 
-    <main v-else class="hub-workbench" :class="{ 'has-detail': selected }">
+    <main v-else class="hub-workbench" :class="{ 'has-detail': view === 'catalog' && selected }">
       <aside class="hub-sidebar">
         <div class="hub-profile">
           <div class="hub-avatar">{{ initials(session.user?.displayName) }}</div>
@@ -205,36 +259,40 @@ onUnmounted(offAuthorized)
             <b>{{ session.user?.displayName }}</b>
             <span>{{ session.user?.email }}</span>
           </div>
-          <button class="hub-profile__logout" title="退出 AutoforgeHub" aria-label="退出 AutoforgeHub" @click="logout">
-            <LogOut :size="15" />
-          </button>
         </div>
 
         <nav class="hub-navigation" aria-label="脚本来源">
-          <button :class="{ active: scope === 'marketplace' }" @click="switchScope('marketplace')">
+          <button :class="{ active: view === 'catalog' && scope === 'marketplace' }" @click="switchScope('marketplace')">
             <Store :size="16" />
             <span>脚本市场</span>
           </button>
-          <button :class="{ active: scope === 'personal' }" @click="switchScope('personal')">
+          <button :class="{ active: view === 'catalog' && scope === 'personal' }" @click="switchScope('personal')">
             <PackageOpen :size="16" />
             <span>我的脚本</span>
           </button>
-          <button :class="{ active: scope === 'team' }" @click="switchScope('team')">
+          <button :class="{ active: view === 'catalog' && scope === 'team' }" @click="switchScope('team')">
             <Users :size="16" />
             <span>团队脚本</span>
             <em v-if="session.user?.teamCount">{{ session.user.teamCount }}</em>
           </button>
         </nav>
 
-        <label v-if="scope === 'team'" class="hub-team-picker">
+        <label v-if="view === 'catalog' && scope === 'team'" class="hub-team-picker">
           <span>当前团队</span>
           <select v-model="teamId" @change="load">
             <option v-for="team in teams" :key="team.id" :value="team.id">{{ team.name }}</option>
           </select>
         </label>
+
+        <div class="hub-sidebar__footer">
+          <button :class="{ active: view === 'settings' }" @click="openSettings">
+            <Settings :size="16" />
+            <span>设置</span>
+          </button>
+        </div>
       </aside>
 
-      <section class="hub-content">
+      <section v-if="view === 'catalog'" class="hub-content">
         <div class="hub-heading">
           <div>
             <p class="hub-kicker">AUTOFORGEHUB / {{ scope.toUpperCase() }}</p>
@@ -244,9 +302,27 @@ onUnmounted(offAuthorized)
             </div>
             <p>{{ scopeMeta.subtitle }}</p>
           </div>
-          <button class="hub-icon-button hub-refresh" title="刷新脚本列表" aria-label="刷新脚本列表" @click="load">
-            <RefreshCw :size="16" :class="{ 'hub-spin': loading }" />
-          </button>
+          <div class="hub-heading__tools">
+            <label class="hub-search" aria-label="搜索 Hub 脚本">
+              <Search :size="15" />
+              <input v-model="searchQuery" type="search" placeholder="搜索脚本" @input="scheduleSearch" />
+              <button v-if="searchQuery" type="button" aria-label="清除搜索" title="清除搜索" @click="clearSearch">
+                <X :size="13" />
+              </button>
+            </label>
+            <label class="hub-category-filter">
+              <SlidersHorizontal :size="14" />
+              <select :value="selectedCategory" aria-label="按分类筛选" @change="setCategory(($event.target as HTMLSelectElement).value)">
+                <option value="">全部分类</option>
+                <option v-for="[category, count] in availableCategories" :key="category" :value="category">
+                  {{ category }} ({{ count }})
+                </option>
+              </select>
+            </label>
+            <button class="hub-icon-button hub-refresh" title="刷新脚本列表" aria-label="刷新脚本列表" @click="load">
+              <RefreshCw :size="16" :class="{ 'hub-spin': loading }" />
+            </button>
+          </div>
         </div>
 
         <p v-if="error" class="hub-error">{{ error }}</p>
@@ -298,7 +374,47 @@ onUnmounted(offAuthorized)
         </div>
       </section>
 
-      <aside v-if="selected" class="hub-detail" aria-label="脚本详情">
+      <section v-else class="hub-content hub-settings-view">
+        <div class="hub-heading hub-settings-heading">
+          <div>
+            <p class="hub-kicker">AUTOFORGEHUB / SETTINGS</p>
+            <div class="hub-heading__title">
+              <Settings :size="20" />
+              <h1>设置</h1>
+            </div>
+            <p>管理你的 AutoforgeHub 连接与账户会话。</p>
+          </div>
+        </div>
+
+        <section class="hub-account-settings" aria-labelledby="hub-account-settings-title">
+          <div class="hub-account-settings__heading">
+            <div class="hub-account-settings__icon"><Boxes :size="19" /></div>
+            <div>
+              <p class="hub-kicker">ACCOUNT</p>
+              <h2 id="hub-account-settings-title">账户管理</h2>
+            </div>
+          </div>
+          <div class="hub-account-settings__body">
+            <div class="hub-account-settings__identity">
+              <div class="hub-account-avatar">{{ initials(session.user?.displayName) }}</div>
+              <div>
+                <strong>{{ session.user?.displayName }}</strong>
+                <span>{{ session.user?.email }}</span>
+              </div>
+            </div>
+            <div class="hub-account-settings__status">
+              <span>AutoforgeHub 已连接</span>
+              <small>团队空间 {{ session.user?.teamCount || 0 }} 个</small>
+            </div>
+          </div>
+          <footer class="hub-account-settings__footer">
+            <p>退出不会移除已安装到本机的脚本。</p>
+            <button class="hub-logout-button" @click="logout"><LogOut :size="15" />退出登录</button>
+          </footer>
+        </section>
+      </section>
+
+      <aside v-if="view === 'catalog' && selected" class="hub-detail" aria-label="脚本详情">
         <header class="hub-detail__header">
           <div>
             <p class="hub-kicker">脚本详情</p>
@@ -369,6 +485,8 @@ onUnmounted(offAuthorized)
 }
 
 .hub-brand { gap: 8px; font-size: 12px; }
+.hub-back-button { display: inline-grid; width: 30px; height: 30px; flex: 0 0 auto; place-items: center; border: 1px solid transparent; border-radius: 5px; color: var(--sb-text-muted); transition: background .15s ease, border-color .15s ease, color .15s ease; }
+.hub-back-button:hover { border-color: var(--hub-rule); background: var(--sb-bg-hover); color: var(--sb-text-primary); }
 .hub-mark {
   display: block;
   width: 24px;
@@ -435,8 +553,6 @@ onUnmounted(offAuthorized)
 .hub-profile__text b, .hub-profile__text span { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .hub-profile__text b { color: var(--sb-text-primary); font-size: 12px; }
 .hub-profile__text span { margin-top: 3px; color: var(--sb-text-faint); font-size: 10px; }
-.hub-profile__logout { display: inline-grid; width: 27px; height: 27px; flex: 0 0 auto; place-items: center; border: 1px solid transparent; border-radius: 4px; color: var(--sb-text-faint); transition: background .15s ease, color .15s ease; }
-.hub-profile__logout:hover { background: var(--sb-bg-hover); color: var(--sb-text-primary); }
 .hub-navigation { display: grid; gap: 3px; margin-top: 15px; }
 .hub-navigation button { min-height: 34px; gap: 9px; width: 100%; padding: 0 8px; border-radius: 4px; color: var(--sb-text-muted); font-size: 12px; text-align: left; transition: background .15s ease, color .15s ease; }
 .hub-navigation button:hover { background: var(--sb-bg-hover); color: var(--sb-text-primary); }
@@ -444,12 +560,26 @@ onUnmounted(offAuthorized)
 .hub-navigation em { min-width: 17px; height: 17px; margin-left: auto; padding: 0 4px; border-radius: 9px; background: var(--sb-bg-inset); color: var(--sb-text-faint); font-family: var(--font-mono); font-size: 9px; font-style: normal; line-height: 17px; text-align: center; }
 .hub-team-picker { display: grid; gap: 6px; margin: 14px 7px 0; color: var(--sb-text-faint); font-family: var(--font-mono); font-size: 9px; letter-spacing: .05em; }
 .hub-team-picker select { width: 100%; height: 31px; padding: 0 8px; border: 1px solid var(--hub-rule); border-radius: 4px; background: var(--sb-bg-inset); color: var(--sb-text-secondary); font-size: 11px; }
+.hub-sidebar__footer { margin-top: auto; padding: 12px 0 0; border-top: 1px solid var(--hub-rule); }
+.hub-sidebar__footer button { display: flex; align-items: center; gap: 9px; width: 100%; min-height: 34px; padding: 0 8px; border-radius: 4px; color: var(--sb-text-muted); font-size: 12px; text-align: left; transition: background .15s ease, color .15s ease; }
+.hub-sidebar__footer button:hover { background: var(--sb-bg-hover); color: var(--sb-text-primary); }
+.hub-sidebar__footer button.active { background: var(--hub-accent-soft); box-shadow: inset 2px 0 0 var(--sb-accent-solid); color: var(--sb-text-primary); font-weight: 700; }
 
 .hub-content { min-width: 0; overflow: auto; padding: 28px clamp(20px, 3vw, 42px) 42px; }
 .hub-heading { display: flex; align-items: flex-start; justify-content: space-between; gap: 20px; padding-bottom: 22px; border-bottom: 1px solid var(--hub-rule); }
 .hub-heading__title { gap: 9px; margin-top: 7px; color: var(--sb-text-primary); }
 .hub-heading h1 { margin: 0; font-size: 22px; line-height: 1.2; letter-spacing: 0; }
 .hub-heading > div > p:last-child { margin: 8px 0 0; color: var(--sb-text-muted); font-size: 12px; }
+.hub-heading__tools { display: flex; align-items: center; gap: 8px; flex: 0 0 auto; }
+.hub-search, .hub-category-filter { display: flex; align-items: center; height: 32px; border: 1px solid var(--hub-rule); border-radius: 5px; background: var(--hub-surface); color: var(--sb-text-faint); }
+.hub-search { width: clamp(180px, 20vw, 256px); gap: 7px; padding-left: 9px; }
+.hub-search:focus-within { border-color: color-mix(in srgb, var(--sb-accent-solid) 58%, var(--hub-rule)); box-shadow: 0 0 0 2px color-mix(in srgb, var(--sb-accent-solid) 11%, transparent); color: var(--sb-accent-solid); }
+.hub-search input { min-width: 0; flex: 1; border: 0; outline: 0; background: transparent; color: var(--sb-text-primary); font-size: 11px; }
+.hub-search input::placeholder { color: var(--sb-text-faint); }
+.hub-search button { display: grid; width: 25px; height: 25px; place-items: center; color: var(--sb-text-faint); }
+.hub-search button:hover { color: var(--sb-text-primary); }
+.hub-category-filter { min-width: 130px; gap: 6px; padding-left: 9px; }
+.hub-category-filter select { min-width: 0; width: 100%; height: 100%; padding: 0 22px 0 0; border: 0; outline: 0; background: transparent; color: var(--sb-text-secondary); font-size: 11px; }
 .hub-refresh { margin-top: 2px; border-color: var(--hub-rule); }
 .hub-grid, .hub-loading-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(226px, 1fr)); gap: 12px; margin-top: 22px; }
 .hub-card { display: flex; flex-direction: column; min-width: 0; height: 196px; padding: 14px; border: 1px solid var(--hub-rule); border-radius: 6px; background: var(--hub-surface); cursor: pointer; outline: none; transition: border-color .15s ease, background .15s ease, transform .15s ease; }
@@ -471,6 +601,27 @@ onUnmounted(offAuthorized)
 .hub-empty-state { display: grid; justify-items: start; gap: 7px; max-width: 360px; margin: 74px auto; color: var(--sb-text-faint); font-size: 12px; text-align: left; }
 .hub-empty-state svg { margin-bottom: 5px; color: var(--sb-text-muted); }
 .hub-empty-state strong { color: var(--sb-text-secondary); font-size: 13px; }
+
+.hub-settings-view { display: flex; flex-direction: column; }
+.hub-settings-heading { flex: 0 0 auto; }
+.hub-account-settings { width: min(620px, 100%); margin-top: 28px; border: 1px solid var(--hub-rule); border-top: 2px solid color-mix(in srgb, var(--sb-accent-solid) 62%, var(--hub-rule)); border-radius: 6px; background: var(--hub-surface); }
+.hub-account-settings__heading { display: flex; align-items: center; gap: 11px; padding: 18px 20px; border-bottom: 1px solid var(--hub-rule); }
+.hub-account-settings__heading .hub-kicker { margin-bottom: 5px; }
+.hub-account-settings__heading h2 { margin: 0; color: var(--sb-text-primary); font-size: 14px; }
+.hub-account-settings__icon { display: grid; width: 34px; height: 34px; place-items: center; border-radius: 5px; background: var(--hub-accent-soft); color: var(--sb-accent-solid); }
+.hub-account-settings__body { display: flex; align-items: center; justify-content: space-between; gap: 24px; padding: 21px 20px; }
+.hub-account-settings__identity { display: flex; align-items: center; min-width: 0; gap: 11px; }
+.hub-account-avatar { display: grid; width: 38px; height: 38px; flex: 0 0 auto; place-items: center; border-radius: 5px; background: var(--sb-accent-solid); color: #fff; font-family: var(--font-mono); font-size: 10px; font-weight: 700; }
+.hub-account-settings__identity strong, .hub-account-settings__identity span { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.hub-account-settings__identity strong { color: var(--sb-text-primary); font-size: 13px; }
+.hub-account-settings__identity span { max-width: 280px; margin-top: 4px; color: var(--sb-text-faint); font-size: 11px; }
+.hub-account-settings__status { display: grid; justify-items: end; gap: 5px; color: var(--sb-text-secondary); font-size: 11px; text-align: right; }
+.hub-account-settings__status span { padding: 4px 7px; border: 1px solid color-mix(in srgb, var(--sb-accent-solid) 28%, var(--hub-rule)); border-radius: 3px; background: var(--hub-accent-soft); color: var(--sb-accent-solid); font-family: var(--font-mono); font-size: 9px; }
+.hub-account-settings__status small { color: var(--sb-text-faint); font-size: 10px; }
+.hub-account-settings__footer { display: flex; align-items: center; justify-content: space-between; gap: 16px; padding: 14px 20px; border-top: 1px solid var(--hub-rule); background: color-mix(in srgb, var(--hub-surface) 90%, var(--sb-bg-inset)); }
+.hub-account-settings__footer p { margin: 0; color: var(--sb-text-faint); font-size: 11px; line-height: 1.45; }
+.hub-logout-button { display: inline-flex; align-items: center; justify-content: center; gap: 7px; min-height: 32px; flex: 0 0 auto; padding: 0 11px; border: 1px solid color-mix(in srgb, var(--sb-status-error, #ef4444) 45%, var(--hub-rule)); border-radius: 4px; color: var(--sb-status-error, #ef4444); font-size: 11px; font-weight: 700; transition: background .15s ease, color .15s ease; }
+.hub-logout-button:hover { background: color-mix(in srgb, var(--sb-status-error, #ef4444) 10%, var(--hub-surface)); }
 
 .hub-detail { display: flex; min-width: 0; min-height: 0; flex-direction: column; border-left: 1px solid var(--hub-rule); background: var(--hub-surface); }
 .hub-detail__header { flex: 0 0 auto; justify-content: space-between; gap: 14px; padding: 22px 22px 14px; border-bottom: 1px solid var(--hub-rule); }
@@ -511,8 +662,14 @@ onUnmounted(offAuthorized)
   .hub-workbench, .hub-workbench.has-detail { grid-template-columns: 1fr; }
   .hub-sidebar { display: none; }
   .hub-content { padding: 20px; }
+  .hub-heading { flex-direction: column; gap: 16px; }
+  .hub-heading__tools { width: 100%; }
+  .hub-search { flex: 1; width: auto; }
+  .hub-category-filter { min-width: 118px; }
   .hub-grid, .hub-loading-grid { grid-template-columns: 1fr; }
   .hub-detail { width: 100%; }
+  .hub-account-settings__body, .hub-account-settings__footer { align-items: flex-start; flex-direction: column; }
+  .hub-account-settings__status { justify-items: start; text-align: left; }
   .hub-auth-card { padding: 26px 22px; }
 }
 </style>
