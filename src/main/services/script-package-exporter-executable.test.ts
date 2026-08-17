@@ -41,26 +41,74 @@ function seedExecutablePackage(root: string): void {
   writeFileSync(join(root, 'bin', 'tool.exe'), 'MZ-binary')
 }
 
-test('collects manifest, entry, readme and explicit resources for a native package', () => {
+test('packs the whole workspace root without needing export.include', () => {
   const root = makeRoot()
   seedExecutablePackage(root)
+  mkdirSync(join(root, 'assets', 'fonts'), { recursive: true })
   writeFileSync(join(root, 'bin', 'runtime.dll'), 'dll')
   writeFileSync(join(root, 'bin', 'settings.ini'), 'key=value')
-  writeFileSync(join(root, 'bin', 'notes.txt'), 'ignored')
+  writeFileSync(join(root, 'bin', 'notes.txt'), 'kept')
+  writeFileSync(join(root, 'assets', 'fonts', 'ui.ttf'), 'font')
 
-  const plan = buildScriptExportPlan(
-    makeScript(root, 'executable'),
-    makeManifest(['bin/runtime.dll', 'bin/settings.ini'])
-  )
+  const plan = buildScriptExportPlan(makeScript(root, 'executable'), makeManifest())
 
   assert.deepEqual(plan.files, [
+    'assets/fonts/ui.ttf',
     'autoforge.json',
+    'bin/notes.txt',
     'bin/runtime.dll',
     'bin/settings.ini',
     'bin/tool.exe',
     'README.md'
   ])
   assert.equal(plan.defaultFileName, 'Tool-1.0.0.zip')
+})
+
+test('packs file types that the source whitelist would reject', () => {
+  const root = makeRoot()
+  seedExecutablePackage(root)
+  writeFileSync(join(root, 'config.json'), '{"port":8080}')
+  writeFileSync(join(root, 'seed.db'), 'sqlite')
+  writeFileSync(join(root, 'report.xlsx'), 'sheet')
+  writeFileSync(join(root, 'bundled.zip'), 'archive')
+  writeFileSync(join(root, 'run.log'), 'log')
+  mkdirSync(join(root, 'dist'), { recursive: true })
+  writeFileSync(join(root, 'dist', 'payload.bin'), 'payload')
+
+  const plan = buildScriptExportPlan(makeScript(root, 'executable'), makeManifest())
+
+  for (const file of [
+    'config.json',
+    'seed.db',
+    'report.xlsx',
+    'bundled.zip',
+    'run.log',
+    'dist/payload.bin'
+  ]) {
+    assert.equal(plan.files.includes(file), true, `缺少 ${file}`)
+  }
+})
+
+test('excludes dependency directories, caches, secrets and .env from the root', () => {
+  const root = makeRoot()
+  seedExecutablePackage(root)
+  mkdirSync(join(root, 'node_modules', 'left-pad'), { recursive: true })
+  mkdirSync(join(root, '.venv'), { recursive: true })
+  mkdirSync(join(root, '.git'), { recursive: true })
+  mkdirSync(join(root, '__pycache__'), { recursive: true })
+  writeFileSync(join(root, 'node_modules', 'left-pad', 'index.js'), 'x')
+  writeFileSync(join(root, '.venv', 'pyvenv.cfg'), 'x')
+  writeFileSync(join(root, '.git', 'HEAD'), 'x')
+  writeFileSync(join(root, '__pycache__', 'cached.pyc'), 'x')
+  writeFileSync(join(root, '.env'), 'TOKEN=1')
+  writeFileSync(join(root, '.env.local'), 'TOKEN=2')
+  writeFileSync(join(root, 'signing.key'), 'secret')
+  writeFileSync(join(root, 'server.pem'), 'secret')
+  writeFileSync(join(root, 'client.pfx'), 'secret')
+
+  const plan = buildScriptExportPlan(makeScript(root, 'executable'), makeManifest())
+
+  assert.deepEqual(plan.files, ['autoforge.json', 'bin/tool.exe', 'README.md'])
 })
 
 test('writes a re-importable archive with the binary entry intact', () => {
@@ -71,7 +119,7 @@ test('writes a re-importable archive with the binary entry intact', () => {
   writeFileSync(join(root, 'bin', 'runtime.dll'), 'dll')
 
   const script = makeScript(root, 'executable')
-  const plan = buildScriptExportPlan(script, makeManifest(['bin/runtime.dll']))
+  const plan = buildScriptExportPlan(script, makeManifest())
   const destination = join(makeRoot(), 'tool.zip')
   writeScriptExportZip(script, plan, destination)
 
@@ -84,14 +132,28 @@ test('writes a re-importable archive with the binary entry intact', () => {
   assert.deepEqual(extracted, binary)
 })
 
-test('does not parse the binary entry for dependencies', () => {
+test('rejects a native entry that is missing from the workspace', () => {
+  const root = makeRoot()
+  mkdirSync(join(root, 'bin'), { recursive: true })
+  writeFileSync(join(root, 'autoforge.json'), '{}')
+
+  assert.throws(
+    () => buildScriptExportPlan(makeScript(root, 'executable'), makeManifest()),
+    /导出文件不存在: bin\/tool\.exe/
+  )
+})
+
+test('rejects a native entry that lives in an excluded directory', () => {
   const root = makeRoot()
   seedExecutablePackage(root)
-  writeFileSync(join(root, 'bin', 'tool.exe'), Buffer.from([0x4d, 0x5a, 0x90, 0x00, 0xff, 0xfe]))
+  mkdirSync(join(root, 'node_modules'), { recursive: true })
+  writeFileSync(join(root, 'node_modules', 'tool.exe'), 'MZ')
 
-  const plan = buildScriptExportPlan(makeScript(root, 'executable'), makeManifest())
-
-  assert.deepEqual(plan.files, ['autoforge.json', 'bin/tool.exe', 'README.md'])
+  const manifest = { ...makeManifest(), entry: 'node_modules/tool.exe' }
+  assert.throws(
+    () => buildScriptExportPlan(makeScript(root, 'executable'), manifest),
+    /导出规则禁止包含文件/
+  )
 })
 
 test('accepts a native binary far above the former 10 MB file limit', () => {
@@ -115,36 +177,49 @@ test('rejects a native file larger than 500 MB', () => {
   )
 })
 
-test('rejects restricted native resources matched by export.include', () => {
+test('ignores export.include for native packages instead of failing on it', () => {
   const root = makeRoot()
   seedExecutablePackage(root)
   writeFileSync(join(root, 'bin', 'signing.key'), 'secret')
 
-  assert.throws(
-    () => buildScriptExportPlan(makeScript(root, 'executable'), makeManifest(['bin/*.key'])),
-    /export\.include 未匹配任何文件/
+  const plan = buildScriptExportPlan(
+    makeScript(root, 'executable'),
+    makeManifest(['bin/*.key', 'nothing/matches/here/*.dll', '../outside.dll'])
   )
+
+  assert.deepEqual(plan.files, ['autoforge.json', 'bin/tool.exe', 'README.md'])
 })
 
-test('rejects an export.include pattern that escapes the workspace', () => {
-  const root = makeRoot()
-  seedExecutablePackage(root)
-
-  assert.throws(
-    () => buildScriptExportPlan(makeScript(root, 'executable'), makeManifest(['../outside.dll'])),
-    /非法导出路径/
-  )
-})
-
-test('rejects a symlinked native entry', { skip: process.platform === 'win32' }, () => {
+test('rejects a symlink anywhere under a native package', { skip: process.platform === 'win32' }, () => {
   const root = makeRoot()
   seedExecutablePackage(root)
   writeFileSync(join(root, 'bin', 'real.dll'), 'dll')
   symlinkSync(join(root, 'bin', 'real.dll'), join(root, 'bin', 'linked.dll'))
 
   assert.throws(
-    () => buildScriptExportPlan(makeScript(root, 'executable'), makeManifest(['bin/linked.dll'])),
+    () => buildScriptExportPlan(makeScript(root, 'executable'), makeManifest()),
     /导出不允许符号链接/
+  )
+})
+
+test('still rejects an escaping export.include pattern for source packages', () => {
+  const root = makeRoot()
+  writeFileSync(join(root, 'autoforge.json'), '{}')
+  writeFileSync(join(root, 'index.mjs'), 'export function run() {}\n')
+
+  assert.throws(
+    () => buildScriptExportPlan(
+      { language: 'javascript', workspacePath: root, entry: 'index.mjs', version: '1.0.0' } as ScriptMeta,
+      {
+        autoforge: '1.0',
+        name: 'Tool',
+        version: '1.0.0',
+        entry: 'index.mjs',
+        language: 'javascript',
+        export: { include: ['../outside.mjs'] }
+      }
+    ),
+    /非法导出路径/
   )
 })
 

@@ -186,7 +186,7 @@ export function registerIpcHandlers(
     return {
       fileCount: plan.files.length,
       totalBytes: plan.totalBytes,
-      message: `${describeExportPlan(plan)}\n\n请确认动态加载的模板或资源已在 autoforge.json 的 export.include 中声明。`
+      message: describeExportPlan(plan)
     }
   })
 

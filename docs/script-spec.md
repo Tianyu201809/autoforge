@@ -82,7 +82,19 @@ Autoforge Hub「添加到本地」等场景使用 **zip** 传递脚本包。解�
 
 JavaScript 与 Python 脚本可在桌面端脚本卡片选择“导出 ZIP”。导出器从 `entry` 递归分析静态本地依赖，只包含 `autoforge.json`、必要源码、README 和被引用资源。依赖目录、缓存、未被入口引用的运行产物、`.env`、密钥、数据库、表格及压缩包等业务数据会被强制排除。若 manifest 入口位于 `dist/` 等构建目录（例如 `dist/index.js`），入口及其静态代码依赖属于必要项目代码，可以导出，但不会因此批量包含整个构建目录。
 
-`language: "executable"` 的原生程序包同样可以导出 ZIP。导出器不解析二进制内容，只固定包含 `autoforge.json`、清单声明的入口程序、README 以及 `export.include` 匹配到的文件；运行时动态加载的 DLL、动态库、配置和数据文件必须在 `export.include` 中显式声明。
+`language: "executable"` 的原生程序包采用整目录打包：导出器不解析二进制内容，直接把整个脚本工作区按原有目录结构写入 ZIP，因此 DLL、动态库、配置和数据文件无需在清单中逐项声明，`export.include` 对原生包不起作用。
+
+原生包只排除以下内容：
+
+| 排除项 | 范围 |
+|--------|------|
+| 依赖与缓存目录 | `node_modules`、`.venv`、`venv`、`site-packages`、`.git`、`.svn`、`__pycache__`、`.pytest_cache`、`.mypy_cache` |
+| Autoforge 内部文件 | `.autoforge-attachments/`、`.autoforge-output/`、`.autoforge-deps.json` |
+| 环境变量文件 | `.env` 及 `.env.*` |
+| 凭据文件 | `.pem`、`.key`、`.p12`、`.pfx`、`.crt`、`.cer` |
+| 符号链接 | 工作区内任意位置出现符号链接时导出会被拒绝 |
+
+其余文件（含 `.json` 配置、数据库、表格、日志、内嵌压缩包以及 `dist/`、`release/` 等目录）都属于程序自身内容，会一并导出。
 
 单个文件和全部文件的未压缩总大小上限均为 500 MB，超出时导出会被拒绝。
 
@@ -117,7 +129,7 @@ JavaScript 与 Python 脚本可在桌面端脚本卡片选择“导出 ZIP”。
 | `params` | ParamDefinition[] | | 运行业务参数 schema（每次运行可不同） |
 | `dependencies` | Record<string,string> | | 依赖：JS 脚本为 npm 包；Python 脚本为 pip 包（运行前自动安装至脚本 `.venv`）；原生程序不得声明此字段 |
 | `browser` | `{ headless?: boolean }` | | 浏览器启动选项；`headless: true` 为无头模式，默认 `false` |
-| `export.include` | string[] | | ZIP 导出时显式补充无法静态发现的必要资源；原生程序的动态库与配置必须在此声明；受安全白名单约束 |
+| `export.include` | string[] | | ZIP 导出时显式补充无法静态发现的必要资源；受安全白名单约束；原生程序整目录打包，此字段被忽略 |
 
 ### 浏览器无头模式
 
@@ -665,7 +677,7 @@ async def run(ctx):
 | `entry` | 单个相对路径字符串；不支持在同一清单中声明多平台入口映射 |
 | `dependencies` | 禁止声明；Autoforge 不安装 DLL、共享库、系统运行库或其他原生依赖 |
 | `browser` | 不适用；原生程序不使用 Autoforge 浏览器 SDK |
-| `export` | 支持导出 ZIP；入口以外的动态库、配置和数据文件必须写进 `export.include` |
+| `export` | 支持导出 ZIP；整个脚本目录原样打包，`export.include` 不生效 |
 
 Autoforge 会在导入和每次运行前重新校验入口文件头及目标平台。识别结果包含 CPU 架构信息，但当前版本不在启动前阻止架构不兼容的程序，具体启动错误由操作系统报告。macOS `.app` 应用包目录暂不支持。
 

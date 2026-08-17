@@ -77,43 +77,8 @@ const BLOCKED_EXTENSIONS = new Set([
   '.crt',
   '.cer'
 ])
-/** 原生包常见的运行资源；入口二进制在 Windows 之外通常没有扩展名 */
-const EXECUTABLE_EXTENSIONS = new Set([
-  '',
-  '.exe',
-  '.com',
-  '.bin',
-  '.dll',
-  '.so',
-  '.dylib',
-  '.node',
-  '.pyd',
-  '.a',
-  '.lib',
-  '.dat',
-  '.pak',
-  '.res',
-  '.ini',
-  '.cfg',
-  '.conf',
-  '.properties',
-  '.toml',
-  '.yaml',
-  '.yml',
-  '.xml',
-  '.manifest',
-  '.ttf',
-  '.otf',
-  '.woff',
-  '.woff2',
-  '.ico',
-  '.icns',
-  '.bmp',
-  '.wav',
-  '.mp3'
-])
-/** 形如 libfoo.so.1.2 的版本化共享库 */
-const VERSIONED_LIBRARY_PATTERN = /\.(?:so|dylib)(?:\.\d+)+$/i
+/** 原生包整目录打包时仍然排除的凭据类文件 */
+const SECRET_EXTENSIONS = new Set(['.pem', '.key', '.p12', '.pfx', '.crt', '.cer'])
 const MAX_EXPORT_BYTES = 500 * 1024 * 1024
 const MAX_FILE_BYTES = 500 * 1024 * 1024
 const MAX_BYTES_LABEL = '500 MB'
@@ -148,14 +113,20 @@ function isReadme(relativePath: string): boolean {
   return /^readme(?:\.md)?$/i.test(relativePath)
 }
 
-export function isBlockedExportPath(relativePath: string): boolean {
+export function isBlockedExportPath(
+  relativePath: string,
+  language: ScriptExportLanguage = 'source'
+): boolean {
   const normalized = toPosixPath(relativePath).toLowerCase()
   const parts = normalized.split('/')
   const fileName = parts.at(-1) ?? ''
+  const extension = extname(fileName).toLowerCase()
   if (parts.some((part) => BLOCKED_DIR_NAMES.has(part))) return true
   if (BLOCKED_FILE_NAMES.has(fileName) || fileName.startsWith('.env.')) return true
-  if (fileName !== MANIFEST_FILENAME && extname(fileName).toLowerCase() === '.json') return true
-  return BLOCKED_EXTENSIONS.has(extname(fileName).toLowerCase())
+  // 原生包整目录打包，配置、数据和运行产物都属于程序自身内容，只排除凭据
+  if (language === 'executable') return SECRET_EXTENSIONS.has(extension)
+  if (fileName !== MANIFEST_FILENAME && extension === '.json') return true
+  return BLOCKED_EXTENSIONS.has(extension)
 }
 
 function isGeneratedExportPath(relativePath: string): boolean {
@@ -166,11 +137,10 @@ function isGeneratedExportPath(relativePath: string): boolean {
 }
 
 function isAllowedExportFile(relativePath: string, language: ScriptExportLanguage): boolean {
+  if (language === 'executable') return true
   if (relativePath === MANIFEST_FILENAME || isReadme(relativePath)) return true
   const extension = extname(relativePath).toLowerCase()
-  if (CODE_EXTENSIONS.has(extension) || RESOURCE_EXTENSIONS.has(extension)) return true
-  if (language !== 'executable') return false
-  return EXECUTABLE_EXTENSIONS.has(extension) || VERSIONED_LIBRARY_PATTERN.test(relativePath)
+  return CODE_EXTENSIONS.has(extension) || RESOURCE_EXTENSIONS.has(extension)
 }
 
 function resolveWorkspacePath(root: string, relativePath: string): string {
@@ -185,7 +155,7 @@ function resolveWorkspacePath(root: string, relativePath: string): string {
 
 function assertSafeFile(root: string, relativePath: string, language: ScriptExportLanguage): string {
   const normalized = normalizeRelativePath(relativePath)
-  if (isBlockedExportPath(normalized)) {
+  if (isBlockedExportPath(normalized, language)) {
     throw new Error(`导出规则禁止包含文件: ${normalized}`)
   }
   if (!isAllowedExportFile(normalized, language)) {
@@ -299,13 +269,15 @@ function globToRegExp(pattern: string): RegExp {
   return new RegExp(`${source}$`)
 }
 
-function listWorkspaceFiles(root: string): string[] {
+function listWorkspaceFiles(root: string, language: ScriptExportLanguage): string[] {
   const files: string[] = []
   const walk = (dir: string): void => {
     for (const entry of readdirSync(dir, { withFileTypes: true })) {
       const fullPath = join(dir, entry.name)
       const relativePath = toPosixPath(relative(root, fullPath))
-      if (isBlockedExportPath(relativePath) || isGeneratedExportPath(relativePath)) continue
+      if (isBlockedExportPath(relativePath, language)) continue
+      // 构建产物对源码脚本是噪音，对原生包则可能是程序本体
+      if (language !== 'executable' && isGeneratedExportPath(relativePath)) continue
       if (entry.isSymbolicLink()) throw new Error(`导出不允许符号链接: ${relativePath}`)
       if (entry.isDirectory()) walk(fullPath)
       else if (entry.isFile()) files.push(relativePath)
@@ -321,7 +293,7 @@ function resolveExplicitIncludes(
   language: ScriptExportLanguage
 ): string[] {
   if (!patterns.length) return []
-  const workspaceFiles = listWorkspaceFiles(root)
+  const workspaceFiles = listWorkspaceFiles(root, language)
   const included = new Set<string>()
   for (const rawPattern of patterns) {
     const normalized = normalizeRelativePath(rawPattern)
@@ -377,26 +349,42 @@ function collectSourceDependencies(root: string, relativePath: string, fullPath:
   return resolved
 }
 
-export function buildScriptExportPlan(script: ScriptMeta, manifest: ScriptManifest): ScriptExportPlan {
-  const language = exportLanguageOf(script, manifest)
-  const root = resolve(script.workspacePath)
-  const entry = manifest.entry ?? script.entry ?? (language === 'executable' ? '' : 'index.mjs')
-  if (!entry) throw new Error('清单缺少入口文件')
+/** 原生包整目录打包：清单与入口只做校验，内容由工作区遍历决定 */
+function collectExecutableFiles(root: string, entry: string): Set<string> {
+  assertSafeFile(root, MANIFEST_FILENAME, 'executable')
+  assertSafeFile(root, entry, 'executable')
+  const files = new Set(listWorkspaceFiles(root, 'executable'))
+  if (!files.size) throw new Error('脚本目录没有可导出的文件')
+  return files
+}
+
+function collectSourceFiles(root: string, entry: string, includes: string[]): Set<string> {
   const pending = [MANIFEST_FILENAME, entry]
   const readme = ['README.md', 'README'].find((name) => existsSync(join(root, name)))
   if (readme) pending.push(readme)
-  pending.push(...resolveExplicitIncludes(root, manifest.export?.include ?? [], language))
+  pending.push(...resolveExplicitIncludes(root, includes, 'source'))
 
   const files = new Set<string>()
   while (pending.length) {
     const relativePath = normalizeRelativePath(pending.shift()!)
     if (files.has(relativePath)) continue
-    const fullPath = assertSafeFile(root, relativePath, language)
+    const fullPath = assertSafeFile(root, relativePath, 'source')
     files.add(relativePath)
-    // 原生包不读取二进制内容，运行时资源只能通过 export.include 声明
-    if (language === 'executable') continue
     pending.push(...collectSourceDependencies(root, relativePath, fullPath))
   }
+  return files
+}
+
+export function buildScriptExportPlan(script: ScriptMeta, manifest: ScriptManifest): ScriptExportPlan {
+  const language = exportLanguageOf(script, manifest)
+  const root = resolve(script.workspacePath)
+  const entry = manifest.entry ?? script.entry ?? (language === 'executable' ? '' : 'index.mjs')
+  if (!entry) throw new Error('清单缺少入口文件')
+
+  const files =
+    language === 'executable'
+      ? collectExecutableFiles(root, entry)
+      : collectSourceFiles(root, entry, manifest.export?.include ?? [])
 
   let totalBytes = 0
   for (const relativePath of files) {
@@ -430,9 +418,9 @@ export function writeScriptExportZip(script: ScriptMeta, plan: ScriptExportPlan,
 export function describeExportPlan(plan: ScriptExportPlan): string {
   const sizeMb = (plan.totalBytes / 1024 / 1024).toFixed(2)
   if (plan.language === 'executable') {
-    return `将导出 ${plan.files.length} 个文件（${sizeMb} MB），包含清单、入口程序与显式声明的运行资源。原生包不做依赖分析，密钥、证书、数据库和业务数据不会包含在 ZIP 中。`
+    return `将打包整个脚本目录，共 ${plan.files.length} 个文件（${sizeMb} MB）。\n\n依赖目录、缓存、.env、密钥和证书不会包含在 ZIP 中；其余文件按目录结构原样导出。`
   }
-  return `将导出 ${plan.files.length} 个必要文件（${sizeMb} MB）。依赖包、运行产物、密钥和业务数据不会包含在 ZIP 中。`
+  return `将导出 ${plan.files.length} 个必要文件（${sizeMb} MB）。依赖包、运行产物、密钥和业务数据不会包含在 ZIP 中。\n\n请确认动态加载的模板或资源已在 autoforge.json 的 export.include 中声明。`
 }
 
 export function exportDisplayName(destination: string): string {

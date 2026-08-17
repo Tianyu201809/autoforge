@@ -57,7 +57,7 @@ userData/                     # autoforge-development 或 autoforge-production
 | `executable-package-discovery` | 扫描无清单来源，返回零个、一个或多个原生入口候选 |
 | `executable-script-runner` | 原生子进程环境变量构建、执行位修复、启动、输出采集与进程树终止 |
 | `executable-trust-store` | 按 `scriptId + 入口路径 + SHA-256` 持久化原生程序运行授权 |
-| `script-package-exporter` | 导出计划与 ZIP 写出：JS / Python 静态依赖收集、`executable` 清单 + 入口 + `export.include`、安全过滤与 500 MB 上限 |
+| `script-package-exporter` | 导出计划与 ZIP 写出：JS / Python 静态依赖收集、`executable` 整目录打包、安全过滤与 500 MB 上限 |
 | `execution-history` | 运行记录持久化、按日查询、详情弹窗、重启后 reconcile |
 | `script-param-inputs` | 运行参数附件 staging 与缓存清理 |
 | `dependency-manager` | 依赖安装门面：按 `language` 委托 npm 或 pip |
@@ -160,15 +160,17 @@ stdout / stderr 增量分行 → 日志总线 → UI
 脚本卡片「导出 ZIP」
     ↓
 buildScriptExportPlan(script, manifest)
-    ├─ javascript / python：入口递归静态依赖 + export.include
-    └─ executable：清单 + 入口 + README + export.include（不解析二进制）
-    ↓ 路径规范化、工作区边界、非符号链接、强制排除、500 MB 上限
+    ├─ javascript / python：入口递归静态依赖 + export.include + 扩展名白名单
+    └─ executable：校验清单与入口 → 遍历整个工作区根目录（不解析二进制，忽略 export.include）
+    ↓ 路径规范化、工作区边界、非符号链接、按语言强制排除、500 MB 上限
 预览确认 → 保存对话框
     ↓
-writeScriptExportZip()（复用同一套语言白名单校验）
+writeScriptExportZip()（复用同一套语言相关校验）
     ↓
 返回文件名、文件数与总大小
 ```
+
+两个分支的排除集合不同：源码脚本额外排除 `.json`、数据库、表格、日志、压缩包和 `dist`/`release` 等构建目录；原生包只排除依赖与缓存目录、`.autoforge-*` 内部文件、`.env` 系列和 `.pem`/`.key`/`.p12`/`.pfx`/`.crt`/`.cer` 凭据文件。
 
 导出计划与写盘阶段共享 `assertSafeFile`，预览通过的文件集合与最终落盘内容一致。导出不携带原生程序的信任记录，目标机器首次运行仍须重新授权。
 
@@ -210,7 +212,7 @@ Autoforge 渲染进程
 | JavaScript 脚本 | `script-runner` · 主进程 `import()` |
 | Python 脚本 | `python-script-runner` · 子进程 + `autoforge_runtime` |
 | 原生可执行程序 | `executable-inspector` / `executable-script-runner` / `executable-trust-store` · v1.27+ PE / Mach-O / ELF，SHA-256 运行授权 |
-| 脚本包 ZIP 导出 | `script-package-exporter` · 卡片「导出 ZIP」；v1.31+ 支持原生包，上限 500 MB |
+| 脚本包 ZIP 导出 | `script-package-exporter` · 卡片「导出 ZIP」；v1.31+ 原生包整目录打包，上限 500 MB |
 | 多类型 schema | `script-contract` · env/params：`text`、`textarea`、`number`、`select`、`radio`、`checkbox`、`boolean`、`attachment` |
 | 参数按环境绑定 | `script-store` · `paramsByEnv` |
 | 运行进度回显 | `script-progress` · `ctx.stage()` / `ctx.progress()` |
