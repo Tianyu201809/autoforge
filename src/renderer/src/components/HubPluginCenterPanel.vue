@@ -345,19 +345,11 @@ onUnmounted(() => {
             @keydown.enter="selected = plugin"
           >
             <div class="hub-card__header">
-              <div class="hub-plugin-icon" :style="{ backgroundColor: plugin.iconColor || 'var(--sb-accent-solid)' }">
-                {{ initials(plugin.icon || plugin.title) }}
-              </div>
-              <span class="hub-language">{{ plugin.language || 'AUTOMATION' }}</span>
-            </div>
-            <div class="hub-card__body">
-              <h2>{{ plugin.title }}</h2>
-              <p>{{ plugin.description || '暂无说明文档。' }}</p>
-            </div>
-            <footer class="hub-card__footer">
-              <div class="hub-card__meta">
-                <span>{{ plugin.category || '其他' }}</span>
-                <span>{{ formatDate(plugin.updatedAt) }}</span>
+              <div class="hub-card__identity">
+                <div class="hub-plugin-icon" :style="{ backgroundColor: plugin.iconColor || 'var(--sb-accent-solid)' }">
+                  {{ initials(plugin.icon || plugin.title) }}
+                </div>
+                <span class="hub-language">{{ plugin.language || 'AUTOMATION' }}</span>
               </div>
               <button
                 class="hub-install-button"
@@ -369,6 +361,17 @@ onUnmounted(() => {
                 <RefreshCw v-if="installingId === plugin.id" :size="15" class="hub-spin" />
                 <Download v-else :size="15" />
               </button>
+            </div>
+            <div class="hub-card__body">
+              <h2>{{ plugin.title }}</h2>
+              <p>{{ plugin.description || '暂无说明文档。' }}</p>
+            </div>
+            <footer class="hub-card__footer">
+              <div class="hub-card__meta">
+                <span class="hub-card__category">{{ plugin.category || '其他' }}</span>
+                <span class="hub-card__owner">{{ plugin.ownerDisplayName || 'AutoforgeHub' }}</span>
+              </div>
+              <time :datetime="plugin.updatedAt">{{ formatDate(plugin.updatedAt) }}</time>
             </footer>
           </article>
         </div>
@@ -581,23 +584,28 @@ onUnmounted(() => {
 .hub-category-filter { min-width: 130px; gap: 6px; padding-left: 9px; }
 .hub-category-filter select { min-width: 0; width: 100%; height: 100%; padding: 0 22px 0 0; border: 0; outline: 0; background: transparent; color: var(--sb-text-secondary); font-size: 11px; }
 .hub-refresh { margin-top: 2px; border-color: var(--hub-rule); }
-.hub-grid, .hub-loading-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(226px, 1fr)); gap: 12px; margin-top: 22px; }
-.hub-card { display: flex; flex-direction: column; min-width: 0; height: 196px; padding: 14px; border: 1px solid var(--hub-rule); border-radius: 6px; background: var(--hub-surface); cursor: pointer; outline: none; transition: border-color .15s ease, background .15s ease, transform .15s ease; }
-.hub-card:hover, .hub-card:focus-visible { border-color: color-mix(in srgb, var(--sb-accent-solid) 58%, var(--hub-rule)); background: var(--hub-surface-raised); transform: translateY(-1px); }
-.hub-card.selected { border-color: var(--sb-accent-solid); background: var(--hub-accent-soft); box-shadow: inset 3px 0 0 var(--sb-accent-solid); }
+.hub-grid, .hub-loading-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(244px, 1fr)); gap: 12px; margin-top: 22px; }
+.hub-card { position: relative; display: flex; flex-direction: column; min-width: 0; height: 184px; padding: 15px; border: 1px solid var(--hub-rule); border-radius: 6px; background: var(--hub-surface); cursor: pointer; outline: none; overflow: hidden; transition: border-color .15s ease, background .15s ease, box-shadow .15s ease, transform .15s ease; }
+.hub-card::before { position: absolute; top: 0; right: 0; left: 0; height: 2px; background: color-mix(in srgb, var(--sb-accent-solid) 24%, transparent); content: ''; }
+.hub-card:hover, .hub-card:focus-visible { border-color: color-mix(in srgb, var(--sb-accent-solid) 52%, var(--hub-rule)); background: var(--hub-surface-raised); box-shadow: 0 8px 22px rgb(0 0 0 / 8%); transform: translateY(-2px); }
+.hub-card.selected { border-color: var(--sb-accent-solid); background: var(--hub-accent-soft); box-shadow: inset 3px 0 0 var(--sb-accent-solid), 0 8px 22px rgb(0 0 0 / 8%); }
+.hub-card.selected::before { background: var(--sb-accent-solid); }
 .hub-card__header { justify-content: space-between; gap: 10px; }
-.hub-plugin-icon { display: grid; width: 31px; height: 31px; place-items: center; border-radius: 5px; color: #fff; font-family: var(--font-mono); font-size: 9px; font-weight: 700; }
-.hub-language { max-width: 105px; overflow: hidden; color: var(--sb-text-faint); font-family: var(--font-mono); font-size: 9px; font-weight: 700; letter-spacing: .05em; text-overflow: ellipsis; white-space: nowrap; }
-.hub-card__body { min-width: 0; margin-top: 13px; }
-.hub-card h2 { overflow: hidden; margin: 0; color: var(--sb-text-primary); font-size: 13px; font-weight: 700; line-height: 1.35; text-overflow: ellipsis; white-space: nowrap; }
-.hub-card__body p { display: -webkit-box; overflow: hidden; margin: 7px 0 0; color: var(--sb-text-muted); font-size: 11px; line-height: 1.5; -webkit-box-orient: vertical; -webkit-line-clamp: 2; }
-.hub-card__footer { justify-content: space-between; gap: 8px; margin-top: auto; }
-.hub-card__meta { min-width: 0; gap: 7px; overflow: hidden; color: var(--sb-text-faint); font-size: 10px; white-space: nowrap; }
+.hub-card__identity { display: flex; align-items: center; min-width: 0; gap: 9px; }
+.hub-plugin-icon { display: grid; width: 32px; height: 32px; flex: 0 0 auto; place-items: center; border-radius: 5px; color: #fff; box-shadow: inset 0 1px 0 rgb(255 255 255 / 22%); font-family: var(--font-mono); font-size: 9px; font-weight: 700; }
+.hub-language { max-width: 132px; overflow: hidden; color: var(--sb-text-faint); font-family: var(--font-mono); font-size: 9px; font-weight: 700; letter-spacing: .05em; text-overflow: ellipsis; white-space: nowrap; }
+.hub-card__body { min-width: 0; margin-top: 15px; }
+.hub-card h2 { display: -webkit-box; overflow: hidden; margin: 0; color: var(--sb-text-primary); font-size: 13px; font-weight: 700; line-height: 1.4; -webkit-box-orient: vertical; -webkit-line-clamp: 2; }
+.hub-card__body p { display: -webkit-box; overflow: hidden; margin: 7px 0 0; color: var(--sb-text-muted); font-size: 11px; line-height: 1.55; -webkit-box-orient: vertical; -webkit-line-clamp: 2; }
+.hub-card__footer { justify-content: space-between; gap: 8px; margin-top: auto; padding-top: 10px; border-top: 1px solid color-mix(in srgb, var(--hub-rule) 82%, transparent); }
+.hub-card__meta { display: flex; align-items: center; min-width: 0; gap: 7px; overflow: hidden; color: var(--sb-text-faint); font-size: 10px; white-space: nowrap; }
 .hub-card__meta span { overflow: hidden; text-overflow: ellipsis; }
-.hub-card__meta span + span::before { content: '·'; margin-right: 7px; color: var(--sb-text-faint); }
-.hub-install-button { display: inline-grid; width: 29px; height: 29px; flex: 0 0 auto; place-items: center; border: 1px solid color-mix(in srgb, var(--sb-accent-solid) 38%, var(--hub-rule)); border-radius: 4px; color: var(--sb-accent-solid); transition: background .15s ease, color .15s ease; }
-.hub-install-button:hover:not(:disabled) { background: var(--sb-accent-solid); color: #fff; }
-.hub-skeleton-card { height: 196px; border: 1px solid var(--hub-rule); border-radius: 6px; background: linear-gradient(100deg, var(--hub-surface) 35%, var(--sb-bg-hover) 50%, var(--hub-surface) 65%); background-size: 230% 100%; animation: hub-loading 1.3s ease-in-out infinite; }
+.hub-card__category { flex: 0 0 auto; padding: 3px 5px; border: 1px solid var(--hub-rule); border-radius: 3px; color: var(--sb-text-muted); font-family: var(--font-mono); font-size: 9px; }
+.hub-card__owner::before { margin-right: 7px; color: var(--sb-text-faint); content: '·'; }
+.hub-card__footer time { flex: 0 0 auto; color: var(--sb-text-faint); font-family: var(--font-mono); font-size: 9px; }
+.hub-install-button { display: inline-grid; width: 30px; height: 30px; flex: 0 0 auto; place-items: center; border: 1px solid color-mix(in srgb, var(--sb-accent-solid) 36%, var(--hub-rule)); border-radius: 4px; background: color-mix(in srgb, var(--sb-accent-solid) 5%, var(--sb-bg-inset)); color: var(--sb-accent-solid); transition: background .15s ease, color .15s ease, border-color .15s ease; }
+.hub-install-button:hover:not(:disabled) { border-color: var(--sb-accent-solid); background: var(--sb-accent-solid); color: #fff; }
+.hub-skeleton-card { height: 184px; border: 1px solid var(--hub-rule); border-radius: 6px; background: linear-gradient(100deg, var(--hub-surface) 35%, var(--sb-bg-hover) 50%, var(--hub-surface) 65%); background-size: 230% 100%; animation: hub-loading 1.3s ease-in-out infinite; }
 .hub-empty-state { display: grid; justify-items: start; gap: 7px; max-width: 360px; margin: 74px auto; color: var(--sb-text-faint); font-size: 12px; text-align: left; }
 .hub-empty-state svg { margin-bottom: 5px; color: var(--sb-text-muted); }
 .hub-empty-state strong { color: var(--sb-text-secondary); font-size: 13px; }
