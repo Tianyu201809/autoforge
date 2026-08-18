@@ -27,7 +27,7 @@ export default {
   <template v-for="node in nodes" :key="node.category.id">
     <button
       type="button"
-      class="relative w-full flex items-center gap-1.5 py-1.5 rounded-md text-[13px] transition-colors text-left"
+      class="w-full flex items-center gap-1.5 py-1.5 rounded-md text-[13px] transition-colors text-left"
       :class="
         activeKey === node.category.key
           ? 'sb-category-active sb-text-primary font-medium'
@@ -38,19 +38,18 @@ export default {
       @contextmenu="emit('context', node.category, $event)"
     >
       <span
-        v-if="node.children.length"
-        class="absolute w-3.5 h-3.5 flex items-center justify-center"
-        :style="{ left: `${depth * 12 - 10}px` }"
-        @click="emit('toggle', node.category.id, $event)"
+        class="w-3.5 h-3.5 flex items-center justify-center flex-shrink-0"
+        :class="node.children.length ? 'cursor-pointer' : 'pointer-events-none'"
+        @click="node.children.length ? emit('toggle', node.category.id, $event) : undefined"
       >
         <ChevronDown
           v-if="node.children.length && isExpanded(node.category.id)"
-          class="w-3 h-3 sb-text-faint"
+          class="w-3 h-3 sb-text-muted"
           :stroke-width="1.5"
         />
         <ChevronRight
           v-else-if="node.children.length"
-          class="w-3 h-3 sb-text-faint"
+          class="w-3 h-3 sb-text-muted"
           :stroke-width="1.5"
         />
       </span>
