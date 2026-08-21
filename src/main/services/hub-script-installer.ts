@@ -1,12 +1,16 @@
 import AdmZip from 'adm-zip'
 import { randomUUID } from 'crypto'
-import { existsSync, mkdirSync, mkdtempSync, readdirSync, rmSync, writeFileSync } from 'fs'
+import { existsSync, mkdirSync, mkdtempSync, readdirSync, rmSync } from 'fs'
+import { createWriteStream } from 'node:fs'
+import { pipeline } from 'node:stream/promises'
+import { Readable, Transform } from 'node:stream'
 import { tmpdir } from 'os'
 import { join } from 'path'
 import { dialog } from 'electron'
 import { MANIFEST_FILENAME } from '../../shared/script-contract'
 import { scriptRegistry } from './script-registry'
 import { scriptWorkspace } from './script-workspace'
+import { MAX_EXTRACTED_BYTES, MAX_ZIP_BYTES } from './safe-zip-package'
 
 export type HubInstallErrorCode =
   | 'invalid_request'
@@ -25,8 +29,6 @@ export class HubInstallError extends Error {
 }
 
 const DOWNLOAD_TIMEOUT_MS = 60_000
-const MAX_ZIP_BYTES = 50 * 1024 * 1024
-const MAX_EXTRACTED_BYTES = 100 * 1024 * 1024
 const MAX_ZIP_ENTRIES = 2_000
 
 function assertHttpUrl(zipUrl: unknown): string {
@@ -95,13 +97,28 @@ async function downloadZip(url: string, destPath: string): Promise<void> {
   try {
     const contentLength = Number(response.headers.get('content-length') ?? '0')
     if (Number.isFinite(contentLength) && contentLength > MAX_ZIP_BYTES) {
-      throw new HubInstallError('invalid_package', 'ZIP 文件超过 50 MB')
+      throw new HubInstallError('invalid_package', 'ZIP 文件超过 500 MB')
     }
-    const buffer = Buffer.from(await response.arrayBuffer())
-    if (buffer.length > MAX_ZIP_BYTES) {
-      throw new HubInstallError('invalid_package', 'ZIP 文件超过 50 MB')
+    if (!response.body) throw new HubInstallError('download_failed', '下载失败: 响应为空')
+    let downloadedBytes = 0
+    const counter = new Transform({
+      transform(chunk: Buffer, _encoding, callback) {
+        downloadedBytes += chunk.length
+        if (downloadedBytes > MAX_ZIP_BYTES) {
+          callback(new HubInstallError('invalid_package', 'ZIP 文件超过 500 MB'))
+          return
+        }
+        callback(null, chunk)
+      }
+    })
+    await pipeline(
+      Readable.fromWeb(response.body as any),
+      counter,
+      createWriteStream(destPath, { flags: 'wx' })
+    )
+    if (downloadedBytes === 0) {
+      throw new HubInstallError('invalid_package', 'ZIP 文件为空')
     }
-    writeFileSync(destPath, buffer)
   } catch (err) {
     if (err instanceof HubInstallError) throw err
     const message = err instanceof Error ? err.message : String(err)
@@ -129,7 +146,7 @@ function extractZip(zipPath: string, extractDir: string): void {
       }
       extractedBytes += entry.header.size
       if (extractedBytes > MAX_EXTRACTED_BYTES) {
-        throw new HubInstallError('invalid_package', 'ZIP 解压后超过 100 MB')
+        throw new HubInstallError('invalid_package', 'ZIP 解压后超过 500 MB')
       }
     }
     zip.extractAllTo(extractDir, true)

@@ -6,7 +6,7 @@ import type { ScriptImportInspection } from '../../shared/types/script'
 import { inferScriptLanguageFromExtension } from '../../shared/script-language'
 import { discoverExecutableCandidates, type ExecutableCandidate } from './executable-package-discovery'
 import { inspectExecutable } from './executable-inspector'
-import { extractZipSecurely, resolveZipPackageRoot } from './safe-zip-package'
+import { extractZipSecurely, MAX_ZIP_BYTES, resolveZipPackageRoot } from './safe-zip-package'
 import { hasManifest } from './script-workspace'
 import { removePathBestEffort } from './filesystem-cleanup'
 
@@ -38,7 +38,7 @@ export function withPreparedImportSource<T>(
   if (!stat.isFile()) throw new Error(`不支持的导入来源: ${sourcePath}`)
 
   if (isZipPath(sourcePath)) {
-    if (stat.size > 50 * 1024 * 1024) throw new Error('ZIP 文件超过 50 MB')
+    if (stat.size > MAX_ZIP_BYTES) throw new Error('ZIP 文件超过 500 MB')
     const tempDir = mkdtempSync(join(tmpdir(), 'autoforge-import-'))
     try {
       const extractDir = join(tempDir, 'extracted')

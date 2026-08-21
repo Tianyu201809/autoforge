@@ -5,6 +5,8 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, test } from 'node:test'
 import {
+  MAX_EXTRACTED_BYTES,
+  MAX_ZIP_BYTES,
   assertSafeZipEntryName,
   extractZipSecurely,
   resolveZipPackageRoot
@@ -12,6 +14,11 @@ import {
 
 const roots: string[] = []
 afterEach(() => { for (const root of roots.splice(0)) rmSync(root, { recursive: true, force: true }) })
+
+test('allows ZIP packages up to the Hub 500 MB limit', () => {
+  assert.equal(MAX_ZIP_BYTES, 500 * 1024 * 1024)
+  assert.equal(MAX_EXTRACTED_BYTES, 500 * 1024 * 1024)
+})
 
 function zipFile(entries: Record<string, Buffer>): string {
   const root = mkdtempSync(join(tmpdir(), 'autoforge-zip-test-'))

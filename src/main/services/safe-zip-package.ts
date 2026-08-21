@@ -3,8 +3,8 @@ import { existsSync, mkdirSync, readdirSync } from 'node:fs'
 import { join, resolve } from 'node:path'
 import { hasManifest } from './script-workspace'
 
-export const MAX_ZIP_BYTES = 50 * 1024 * 1024
-export const MAX_EXTRACTED_BYTES = 100 * 1024 * 1024
+export const MAX_ZIP_BYTES = 500 * 1024 * 1024
+export const MAX_EXTRACTED_BYTES = 500 * 1024 * 1024
 export const MAX_ZIP_ENTRIES = 2_000
 
 export function assertSafeZipEntryName(rawEntryName: string): string {
@@ -29,7 +29,7 @@ export function extractZipSecurely(zipPath: string, extractDir: string): void {
   for (const entry of entries) {
     assertSafeZipEntryName(entry.entryName)
     extractedBytes += entry.header.size
-    if (extractedBytes > MAX_EXTRACTED_BYTES) throw new Error('ZIP 解压后超过 100 MB')
+    if (extractedBytes > MAX_EXTRACTED_BYTES) throw new Error('ZIP 解压后超过 500 MB')
   }
   zip.extractAllTo(extractDir, true)
 }
