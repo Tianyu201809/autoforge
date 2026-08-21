@@ -124,7 +124,9 @@ export function registerIpcHandlers(
   })
   ipcMain.handle(IPC.HUB_INSTALL_PLUGIN, async (_event, id: unknown) => {
     if (typeof id !== 'string' || !id.trim()) throw new Error('invalid Hub plugin id')
-    const result = await hubClient.installPlugin(id.trim())
+    const result = await hubClient.installPlugin(id.trim(), (progress) => {
+      _event.sender.send(IPC.EVENT_HUB_INSTALL_PROGRESS, progress)
+    })
     if (result.status !== 'duplicate_cancelled') {
       broadcastToRenderers(IPC.EVENT_HUB_SCRIPT_INSTALLED, result)
     }

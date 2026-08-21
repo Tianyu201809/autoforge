@@ -67,6 +67,25 @@ export interface HubPluginListResult {
   distributions: { category: Record<string, number>; language: Record<string, number> }
 }
 
+export type HubInstallProgressPhase =
+  | 'preparing'
+  | 'downloading'
+  | 'extracting'
+  | 'validating'
+  | 'importing'
+  | 'complete'
+  | 'error'
+
+export interface HubInstallProgress {
+  hubScriptId: string
+  phase: HubInstallProgressPhase
+  message: string
+  percent?: number
+  downloadedBytes?: number
+  totalBytes?: number
+  error?: string
+}
+
 export type HubErrorCode =
   | 'hub_not_configured'
   | 'network'

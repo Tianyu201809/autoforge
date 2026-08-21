@@ -15,7 +15,7 @@ import {
   Users,
   X
 } from 'lucide-vue-next'
-import type { HubPlugin, HubScope, HubTeam, HubSession } from '../../../shared/hub-types'
+import type { HubInstallProgress, HubPlugin, HubScope, HubTeam, HubSession } from '../../../shared/hub-types'
 import { askConfirm } from '../composables/useConfirmDialog'
 import { useToast } from '../composables/useToast'
 import { renderScriptReadmeMarkdown } from '../lib/script-readme-markdown'
@@ -33,6 +33,7 @@ const items = ref<HubPlugin[]>([])
 const loading = ref(false)
 const authorizing = ref(false)
 const installingId = ref<string | null>(null)
+const installProgress = ref<HubInstallProgress | null>(null)
 const error = ref('')
 const selected = ref<HubPlugin | null>(null)
 const view = ref<'catalog' | 'settings'>('catalog')
@@ -71,6 +72,25 @@ function formatDate(value?: string): string {
   const date = new Date(value)
   if (Number.isNaN(date.getTime())) return '近期更新'
   return new Intl.DateTimeFormat('zh-CN', { month: 'short', day: 'numeric' }).format(date)
+}
+
+function formatBytes(value?: number): string {
+  if (value == null || value < 0) return ''
+  if (value < 1024 * 1024) return `${Math.max(1, Math.ceil(value / 1024))} KB`
+  return `${(value / (1024 * 1024)).toFixed(value >= 100 * 1024 * 1024 ? 0 : 1)} MB`
+}
+
+function progressFor(plugin: HubPlugin): HubInstallProgress | null {
+  return installProgress.value?.hubScriptId === plugin.id ? installProgress.value : null
+}
+
+function progressLabel(progress: HubInstallProgress): string {
+  if (progress.phase === 'error') return progress.error || '安装失败，请重试'
+  if (progress.phase !== 'downloading') return progress.message
+  const received = formatBytes(progress.downloadedBytes)
+  const total = formatBytes(progress.totalBytes)
+  if (received && total) return `${progress.message} ${progress.percent ?? 0}% · ${received} / ${total}`
+  return received ? `${progress.message} · 已下载 ${received}` : progress.message
 }
 
 async function load(): Promise<void> {
@@ -174,9 +194,16 @@ async function logout(): Promise<void> {
 }
 
 async function install(plugin: HubPlugin): Promise<void> {
+  if (installingId.value) return
   installingId.value = plugin.id
+  installProgress.value = {
+    hubScriptId: plugin.id,
+    phase: 'preparing',
+    message: '正在准备安装'
+  }
   try {
     const result = await window.autoforge.hub.installPlugin(plugin.id)
+    installProgress.value = null
     if (result.status !== 'duplicate_cancelled') {
       pushToast({
         type: 'success',
@@ -185,15 +212,30 @@ async function install(plugin: HubPlugin): Promise<void> {
       })
     }
   } catch (err) {
+    const message = err instanceof Error ? err.message : '请稍后重试'
+    if (installProgress.value?.hubScriptId === plugin.id && installProgress.value.phase !== 'error') {
+      installProgress.value = {
+        hubScriptId: plugin.id,
+        phase: 'error',
+        message: '安装失败',
+        error: message
+      }
+    }
     pushToast({
       type: 'error',
       title: '安装失败',
-      message: err instanceof Error ? err.message : '请稍后重试'
+      message
     })
   } finally {
     installingId.value = null
   }
 }
+
+const offInstallProgress = window.autoforge.hub.onInstallProgress((progress) => {
+  if (progress.hubScriptId === installingId.value || progress.hubScriptId === installProgress.value?.hubScriptId) {
+    installProgress.value = progress
+  }
+})
 
 const offAuthorized = window.autoforge.hub.onHubAuthorized((next) => {
   session.value = next
@@ -211,6 +253,7 @@ watch(
 
 onUnmounted(() => {
   offAuthorized()
+  offInstallProgress()
   if (searchTimer) window.clearTimeout(searchTimer)
 })
 </script>
@@ -339,7 +382,7 @@ onUnmounted(() => {
             v-for="plugin in items"
             :key="plugin.id"
             class="hub-card"
-            :class="{ selected: selected?.id === plugin.id }"
+            :class="{ selected: selected?.id === plugin.id, installing: installingId === plugin.id, 'install-failed': progressFor(plugin)?.phase === 'error' }"
             tabindex="0"
             @click="selected = plugin"
             @keydown.enter="selected = plugin"
@@ -354,8 +397,8 @@ onUnmounted(() => {
               <button
                 class="hub-install-button"
                 :disabled="installingId !== null"
-                :aria-label="`安装 ${plugin.title}`"
-                :title="`安装 ${plugin.title}`"
+                :aria-label="progressFor(plugin)?.phase === 'error' ? `重试安装 ${plugin.title}` : `安装 ${plugin.title}`"
+                :title="progressFor(plugin)?.phase === 'error' ? `重试安装 ${plugin.title}` : `安装 ${plugin.title}`"
                 @click.stop="install(plugin)"
               >
                 <RefreshCw v-if="installingId === plugin.id" :size="15" class="hub-spin" />
@@ -365,6 +408,12 @@ onUnmounted(() => {
             <div class="hub-card__body">
               <h2>{{ plugin.title }}</h2>
               <p>{{ plugin.description || '暂无说明文档。' }}</p>
+            </div>
+            <div v-if="progressFor(plugin)" class="hub-install-progress" :class="{ error: progressFor(plugin)?.phase === 'error' }" role="status">
+              <div v-if="progressFor(plugin)?.phase !== 'error'" class="hub-install-progress__track" aria-hidden="true">
+                <span :class="{ indeterminate: progressFor(plugin)?.percent == null }" :style="progressFor(plugin)?.percent != null ? { width: `${progressFor(plugin)?.percent}%` } : undefined" />
+              </div>
+              <span>{{ progressLabel(progressFor(plugin)!) }}</span>
             </div>
             <footer class="hub-card__footer">
               <div class="hub-card__meta">
@@ -437,7 +486,7 @@ onUnmounted(() => {
           <button class="hub-primary-button" :disabled="installingId !== null" @click="install(selected)">
             <RefreshCw v-if="installingId === selected.id" :size="16" class="hub-spin" />
             <Download v-else :size="16" />
-            {{ installingId === selected.id ? '正在安装' : '安装到本地' }}
+            {{ installingId === selected.id ? progressFor(selected)?.message || '正在安装' : progressFor(selected)?.phase === 'error' ? '重试安装' : '安装到本地' }}
           </button>
         </footer>
       </aside>
@@ -585,7 +634,7 @@ onUnmounted(() => {
 .hub-category-filter select { min-width: 0; width: 100%; height: 100%; padding: 0 22px 0 0; border: 0; outline: 0; background: transparent; color: var(--sb-text-secondary); font-size: 11px; }
 .hub-refresh { margin-top: 2px; border-color: var(--hub-rule); }
 .hub-grid, .hub-loading-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(244px, 1fr)); gap: 12px; margin-top: 22px; }
-.hub-card { position: relative; display: flex; flex-direction: column; min-width: 0; height: 184px; padding: 15px; border: 1px solid var(--hub-rule); border-radius: 6px; background: var(--hub-surface); cursor: pointer; outline: none; overflow: hidden; transition: border-color .15s ease, background .15s ease, box-shadow .15s ease, transform .15s ease; }
+.hub-card { position: relative; display: flex; flex-direction: column; min-width: 0; height: 220px; padding: 15px; border: 1px solid var(--hub-rule); border-radius: 6px; background: var(--hub-surface); cursor: pointer; outline: none; overflow: hidden; transition: border-color .15s ease, background .15s ease, box-shadow .15s ease, transform .15s ease; }
 .hub-card::before { position: absolute; top: 0; right: 0; left: 0; height: 2px; background: color-mix(in srgb, var(--sb-accent-solid) 24%, transparent); content: ''; }
 .hub-card:hover, .hub-card:focus-visible { border-color: color-mix(in srgb, var(--sb-accent-solid) 52%, var(--hub-rule)); background: var(--hub-surface-raised); box-shadow: 0 8px 22px rgb(0 0 0 / 8%); transform: translateY(-2px); }
 .hub-card.selected { border-color: var(--sb-accent-solid); background: var(--hub-accent-soft); box-shadow: inset 3px 0 0 var(--sb-accent-solid), 0 8px 22px rgb(0 0 0 / 8%); }
@@ -605,7 +654,14 @@ onUnmounted(() => {
 .hub-card__footer time { flex: 0 0 auto; color: var(--sb-text-faint); font-family: var(--font-mono); font-size: 9px; }
 .hub-install-button { display: inline-grid; width: 30px; height: 30px; flex: 0 0 auto; place-items: center; border: 1px solid color-mix(in srgb, var(--sb-accent-solid) 36%, var(--hub-rule)); border-radius: 4px; background: color-mix(in srgb, var(--sb-accent-solid) 5%, var(--sb-bg-inset)); color: var(--sb-accent-solid); transition: background .15s ease, color .15s ease, border-color .15s ease; }
 .hub-install-button:hover:not(:disabled) { border-color: var(--sb-accent-solid); background: var(--sb-accent-solid); color: #fff; }
-.hub-skeleton-card { height: 184px; border: 1px solid var(--hub-rule); border-radius: 6px; background: linear-gradient(100deg, var(--hub-surface) 35%, var(--sb-bg-hover) 50%, var(--hub-surface) 65%); background-size: 230% 100%; animation: hub-loading 1.3s ease-in-out infinite; }
+.hub-card.installing { border-color: color-mix(in srgb, var(--sb-accent-solid) 60%, var(--hub-rule)); }
+.hub-card.install-failed { border-color: color-mix(in srgb, var(--sb-status-error, #ef4444) 62%, var(--hub-rule)); }
+.hub-install-progress { display: grid; gap: 6px; margin-top: 12px; color: var(--sb-accent-solid); font-family: var(--font-mono); font-size: 9px; line-height: 1.35; }
+.hub-install-progress.error { color: var(--sb-status-error, #ef4444); }
+.hub-install-progress__track { height: 4px; overflow: hidden; border-radius: 3px; background: color-mix(in srgb, var(--sb-bg-inset) 90%, #000); }
+.hub-install-progress__track span { display: block; height: 100%; min-width: 2px; border-radius: inherit; background: var(--sb-accent-solid); transition: width .18s ease; }
+.hub-install-progress__track span.indeterminate { width: 36%; animation: hub-progress-indeterminate 1.15s ease-in-out infinite; }
+.hub-skeleton-card { height: 220px; border: 1px solid var(--hub-rule); border-radius: 6px; background: linear-gradient(100deg, var(--hub-surface) 35%, var(--sb-bg-hover) 50%, var(--hub-surface) 65%); background-size: 230% 100%; animation: hub-loading 1.3s ease-in-out infinite; }
 .hub-empty-state { display: grid; justify-items: start; gap: 7px; max-width: 360px; margin: 74px auto; color: var(--sb-text-faint); font-size: 12px; text-align: left; }
 .hub-empty-state svg { margin-bottom: 5px; color: var(--sb-text-muted); }
 .hub-empty-state strong { color: var(--sb-text-secondary); font-size: 13px; }
@@ -660,6 +716,7 @@ onUnmounted(() => {
 
 @keyframes hub-spin { to { transform: rotate(360deg); } }
 @keyframes hub-loading { to { background-position: -130% 0; } }
+@keyframes hub-progress-indeterminate { 0% { transform: translateX(-120%); } 50% { transform: translateX(120%); } 100% { transform: translateX(280%); } }
 
 @media (max-width: 1080px) {
   .hub-workbench.has-detail { grid-template-columns: 188px minmax(0, 1fr); }

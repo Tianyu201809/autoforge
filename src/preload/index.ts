@@ -36,7 +36,7 @@ import type {
 import type { ScriptIcon, ScriptLifecycleEvent } from '../shared/script-contract'
 import type { ScriptLanguage } from '../shared/script-language'
 import type { McpClientConfig, McpStatus } from '../shared/mcp-types'
-import type { HubPlugin, HubPluginListResult, HubPluginQuery, HubSession, HubTeam } from '../shared/hub-types'
+import type { HubInstallProgress, HubPlugin, HubPluginListResult, HubPluginQuery, HubSession, HubTeam } from '../shared/hub-types'
 
 export interface EditorFileStatePayload {
   content: string
@@ -267,7 +267,12 @@ const autoforge = {
     listTeams: (): Promise<HubTeam[]> => ipcRenderer.invoke(IPC.HUB_LIST_TEAMS),
     listPlugins: (query: HubPluginQuery): Promise<HubPluginListResult> => ipcRenderer.invoke(IPC.HUB_LIST_PLUGINS, query),
     getPlugin: (id: string): Promise<HubPlugin> => ipcRenderer.invoke(IPC.HUB_GET_PLUGIN, id),
-    installPlugin: (id: string): Promise<{ scriptId: string; name: string; status: 'installed' | 'updated' | 'duplicate_cancelled' }> => ipcRenderer.invoke(IPC.HUB_INSTALL_PLUGIN, id)
+    installPlugin: (id: string): Promise<{ scriptId: string; name: string; status: 'installed' | 'updated' | 'duplicate_cancelled' }> => ipcRenderer.invoke(IPC.HUB_INSTALL_PLUGIN, id),
+    onInstallProgress: (callback: (progress: HubInstallProgress) => void): (() => void) => {
+      const handler = (_event: IpcRendererEvent, progress: HubInstallProgress): void => callback(progress)
+      ipcRenderer.on(IPC.EVENT_HUB_INSTALL_PROGRESS, handler)
+      return () => ipcRenderer.removeListener(IPC.EVENT_HUB_INSTALL_PROGRESS, handler)
+    }
   },
   mcp: {
     getStatus: (): Promise<McpStatus> => ipcRenderer.invoke(IPC.MCP_GET_STATUS),

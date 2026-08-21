@@ -1,5 +1,5 @@
 import type { HubCredentialStore } from './hub-credential-store'
-import { HubClientError, type HubPlugin, type HubPluginListResult, type HubPluginQuery, type HubSession, type HubTeam, type HubUser } from '../../shared/hub-types'
+import { HubClientError, type HubInstallProgress, type HubPlugin, type HubPluginListResult, type HubPluginQuery, type HubSession, type HubTeam, type HubUser } from '../../shared/hub-types'
 
 type ResponseLike = { ok: boolean; status: number; json(): Promise<unknown> }
 type InstallResult = { scriptId: string; name: string; status: 'installed' | 'updated' | 'duplicate_cancelled' }
@@ -20,7 +20,7 @@ export function createHubClient(options: {
   getHubUrl(): string
   credentials: HubCredentialStore
   request(url: string, init?: RequestInit): Promise<ResponseLike>
-  install(input: { zipUrl: string; scriptName: string; hubScriptId: string }): Promise<InstallResult>
+  install(input: { zipUrl: string; scriptName: string; hubScriptId: string; onProgress?: (progress: HubInstallProgress) => void }): Promise<InstallResult>
 }) {
   function baseUrl(): string {
     try {
@@ -87,10 +87,10 @@ export function createHubClient(options: {
       return await request(`/api/scripts?${params}`) as HubPluginListResult
     },
     async getPlugin(id: string): Promise<HubPlugin> { return await request(`/api/scripts/${encodeURIComponent(id)}`) as HubPlugin },
-    async installPlugin(id: string): Promise<InstallResult> {
+    async installPlugin(id: string, onProgress?: (progress: HubInstallProgress) => void): Promise<InstallResult> {
       const body = await request(`/api/scripts/${encodeURIComponent(id)}/install-token`, { method: 'POST' }) as Record<string, unknown>
       if (typeof body.zipUrl !== 'string' || typeof body.scriptName !== 'string' || typeof body.hubScriptId !== 'string') throw new HubClientError('invalid_response', 'AutoforgeHub 安装响应无效')
-      try { return await options.install({ zipUrl: body.zipUrl, scriptName: body.scriptName, hubScriptId: body.hubScriptId }) }
+      try { return await options.install({ zipUrl: body.zipUrl, scriptName: body.scriptName, hubScriptId: body.hubScriptId, onProgress }) }
       catch (error) { throw new HubClientError('install_failed', error instanceof Error ? error.message : '脚本安装失败') }
     }
   }

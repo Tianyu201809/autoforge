@@ -33,6 +33,7 @@ import type {
 } from '../../shared/types/script'
 import type { ScriptIcon, ScriptLifecycleEvent } from '../../shared/script-contract'
 import type { McpClientConfig, McpStatus } from '../../shared/mcp-types'
+import type { HubInstallProgress, HubPlugin, HubPluginListResult, HubPluginQuery, HubSession, HubTeam } from '../../shared/hub-types'
 
 export interface ScriptListResponse {
   scripts: ScriptItem[]
@@ -195,6 +196,19 @@ export interface AutoforgeApi {
   config: {
     get: () => Promise<AppConfig>
     set: (config: Partial<AppConfig>) => Promise<AppConfig>
+  }
+  hub: {
+    session: () => Promise<HubSession>
+    login: (email: string, password: string) => Promise<HubSession>
+    beginAuthorization: () => Promise<void>
+    cancelAuthorization: () => Promise<void>
+    onHubAuthorized: (callback: (session: HubSession) => void) => () => void
+    logout: () => Promise<void>
+    listTeams: () => Promise<HubTeam[]>
+    listPlugins: (query: HubPluginQuery) => Promise<HubPluginListResult>
+    getPlugin: (id: string) => Promise<HubPlugin>
+    installPlugin: (id: string) => Promise<{ scriptId: string; name: string; status: 'installed' | 'updated' | 'duplicate_cancelled' }>
+    onInstallProgress: (callback: (progress: HubInstallProgress) => void) => () => void
   }
   mcp: {
     getStatus: () => Promise<McpStatus>

@@ -173,6 +173,7 @@ export const IPC = {
   EVENT_WINDOW_MODE: 'event:window-mode',
 
   EVENT_HUB_SCRIPT_INSTALLED: 'event:hub-script-installed',
+  EVENT_HUB_INSTALL_PROGRESS: 'event:hub-install-progress',
   EVENT_HUB_AUTHORIZED: 'event:hub-authorized',
 
   EVENT_MCP_STATUS: 'event:mcp-status'

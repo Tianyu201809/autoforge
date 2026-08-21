@@ -8,6 +8,7 @@ import { tmpdir } from 'os'
 import { join } from 'path'
 import { dialog } from 'electron'
 import { MANIFEST_FILENAME } from '../../shared/script-contract'
+import type { HubInstallProgress } from '../../shared/hub-types'
 import { scriptRegistry } from './script-registry'
 import { scriptWorkspace } from './script-workspace'
 import { MAX_EXTRACTED_BYTES, MAX_ZIP_BYTES } from './safe-zip-package'
@@ -30,6 +31,9 @@ export class HubInstallError extends Error {
 
 export const DOWNLOAD_STALL_TIMEOUT_MS = 60_000
 const MAX_ZIP_ENTRIES = 2_000
+const DOWNLOAD_PROGRESS_STEP_BYTES = 1024 * 1024
+
+export type HubInstallProgressCallback = (progress: HubInstallProgress) => void
 
 export function createDownloadTimeout(timeoutMs = DOWNLOAD_STALL_TIMEOUT_MS): {
   signal: AbortSignal
@@ -97,7 +101,11 @@ function resolvePackageRoot(extractedDir: string): string {
   throw new HubInstallError('invalid_package', '不是有效的 Autoforge 脚本包')
 }
 
-async function downloadZip(url: string, destPath: string): Promise<void> {
+async function downloadZip(
+  url: string,
+  destPath: string,
+  reportProgress: (progress: Omit<HubInstallProgress, 'hubScriptId'>) => void
+): Promise<void> {
   const downloadTimeout = createDownloadTimeout()
   let response: Response
   try {
@@ -122,6 +130,27 @@ async function downloadZip(url: string, destPath: string): Promise<void> {
     }
     if (!response.body) throw new HubInstallError('download_failed', '下载失败: 响应为空')
     let downloadedBytes = 0
+    let lastReportedBytes = 0
+    let lastReportedPercent = -1
+    const totalBytes = Number.isFinite(contentLength) && contentLength > 0 ? contentLength : undefined
+    const reportDownloadProgress = (): void => {
+      const percent = totalBytes ? Math.min(100, Math.floor((downloadedBytes / totalBytes) * 100)) : undefined
+      if (
+        downloadedBytes !== 0 &&
+        percent === lastReportedPercent &&
+        downloadedBytes - lastReportedBytes < DOWNLOAD_PROGRESS_STEP_BYTES
+      ) return
+      lastReportedBytes = downloadedBytes
+      lastReportedPercent = percent ?? -1
+      reportProgress({
+        phase: 'downloading',
+        message: '正在下载脚本包',
+        percent,
+        downloadedBytes,
+        totalBytes
+      })
+    }
+    reportDownloadProgress()
     const counter = new Transform({
       transform(chunk: Buffer, _encoding, callback) {
         downloadTimeout.refresh()
@@ -130,6 +159,7 @@ async function downloadZip(url: string, destPath: string): Promise<void> {
           callback(new HubInstallError('invalid_package', 'ZIP 文件超过 500 MB'))
           return
         }
+        reportDownloadProgress()
         callback(null, chunk)
       }
     })
@@ -186,9 +216,13 @@ export async function installScriptFromHubZip(input: {
   zipUrl: string
   scriptName?: string
   hubScriptId?: string
+  onProgress?: HubInstallProgressCallback
 }): Promise<{ scriptId: string; name: string; status: 'installed' | 'updated' | 'duplicate_cancelled' }> {
   const url = assertHttpUrl(input.zipUrl)
   const hubScriptId = assertHubScriptId(input.hubScriptId)
+  const reportProgress = (progress: Omit<HubInstallProgress, 'hubScriptId'>): void => {
+    input.onProgress?.({ hubScriptId, ...progress })
+  }
 
   if (input.scriptName || input.hubScriptId) {
     console.info('[hub-install]', {
@@ -204,10 +238,15 @@ export async function installScriptFromHubZip(input: {
     const zipPath = join(tempDir, 'package.zip')
     const extractedDir = join(tempDir, 'extracted')
 
-    await downloadZip(url, zipPath)
+    reportProgress({ phase: 'preparing', message: '正在准备下载' })
+    await downloadZip(url, zipPath, reportProgress)
+    reportProgress({ phase: 'extracting', message: '正在解压脚本包' })
     extractZip(zipPath, extractedDir)
+    reportProgress({ phase: 'extracting', message: '脚本包解压完成', percent: 100 })
+    reportProgress({ phase: 'validating', message: '正在校验脚本包' })
     const packageRoot = resolvePackageRoot(extractedDir)
     const packageManifest = scriptWorkspace.validatePackageDirectory(packageRoot)
+    reportProgress({ phase: 'validating', message: '脚本包校验完成', percent: 100 })
     const existing = scriptRegistry.getByHubScriptId(hubScriptId)
 
     if (existing) {
@@ -222,11 +261,16 @@ export async function installScriptFromHubZip(input: {
         noLink: true
       })
       if (response.response !== 0) {
-        return { scriptId: existing.id, name: existing.name, status: 'duplicate_cancelled' }
+        const result = { scriptId: existing.id, name: existing.name, status: 'duplicate_cancelled' as const }
+        reportProgress({ phase: 'complete', message: '已取消更新', percent: 100 })
+        return result
       }
       try {
+        reportProgress({ phase: 'importing', message: '正在更新本地脚本' })
         const updated = scriptRegistry.updateFromHubPackage(existing.id, packageRoot)
-        return { scriptId: updated.id, name: updated.name, status: 'updated' }
+        const result = { scriptId: updated.id, name: updated.name, status: 'updated' as const }
+        reportProgress({ phase: 'complete', message: '脚本已更新', percent: 100 })
+        return result
       } catch (err) {
         const message = err instanceof Error ? err.message : String(err)
         throw new HubInstallError('import_failed', `更新失败: ${message}`)
@@ -235,13 +279,23 @@ export async function installScriptFromHubZip(input: {
 
     let meta
     try {
+      reportProgress({ phase: 'importing', message: '正在导入本地脚本' })
       meta = scriptRegistry.importFromPath(packageRoot, { hubScriptId })
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err)
       throw new HubInstallError('import_failed', `导入失败: ${message}`)
     }
 
-    return { scriptId: meta.id, name: meta.name, status: 'installed' }
+    const result = { scriptId: meta.id, name: meta.name, status: 'installed' as const }
+    reportProgress({ phase: 'complete', message: '脚本已安装', percent: 100 })
+    return result
+  } catch (err) {
+    reportProgress({
+      phase: 'error',
+      message: '安装失败',
+      error: err instanceof Error ? err.message : String(err)
+    })
+    throw err
   } finally {
     rmSync(tempDir, { recursive: true, force: true })
   }
