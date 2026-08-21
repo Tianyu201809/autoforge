@@ -28,8 +28,27 @@ export class HubInstallError extends Error {
   }
 }
 
-const DOWNLOAD_TIMEOUT_MS = 60_000
+export const DOWNLOAD_STALL_TIMEOUT_MS = 60_000
 const MAX_ZIP_ENTRIES = 2_000
+
+export function createDownloadTimeout(timeoutMs = DOWNLOAD_STALL_TIMEOUT_MS): {
+  signal: AbortSignal
+  refresh: () => void
+  clear: () => void
+} {
+  const controller = new AbortController()
+  let timer = setTimeout(() => controller.abort(), timeoutMs)
+  return {
+    signal: controller.signal,
+    refresh() {
+      clearTimeout(timer)
+      timer = setTimeout(() => controller.abort(), timeoutMs)
+    },
+    clear() {
+      clearTimeout(timer)
+    }
+  }
+}
 
 function assertHttpUrl(zipUrl: unknown): string {
   if (typeof zipUrl !== 'string' || !zipUrl.trim()) {
@@ -79,22 +98,24 @@ function resolvePackageRoot(extractedDir: string): string {
 }
 
 async function downloadZip(url: string, destPath: string): Promise<void> {
+  const downloadTimeout = createDownloadTimeout()
   let response: Response
   try {
-    response = await fetch(url, { signal: AbortSignal.timeout(DOWNLOAD_TIMEOUT_MS) })
-  } catch (err) {
-    const message = err instanceof Error ? err.message : String(err)
-    throw new HubInstallError('download_failed', `下载失败: ${message}`)
-  }
+    try {
+      response = await fetch(url, { signal: downloadTimeout.signal })
+      downloadTimeout.refresh()
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err)
+      throw new HubInstallError('download_failed', `下载失败: ${message}`)
+    }
 
-  if (!response.ok) {
-    throw new HubInstallError(
-      'download_failed',
-      `下载失败: HTTP ${response.status} ${response.statusText}`
-    )
-  }
+    if (!response.ok) {
+      throw new HubInstallError(
+        'download_failed',
+        `下载失败: HTTP ${response.status} ${response.statusText}`
+      )
+    }
 
-  try {
     const contentLength = Number(response.headers.get('content-length') ?? '0')
     if (Number.isFinite(contentLength) && contentLength > MAX_ZIP_BYTES) {
       throw new HubInstallError('invalid_package', 'ZIP 文件超过 500 MB')
@@ -103,6 +124,7 @@ async function downloadZip(url: string, destPath: string): Promise<void> {
     let downloadedBytes = 0
     const counter = new Transform({
       transform(chunk: Buffer, _encoding, callback) {
+        downloadTimeout.refresh()
         downloadedBytes += chunk.length
         if (downloadedBytes > MAX_ZIP_BYTES) {
           callback(new HubInstallError('invalid_package', 'ZIP 文件超过 500 MB'))
@@ -114,7 +136,8 @@ async function downloadZip(url: string, destPath: string): Promise<void> {
     await pipeline(
       Readable.fromWeb(response.body as any),
       counter,
-      createWriteStream(destPath, { flags: 'wx' })
+      createWriteStream(destPath, { flags: 'wx' }),
+      { signal: downloadTimeout.signal }
     )
     if (downloadedBytes === 0) {
       throw new HubInstallError('invalid_package', 'ZIP 文件为空')
@@ -123,6 +146,8 @@ async function downloadZip(url: string, destPath: string): Promise<void> {
     if (err instanceof HubInstallError) throw err
     const message = err instanceof Error ? err.message : String(err)
     throw new HubInstallError('download_failed', `下载失败: ${message}`)
+  } finally {
+    downloadTimeout.clear()
   }
 }
 
