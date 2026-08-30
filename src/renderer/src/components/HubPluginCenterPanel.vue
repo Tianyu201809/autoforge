@@ -19,6 +19,7 @@ import type { HubInstallProgress, HubPlugin, HubScope, HubTeam, HubSession } fro
 import { askConfirm } from '../composables/useConfirmDialog'
 import { useToast } from '../composables/useToast'
 import { renderScriptReadmeMarkdown } from '../lib/script-readme-markdown'
+import { hubPluginCatalogCache as catalogCache, type CatalogFilterState, type CatalogSnapshot } from '../lib/hub-plugin-catalog-cache'
 import appIcon from '@build/icon.png?url'
 
 const props = defineProps<{ open: boolean }>()
@@ -32,8 +33,8 @@ const teamId = ref('')
 const items = ref<HubPlugin[]>([])
 const loading = ref(false)
 const authorizing = ref(false)
-const installingId = ref<string | null>(null)
-const installProgress = ref<HubInstallProgress | null>(null)
+const MAX_CONCURRENT_INSTALLS = 5
+const installProgress = ref(new Map<string, HubInstallProgress>())
 const error = ref('')
 const selected = ref<HubPlugin | null>(null)
 const view = ref<'catalog' | 'settings'>('catalog')
@@ -81,8 +82,31 @@ function formatBytes(value?: number): string {
 }
 
 function progressFor(plugin: HubPlugin): HubInstallProgress | null {
-  return installProgress.value?.hubScriptId === plugin.id ? installProgress.value : null
+  return installProgress.value.get(plugin.id) ?? null
 }
+
+function setInstallProgress(progress: HubInstallProgress): void {
+  installProgress.value = new Map(installProgress.value).set(progress.hubScriptId, progress)
+}
+
+function clearInstallProgress(id: string): void {
+  const next = new Map(installProgress.value)
+  next.delete(id)
+  installProgress.value = next
+}
+
+function isInstalling(id: string): boolean {
+  const progress = installProgress.value.get(id)
+  return Boolean(progress && progress.phase !== 'error' && progress.phase !== 'complete')
+}
+
+const activeInstallCount = computed(() => {
+  let count = 0
+  for (const progress of installProgress.value.values()) {
+    if (progress.phase !== 'error' && progress.phase !== 'complete') count += 1
+  }
+  return count
+})
 
 function progressLabel(progress: HubInstallProgress): string {
   if (progress.phase === 'error') return progress.error || '安装失败，请重试'
@@ -93,7 +117,57 @@ function progressLabel(progress: HubInstallProgress): string {
   return received ? `${progress.message} · 已下载 ${received}` : progress.message
 }
 
-async function load(): Promise<void> {
+function catalogFilterKey(): string {
+  return JSON.stringify({ q: searchQuery.value.trim(), category: selectedCategory.value })
+}
+
+function catalogCacheBucket(scopeKey = scope.value): Map<string, CatalogSnapshot> {
+  if (scopeKey !== 'team') return catalogCache[scopeKey]
+  const currentTeamId = teamId.value || '__default__'
+  let bucket = catalogCache.team.get(currentTeamId)
+  if (!bucket) {
+    bucket = new Map<string, CatalogSnapshot>()
+    catalogCache.team.set(currentTeamId, bucket)
+  }
+  return bucket
+}
+
+function catalogFilterState(scopeKey = scope.value): CatalogFilterState {
+  if (scopeKey !== 'team') return catalogCache.filters[scopeKey]
+  const currentTeamId = teamId.value || '__default__'
+  let state = catalogCache.filters.team.get(currentTeamId)
+  if (!state) {
+    state = { q: '', category: '' }
+    catalogCache.filters.team.set(currentTeamId, state)
+  }
+  return state
+}
+
+function saveCatalogFilterState(): void {
+  const state = catalogFilterState()
+  state.q = searchQuery.value.trim()
+  state.category = selectedCategory.value
+}
+
+function restoreCatalogFilterState(scopeKey: HubScope): void {
+  const state = catalogFilterState(scopeKey)
+  searchQuery.value = state.q
+  selectedCategory.value = state.category
+}
+
+function restoreCatalogCache(): boolean {
+  const cached = catalogCacheBucket().get(catalogFilterKey())
+  if (!cached) return false
+  items.value = cached.items
+  categoryCounts.value = cached.categoryCounts
+  return true
+}
+
+async function load(force = false): Promise<void> {
+  if (!force && session.value.authenticated && view.value === 'catalog' && restoreCatalogCache()) {
+    error.value = ''
+    return
+  }
   loading.value = true
   error.value = ''
   try {
@@ -102,11 +176,37 @@ async function load(): Promise<void> {
       items.value = []
       selected.value = null
       categoryCounts.value = {}
+      catalogCache.marketplace.clear()
+      catalogCache.personal.clear()
+      catalogCache.team.clear()
+      catalogCache.teams = null
+      catalogCache.filters.marketplace = { q: '', category: '' }
+      catalogCache.filters.personal = { q: '', category: '' }
+      catalogCache.filters.team.clear()
       return
     }
     if (view.value === 'settings') return
-    teams.value = await window.autoforge.hub.listTeams()
-    if (!teamId.value) teamId.value = teams.value[0]?.id ?? ''
+    if (scope.value === 'team') {
+      if (!teams.value.length || force) {
+        if (!force && catalogCache.teams) {
+          teams.value = catalogCache.teams
+        } else {
+          teams.value = await window.autoforge.hub.listTeams()
+          catalogCache.teams = teams.value
+        }
+      }
+      if (!teamId.value) {
+        teamId.value = teams.value[0]?.id ?? ''
+        restoreCatalogFilterState('team')
+      }
+    }
+    // The component can be mounted again with a fresh local session ref. Once
+    // the session is restored, check the module-level catalog cache before any
+    // network request so reopening the hub remains instant.
+    if (!force && restoreCatalogCache()) {
+      error.value = ''
+      return
+    }
     const result = await window.autoforge.hub.listPlugins({
       scope: scope.value,
       teamId: scope.value === 'team' ? teamId.value : undefined,
@@ -114,10 +214,16 @@ async function load(): Promise<void> {
       pageSize: 30,
       q: searchQuery.value.trim() || undefined,
       category: selectedCategory.value || undefined,
-      sort: scope.value === 'marketplace' ? 'newest' : 'name'
+      sort: 'newest'
     })
-    items.value = result.items
+    items.value = [...result.items].sort((left, right) => {
+      const leftDate = left.publishedAt ?? left.createdAt ?? ''
+      const rightDate = right.publishedAt ?? right.createdAt ?? ''
+      const dateDelta = (Date.parse(rightDate) || 0) - (Date.parse(leftDate) || 0)
+      return dateDelta || left.title.localeCompare(right.title, 'zh-CN')
+    })
     categoryCounts.value = result.distributions.category
+    catalogCacheBucket().set(catalogFilterKey(), { items: items.value, categoryCounts: categoryCounts.value })
     if (selected.value && !items.value.some((item) => item.id === selected.value?.id)) {
       selected.value = null
     }
@@ -131,10 +237,20 @@ async function load(): Promise<void> {
 async function switchScope(nextScope: HubScope): Promise<void> {
   view.value = 'catalog'
   if (scope.value === nextScope && items.value.length) return
+  saveCatalogFilterState()
   scope.value = nextScope
-  selectedCategory.value = ''
+  restoreCatalogFilterState(nextScope)
   selected.value = null
   await load()
+}
+
+function switchTeam(nextTeamId: string): void {
+  if (nextTeamId === teamId.value) return
+  saveCatalogFilterState()
+  teamId.value = nextTeamId
+  restoreCatalogFilterState('team')
+  selected.value = null
+  void load()
 }
 
 function openSettings(): void {
@@ -145,12 +261,14 @@ function openSettings(): void {
 
 function setCategory(category: string): void {
   selectedCategory.value = category
+  saveCatalogFilterState()
   selected.value = null
-  void load()
+  void load(true)
 }
 
 function scheduleSearch(): void {
   if (searchTimer) window.clearTimeout(searchTimer)
+  saveCatalogFilterState()
   searchTimer = window.setTimeout(() => {
     selected.value = null
     void load()
@@ -191,19 +309,25 @@ async function logout(): Promise<void> {
   session.value = { authenticated: false, persistent: false, user: null }
   items.value = []
   selected.value = null
+  catalogCache.marketplace.clear()
+  catalogCache.personal.clear()
+  catalogCache.team.clear()
+  catalogCache.teams = null
+  catalogCache.filters.marketplace = { q: '', category: '' }
+  catalogCache.filters.personal = { q: '', category: '' }
+  catalogCache.filters.team.clear()
 }
 
 async function install(plugin: HubPlugin): Promise<void> {
-  if (installingId.value) return
-  installingId.value = plugin.id
-  installProgress.value = {
+  if (isInstalling(plugin.id) || activeInstallCount.value >= MAX_CONCURRENT_INSTALLS) return
+  setInstallProgress({
     hubScriptId: plugin.id,
     phase: 'preparing',
     message: '正在准备安装'
-  }
+  })
   try {
     const result = await window.autoforge.hub.installPlugin(plugin.id)
-    installProgress.value = null
+    clearInstallProgress(plugin.id)
     if (result.status !== 'duplicate_cancelled') {
       pushToast({
         type: 'success',
@@ -213,35 +337,34 @@ async function install(plugin: HubPlugin): Promise<void> {
     }
   } catch (err) {
     const message = err instanceof Error ? err.message : '请稍后重试'
-    if (installProgress.value?.hubScriptId === plugin.id && installProgress.value.phase !== 'error') {
-      installProgress.value = {
+    const progress = installProgress.value.get(plugin.id)
+    if (progress && progress.phase !== 'error') {
+      setInstallProgress({
         hubScriptId: plugin.id,
         phase: 'error',
         message: '安装失败',
         error: message
-      }
+      })
     }
     pushToast({
       type: 'error',
       title: '安装失败',
       message
     })
-  } finally {
-    installingId.value = null
   }
 }
 
 const offInstallProgress = window.autoforge.hub.onInstallProgress((progress) => {
-  if (progress.hubScriptId === installingId.value || progress.hubScriptId === installProgress.value?.hubScriptId) {
-    installProgress.value = progress
-  }
+  if (installProgress.value.has(progress.hubScriptId)) setInstallProgress(progress)
 })
 
 const offAuthorized = window.autoforge.hub.onHubAuthorized((next) => {
   session.value = next
   authorizing.value = false
-  void load()
+  void load(true)
 })
+
+restoreCatalogFilterState(scope.value)
 
 watch(
   () => props.open,
@@ -322,7 +445,7 @@ onUnmounted(() => {
 
         <label v-if="view === 'catalog' && scope === 'team'" class="hub-team-picker">
           <span>当前团队</span>
-          <select v-model="teamId" @change="load">
+            <select :value="teamId" @change="switchTeam(($event.target as HTMLSelectElement).value)">
             <option v-for="team in teams" :key="team.id" :value="team.id">{{ team.name }}</option>
           </select>
         </label>
@@ -362,7 +485,7 @@ onUnmounted(() => {
                 </option>
               </select>
             </label>
-            <button class="hub-icon-button hub-refresh" title="刷新脚本列表" aria-label="刷新脚本列表" @click="load">
+            <button class="hub-icon-button hub-refresh" title="刷新脚本列表" aria-label="刷新脚本列表" @click="load(true)">
               <RefreshCw :size="16" :class="{ 'hub-spin': loading }" />
             </button>
           </div>
@@ -382,26 +505,26 @@ onUnmounted(() => {
             v-for="plugin in items"
             :key="plugin.id"
             class="hub-card"
-            :class="{ selected: selected?.id === plugin.id, installing: installingId === plugin.id, 'install-failed': progressFor(plugin)?.phase === 'error' }"
+            :class="{ selected: selected?.id === plugin.id, installing: isInstalling(plugin.id), 'install-failed': progressFor(plugin)?.phase === 'error' }"
             tabindex="0"
             @click="selected = plugin"
             @keydown.enter="selected = plugin"
           >
             <div class="hub-card__header">
               <div class="hub-card__identity">
-                <div class="hub-plugin-icon" :style="{ backgroundColor: plugin.iconColor || 'var(--sb-accent-solid)' }">
+                <div class="hub-plugin-icon" :style="{ '--hub-icon-source': plugin.iconColor || 'var(--sb-accent-solid)' }">
                   {{ initials(plugin.icon || plugin.title) }}
                 </div>
                 <span class="hub-language">{{ plugin.language || 'AUTOMATION' }}</span>
               </div>
               <button
                 class="hub-install-button"
-                :disabled="installingId !== null"
+                :disabled="isInstalling(plugin.id) || activeInstallCount >= MAX_CONCURRENT_INSTALLS"
                 :aria-label="progressFor(plugin)?.phase === 'error' ? `重试安装 ${plugin.title}` : `安装 ${plugin.title}`"
                 :title="progressFor(plugin)?.phase === 'error' ? `重试安装 ${plugin.title}` : `安装 ${plugin.title}`"
                 @click.stop="install(plugin)"
               >
-                <RefreshCw v-if="installingId === plugin.id" :size="15" class="hub-spin" />
+                <RefreshCw v-if="isInstalling(plugin.id)" :size="15" class="hub-spin" />
                 <Download v-else :size="15" />
               </button>
             </div>
@@ -419,8 +542,9 @@ onUnmounted(() => {
               <div class="hub-card__meta">
                 <span class="hub-card__category">{{ plugin.category || '其他' }}</span>
                 <span class="hub-card__owner">{{ plugin.ownerDisplayName || 'AutoforgeHub' }}</span>
+                <span class="hub-card__installs">{{ plugin.installCount || 0 }} 次安装</span>
               </div>
-              <time :datetime="plugin.updatedAt">{{ formatDate(plugin.updatedAt) }}</time>
+              <time :datetime="plugin.publishedAt || plugin.createdAt || plugin.updatedAt">{{ formatDate(plugin.publishedAt || plugin.createdAt || plugin.updatedAt) }}</time>
             </footer>
           </article>
         </div>
@@ -483,10 +607,10 @@ onUnmounted(() => {
         </div>
         <div class="hub-markdown" v-html="selectedReadmeHtml" />
         <footer class="hub-detail__footer">
-          <button class="hub-primary-button" :disabled="installingId !== null" @click="install(selected)">
-            <RefreshCw v-if="installingId === selected.id" :size="16" class="hub-spin" />
+          <button class="hub-primary-button" :disabled="isInstalling(selected.id) || activeInstallCount >= MAX_CONCURRENT_INSTALLS" @click="install(selected)">
+            <RefreshCw v-if="isInstalling(selected.id)" :size="16" class="hub-spin" />
             <Download v-else :size="16" />
-            {{ installingId === selected.id ? progressFor(selected)?.message || '正在安装' : progressFor(selected)?.phase === 'error' ? '重试安装' : '安装到本地' }}
+            {{ isInstalling(selected.id) ? progressFor(selected)?.message || '正在安装' : progressFor(selected)?.phase === 'error' ? '重试安装' : '安装到本地' }}
           </button>
         </footer>
       </aside>
@@ -633,22 +757,24 @@ onUnmounted(() => {
 .hub-category-filter { min-width: 130px; gap: 6px; padding-left: 9px; }
 .hub-category-filter select { min-width: 0; width: 100%; height: 100%; padding: 0 22px 0 0; border: 0; outline: 0; background: transparent; color: var(--sb-text-secondary); font-size: 11px; }
 .hub-refresh { margin-top: 2px; border-color: var(--hub-rule); }
-.hub-grid, .hub-loading-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(244px, 1fr)); gap: 12px; margin-top: 22px; }
-.hub-card { position: relative; display: flex; flex-direction: column; min-width: 0; height: 220px; padding: 15px; border: 1px solid var(--hub-rule); border-radius: 6px; background: var(--hub-surface); cursor: pointer; outline: none; overflow: hidden; transition: border-color .15s ease, background .15s ease, box-shadow .15s ease, transform .15s ease; }
+.hub-grid, .hub-loading-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 14px; margin-top: 22px; }
+.hub-card { position: relative; display: flex; flex-direction: column; min-width: 0; min-height: 236px; padding: 17px; border: 1px solid var(--hub-rule); border-radius: 7px; background: var(--hub-surface); cursor: pointer; outline: none; overflow: hidden; transition: border-color .18s ease, background .18s ease, box-shadow .18s ease, transform .18s ease; }
 .hub-card::before { position: absolute; top: 0; right: 0; left: 0; height: 2px; background: color-mix(in srgb, var(--sb-accent-solid) 24%, transparent); content: ''; }
-.hub-card:hover, .hub-card:focus-visible { border-color: color-mix(in srgb, var(--sb-accent-solid) 52%, var(--hub-rule)); background: var(--hub-surface-raised); box-shadow: 0 8px 22px rgb(0 0 0 / 8%); transform: translateY(-2px); }
+.hub-card:hover, .hub-card:focus-visible { border-color: color-mix(in srgb, var(--sb-accent-solid) 58%, var(--hub-rule)); background: var(--hub-surface-raised); box-shadow: 0 14px 30px rgb(0 0 0 / 12%); transform: translateY(-3px); }
 .hub-card.selected { border-color: var(--sb-accent-solid); background: var(--hub-accent-soft); box-shadow: inset 3px 0 0 var(--sb-accent-solid), 0 8px 22px rgb(0 0 0 / 8%); }
 .hub-card.selected::before { background: var(--sb-accent-solid); }
 .hub-card__header { justify-content: space-between; gap: 10px; }
 .hub-card__identity { display: flex; align-items: center; min-width: 0; gap: 9px; }
-.hub-plugin-icon { display: grid; width: 32px; height: 32px; flex: 0 0 auto; place-items: center; border-radius: 5px; color: #fff; box-shadow: inset 0 1px 0 rgb(255 255 255 / 22%); font-family: var(--font-mono); font-size: 9px; font-weight: 700; }
+.hub-plugin-icon { position: relative; display: grid; width: 38px; height: 38px; flex: 0 0 auto; place-items: center; border: 1px solid var(--hub-rule); border-radius: 6px; background: var(--sb-bg-inset); color: var(--sb-text-primary); box-shadow: inset 0 1px 0 rgb(255 255 255 / 9%), 0 2px 8px rgb(0 0 0 / 8%); font-family: var(--font-mono); font-size: 10px; font-weight: 700; letter-spacing: .02em; }
+.hub-plugin-icon::after { position: absolute; right: 6px; bottom: 5px; left: 6px; height: 2px; border-radius: 2px; background: color-mix(in srgb, var(--hub-icon-source) 54%, var(--sb-accent-solid)); content: ''; opacity: .75; }
 .hub-language { max-width: 132px; overflow: hidden; color: var(--sb-text-faint); font-family: var(--font-mono); font-size: 9px; font-weight: 700; letter-spacing: .05em; text-overflow: ellipsis; white-space: nowrap; }
-.hub-card__body { min-width: 0; margin-top: 15px; }
+.hub-card__body { min-width: 0; margin-top: 18px; }
 .hub-card h2 { display: -webkit-box; overflow: hidden; margin: 0; color: var(--sb-text-primary); font-size: 13px; font-weight: 700; line-height: 1.4; -webkit-box-orient: vertical; -webkit-line-clamp: 2; }
-.hub-card__body p { display: -webkit-box; overflow: hidden; margin: 7px 0 0; color: var(--sb-text-muted); font-size: 11px; line-height: 1.55; -webkit-box-orient: vertical; -webkit-line-clamp: 2; }
-.hub-card__footer { justify-content: space-between; gap: 8px; margin-top: auto; padding-top: 10px; border-top: 1px solid color-mix(in srgb, var(--hub-rule) 82%, transparent); }
+.hub-card__body p { display: -webkit-box; overflow: hidden; margin: 8px 0 0; color: var(--sb-text-muted); font-size: 11px; line-height: 1.6; -webkit-box-orient: vertical; -webkit-line-clamp: 3; }
+.hub-card__footer { justify-content: space-between; gap: 10px; margin-top: auto; padding-top: 12px; border-top: 1px solid color-mix(in srgb, var(--hub-rule) 82%, transparent); }
 .hub-card__meta { display: flex; align-items: center; min-width: 0; gap: 7px; overflow: hidden; color: var(--sb-text-faint); font-size: 10px; white-space: nowrap; }
 .hub-card__meta span { overflow: hidden; text-overflow: ellipsis; }
+.hub-card__installs { flex: 0 0 auto; color: var(--sb-text-faint); font-family: var(--font-mono); font-size: 9px; }
 .hub-card__category { flex: 0 0 auto; padding: 3px 5px; border: 1px solid var(--hub-rule); border-radius: 3px; color: var(--sb-text-muted); font-family: var(--font-mono); font-size: 9px; }
 .hub-card__owner::before { margin-right: 7px; color: var(--sb-text-faint); content: '·'; }
 .hub-card__footer time { flex: 0 0 auto; color: var(--sb-text-faint); font-family: var(--font-mono); font-size: 9px; }
@@ -661,7 +787,7 @@ onUnmounted(() => {
 .hub-install-progress__track { height: 4px; overflow: hidden; border-radius: 3px; background: color-mix(in srgb, var(--sb-bg-inset) 90%, #000); }
 .hub-install-progress__track span { display: block; height: 100%; min-width: 2px; border-radius: inherit; background: var(--sb-accent-solid); transition: width .18s ease; }
 .hub-install-progress__track span.indeterminate { width: 36%; animation: hub-progress-indeterminate 1.15s ease-in-out infinite; }
-.hub-skeleton-card { height: 220px; border: 1px solid var(--hub-rule); border-radius: 6px; background: linear-gradient(100deg, var(--hub-surface) 35%, var(--sb-bg-hover) 50%, var(--hub-surface) 65%); background-size: 230% 100%; animation: hub-loading 1.3s ease-in-out infinite; }
+.hub-skeleton-card { min-height: 236px; border: 1px solid var(--hub-rule); border-radius: 7px; background: linear-gradient(100deg, var(--hub-surface) 35%, var(--sb-bg-hover) 50%, var(--hub-surface) 65%); background-size: 230% 100%; animation: hub-loading 1.3s ease-in-out infinite; }
 .hub-empty-state { display: grid; justify-items: start; gap: 7px; max-width: 360px; margin: 74px auto; color: var(--sb-text-faint); font-size: 12px; text-align: left; }
 .hub-empty-state svg { margin-bottom: 5px; color: var(--sb-text-muted); }
 .hub-empty-state strong { color: var(--sb-text-secondary); font-size: 13px; }
