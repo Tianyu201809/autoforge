@@ -4,10 +4,10 @@
 
 ### 自动化脚本散落在各处，环境配置重复录入，运行结果难以追溯——Autoforge 把它们收进一个本机桌面工作台。
 
-[![Version](https://img.shields.io/badge/version-1.31.0-blue)](docs/v1.31.0.md)
+[![Version](https://img.shields.io/badge/version-1.35.0-blue)](docs/v1.35.0.md)
 [![License](https://img.shields.io/badge/license-MIT-green)](LICENSE)
 
-[快速开始](#install) · [看示例](#see-it-work) · [脚本开发](#脚本开发) · [版本说明](docs/v1.31.0.md) · [更新日志](docs/CHANGELOG.md)
+[快速开始](#install) · [看示例](#see-it-work) · [脚本开发](#脚本开发) · [版本说明](docs/v1.35.0.md) · [更新日志](docs/CHANGELOG.md)
 
 </div>
 
@@ -270,7 +270,8 @@ Electron 34 · Vue 3 · TypeScript · Tailwind CSS 4 · Playwright Core · sql.j
 
 | 文档 | 内容 |
 |------|------|
-| [v1.31.0 版本说明](docs/v1.31.0.md) | 当前版本：原生脚本导出 ZIP、500 MB 导出上限 |
+| [v1.35.0 版本说明](docs/v1.35.0.md) | 当前版本：插件中心并发安装、分栏缓存与界面主题优化 |
+| [v1.31.0 版本说明](docs/v1.31.0.md) | 原生脚本导出 ZIP、500 MB 导出上限 |
 | [v1.30.0 版本说明](docs/v1.30.0.md) | Hub 授权登录、脚本中心、搜索筛选、一键安装与账户设置 |
 | [v1.27.0 版本说明](docs/v1.27.0.md) | 原生可执行程序导入、运行授权与进程托管 |
 | [v1.26.0 版本说明](docs/v1.26.0.md) | 脚本分页跳转、文本输入路径拖入 |
