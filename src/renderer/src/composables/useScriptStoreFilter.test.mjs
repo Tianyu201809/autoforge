@@ -22,10 +22,10 @@ function script(id, overrides = {}) {
   }
 }
 
-test('selecting a category resets conflicting filters and searches all scripts', () => {
+test('selecting a category resets the status condition to all', () => {
   const store = useScriptStore()
   store.scripts.value = [
-    script('archived-in-category', { archived: true }),
+    script('running-in-category', { status: 'running' }),
     script('idle-in-category'),
     script('running-in-other-category', { category: 'other', status: 'running' })
   ]
@@ -34,8 +34,8 @@ test('selecting a category resets conflicting filters and searches all scripts',
   store.listFilter.value = {
     status: 'running',
     categoryKey: null,
-    starredOnly: true,
-    scheduledOnly: true
+    starredOnly: false,
+    scheduledOnly: false
   }
 
   store.setCategoryFilter('cat')
@@ -47,11 +47,22 @@ test('selecting a category resets conflicting filters and searches all scripts',
     starredOnly: false,
     scheduledOnly: false
   })
-  assert.deepEqual(new Set(store.filteredScripts.value.map((item) => item.id)), new Set(['idle-in-category', 'archived-in-category']))
+  assert.deepEqual(store.filteredScripts.value.map((item) => item.id), ['running-in-category', 'idle-in-category'])
 })
 
-test('category patches from the filter panel use the same override behavior', () => {
+test('category patches from the filter panel reset status and preserve other conditions', () => {
   const store = useScriptStore()
+  store.scripts.value = [
+    script('matching', {
+      category: 'cat',
+      status: 'error',
+      starred: true,
+      schedule: { enabled: true, expression: '* * * * *' }
+    }),
+    script('wrong-status', { category: 'cat', status: 'idle', starred: true, schedule: { enabled: true } }),
+    script('wrong-category', { category: 'other', status: 'error', starred: true, schedule: { enabled: true } })
+  ]
+  store.categoryDefinitions.value = [{ id: 'cat-id', key: 'cat', parentId: null }]
   store.navFilter.value = 'starred'
   store.listFilter.value = {
     status: 'error',
@@ -66,7 +77,8 @@ test('category patches from the filter panel use the same override behavior', ()
   assert.deepEqual(store.listFilter.value, {
     status: 'all',
     categoryKey: 'cat',
-    starredOnly: false,
-    scheduledOnly: false
+    starredOnly: true,
+    scheduledOnly: true
   })
+  assert.deepEqual(store.filteredScripts.value.map((item) => item.id), ['matching', 'wrong-status'])
 })

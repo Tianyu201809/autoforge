@@ -98,32 +98,30 @@ const activeCategoryKey = computed(
 
 const filteredScripts = computed(() => {
   let list = scripts.value
-  const catKey = activeCategoryKey.value
 
-  if (!catKey) {
-    switch (navFilter.value) {
-      case 'running':
-        list = list.filter((s) => s.status === 'running')
-        break
-      case 'scheduled':
-        list = list.filter((s) => !s.archived && s.schedule?.enabled)
-        break
-      case 'starred':
-        list = list.filter((s) => s.starred)
-        break
-      case 'recent':
-        list = list.filter((s) => s.recentRunAt).sort((a, b) =>
-          (b.recentRunAt ?? '').localeCompare(a.recentRunAt ?? '')
-        )
-        break
-      case 'archived':
-        list = list.filter((s) => s.archived)
-        break
-      default:
-        list = list.filter((s) => !s.archived)
-    }
+  switch (navFilter.value) {
+    case 'running':
+      list = list.filter((s) => s.status === 'running')
+      break
+    case 'scheduled':
+      list = list.filter((s) => !s.archived && s.schedule?.enabled)
+      break
+    case 'starred':
+      list = list.filter((s) => s.starred)
+      break
+    case 'recent':
+      list = list.filter((s) => s.recentRunAt).sort((a, b) =>
+        (b.recentRunAt ?? '').localeCompare(a.recentRunAt ?? '')
+      )
+      break
+    case 'archived':
+      list = list.filter((s) => s.archived)
+      break
+    default:
+      list = list.filter((s) => !s.archived)
   }
 
+  const catKey = activeCategoryKey.value
   if (catKey) {
     const keys = new Set(collectDescendantKeys(categoryDefinitions.value, catKey))
     if (keys.size === 0) {
@@ -303,24 +301,14 @@ function setCategoryFilter(key: string | null): void {
   const next = categoryFilter.value === key ? null : key
   navFilter.value = 'all'
   categoryFilter.value = next
-  listFilter.value = {
-    status: 'all',
-    categoryKey: next,
-    starredOnly: false,
-    scheduledOnly: false
-  }
+  listFilter.value = { ...listFilter.value, status: 'all', categoryKey: next }
 }
 
 function setListFilter(patch: Partial<ScriptListFilter>): void {
   if (patch.categoryKey !== undefined) {
     navFilter.value = 'all'
+    listFilter.value = { ...listFilter.value, ...patch, status: 'all' }
     categoryFilter.value = patch.categoryKey
-    listFilter.value = {
-      status: 'all',
-      categoryKey: patch.categoryKey,
-      starredOnly: false,
-      scheduledOnly: false
-    }
     return
   }
 

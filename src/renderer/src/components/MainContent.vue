@@ -231,7 +231,7 @@ onUnmounted(() => {
           </button>
           <div
             v-if="filterOpen"
-            class="absolute right-0 top-full mt-1.5 w-64 rounded-lg border sb-border sb-bg-panel shadow-xl z-30 p-3 space-y-3"
+            class="filter-popup absolute right-0 top-full mt-1.5 w-64 rounded-lg border sb-border sb-bg-panel shadow-xl z-30 p-3 space-y-3"
           >
             <div class="flex items-center justify-between">
               <span class="text-[12px] font-medium sb-text-primary">筛选条件</span>
