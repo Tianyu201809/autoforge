@@ -2,8 +2,10 @@
 import { computed, onUnmounted, ref, watch } from 'vue'
 import {
   ArrowLeft,
+  ArrowUpRight,
   Boxes,
   Download,
+  FileArchive,
   FileText,
   LogOut,
   PackageOpen,
@@ -19,6 +21,7 @@ import type { HubInstallProgress, HubPlugin, HubScope, HubTeam, HubSession } fro
 import { askConfirm } from '../composables/useConfirmDialog'
 import { useToast } from '../composables/useToast'
 import { renderScriptReadmeMarkdown } from '../lib/script-readme-markdown'
+import { resolveScriptIcon } from '../lib/script-icon-map'
 import { hubPluginCatalogCache as catalogCache, type CatalogFilterState, type CatalogSnapshot } from '../lib/hub-plugin-catalog-cache'
 import appIcon from '@build/icon.png?url'
 
@@ -66,6 +69,22 @@ const selectedReadmeHtml = computed(() => {
 
 function initials(name?: string): string {
   return (name || 'AF').trim().slice(0, 2).toUpperCase()
+}
+
+const categoryAccents: Record<string, string> = {
+  '实用工具': '#0d9488',
+  '自动化': '#2563eb',
+  '数据处理': '#c07816',
+  '开发工具': '#c45475',
+  '其他': '#64748b'
+}
+
+function cardAccent(plugin: HubPlugin): string {
+  return plugin.iconColor || categoryAccents[plugin.category] || '#0d9488'
+}
+
+function pluginIcon(plugin: HubPlugin) {
+  return plugin.icon === 'file-archive' ? FileArchive : resolveScriptIcon(plugin.icon)
 }
 
 function formatDate(value?: string): string {
@@ -506,31 +525,32 @@ onUnmounted(() => {
             :key="plugin.id"
             class="hub-card"
             :class="{ selected: selected?.id === plugin.id, installing: isInstalling(plugin.id), 'install-failed': progressFor(plugin)?.phase === 'error' }"
+            :style="{ '--hub-card-accent': cardAccent(plugin) }"
             tabindex="0"
             @click="selected = plugin"
-            @keydown.enter="selected = plugin"
+            @keydown.enter.self="selected = plugin"
+            @keydown.space.self.prevent="selected = plugin"
           >
             <div class="hub-card__header">
               <div class="hub-card__identity">
-                <div class="hub-plugin-icon" :style="{ '--hub-icon-source': plugin.iconColor || 'var(--sb-accent-solid)' }">
-                  {{ initials(plugin.icon || plugin.title) }}
+                <div class="hub-plugin-icon" aria-hidden="true">
+                  <component :is="pluginIcon(plugin)" :size="23" :stroke-width="1.6" />
                 </div>
-                <span class="hub-language">{{ plugin.language || 'AUTOMATION' }}</span>
+                <div class="hub-card__classification">
+                  <span class="hub-card__category" :title="plugin.category || '其他'">{{ plugin.category || '其他' }}</span>
+                  <span class="hub-language" :title="plugin.language || 'AUTOMATION'">{{ plugin.language || 'AUTOMATION' }}</span>
+                </div>
               </div>
-              <button
-                class="hub-install-button"
-                :disabled="isInstalling(plugin.id) || activeInstallCount >= MAX_CONCURRENT_INSTALLS"
-                :aria-label="progressFor(plugin)?.phase === 'error' ? `重试安装 ${plugin.title}` : `安装 ${plugin.title}`"
-                :title="progressFor(plugin)?.phase === 'error' ? `重试安装 ${plugin.title}` : `安装 ${plugin.title}`"
-                @click.stop="install(plugin)"
-              >
-                <RefreshCw v-if="isInstalling(plugin.id)" :size="15" class="hub-spin" />
-                <Download v-else :size="15" />
-              </button>
+              <ArrowUpRight class="hub-card__detail-hint" :size="16" aria-hidden="true" />
             </div>
             <div class="hub-card__body">
-              <h2>{{ plugin.title }}</h2>
-              <p>{{ plugin.description || '暂无说明文档。' }}</p>
+              <h2 :title="plugin.title">{{ plugin.title }}</h2>
+              <p :title="plugin.description">{{ plugin.description || '暂无说明文档。' }}</p>
+            </div>
+            <div class="hub-card__credits">
+              <span class="hub-card__owner-avatar" aria-hidden="true">{{ initials(plugin.ownerDisplayName || 'AutoforgeHub').slice(0, 1) }}</span>
+              <span class="hub-card__owner" :title="plugin.ownerDisplayName || 'AutoforgeHub'">{{ plugin.ownerDisplayName || 'AutoforgeHub' }}</span>
+              <time :datetime="plugin.publishedAt || plugin.createdAt || plugin.updatedAt">{{ formatDate(plugin.publishedAt || plugin.createdAt || plugin.updatedAt) }}</time>
             </div>
             <div v-if="progressFor(plugin)" class="hub-install-progress" :class="{ error: progressFor(plugin)?.phase === 'error' }" role="status">
               <div v-if="progressFor(plugin)?.phase !== 'error'" class="hub-install-progress__track" aria-hidden="true">
@@ -539,12 +559,19 @@ onUnmounted(() => {
               <span>{{ progressLabel(progressFor(plugin)!) }}</span>
             </div>
             <footer class="hub-card__footer">
-              <div class="hub-card__meta">
-                <span class="hub-card__category">{{ plugin.category || '其他' }}</span>
-                <span class="hub-card__owner">{{ plugin.ownerDisplayName || 'AutoforgeHub' }}</span>
-                <span class="hub-card__installs">{{ plugin.installCount || 0 }} 次安装</span>
-              </div>
-              <time :datetime="plugin.publishedAt || plugin.createdAt || plugin.updatedAt">{{ formatDate(plugin.publishedAt || plugin.createdAt || plugin.updatedAt) }}</time>
+              <span class="hub-card__installs"><Download :size="12" aria-hidden="true" /><b>{{ plugin.installCount || 0 }}</b> 次安装</span>
+              <button
+                type="button"
+                class="hub-install-button"
+                :disabled="isInstalling(plugin.id) || activeInstallCount >= MAX_CONCURRENT_INSTALLS"
+                :aria-label="progressFor(plugin)?.phase === 'error' ? `重试安装 ${plugin.title}` : `安装 ${plugin.title}`"
+                :title="progressFor(plugin)?.phase === 'error' ? `重试安装 ${plugin.title}` : `安装 ${plugin.title}`"
+                @click.stop="install(plugin)"
+              >
+                <RefreshCw v-if="isInstalling(plugin.id) || progressFor(plugin)?.phase === 'error'" :size="14" :class="{ 'hub-spin': isInstalling(plugin.id) }" />
+                <Download v-else :size="14" />
+                <span>{{ isInstalling(plugin.id) ? '安装中' : progressFor(plugin)?.phase === 'error' ? '重试' : '安装' }}</span>
+              </button>
             </footer>
           </article>
         </div>
@@ -654,8 +681,7 @@ onUnmounted(() => {
 .hub-detail__header,
 .hub-detail__meta,
 .hub-card__header,
-.hub-card__footer,
-.hub-card__meta {
+.hub-card__footer {
   display: flex;
   align-items: center;
 }
@@ -748,46 +774,50 @@ onUnmounted(() => {
 .hub-heading > div > p:last-child { margin: 8px 0 0; color: var(--sb-text-muted); font-size: 12px; }
 .hub-heading__tools { display: flex; align-items: center; gap: 8px; flex: 0 0 auto; }
 .hub-search, .hub-category-filter { display: flex; align-items: center; height: 32px; border: 1px solid var(--hub-rule); border-radius: 5px; background: var(--hub-surface); color: var(--sb-text-faint); }
-.hub-search { width: clamp(180px, 20vw, 256px); gap: 7px; padding-left: 9px; }
+.hub-search { width: clamp(180px, 20vw, 256px); min-width: 0; gap: 7px; padding-left: 9px; }
 .hub-search:focus-within { border-color: color-mix(in srgb, var(--sb-accent-solid) 58%, var(--hub-rule)); box-shadow: 0 0 0 2px color-mix(in srgb, var(--sb-accent-solid) 11%, transparent); color: var(--sb-accent-solid); }
 .hub-search input { min-width: 0; flex: 1; border: 0; outline: 0; background: transparent; color: var(--sb-text-primary); font-size: 11px; }
 .hub-search input::placeholder { color: var(--sb-text-faint); }
 .hub-search button { display: grid; width: 25px; height: 25px; place-items: center; color: var(--sb-text-faint); }
 .hub-search button:hover { color: var(--sb-text-primary); }
-.hub-category-filter { min-width: 130px; gap: 6px; padding-left: 9px; }
+.hub-category-filter { width: 136px; min-width: 0; flex: 0 0 auto; gap: 6px; padding-left: 9px; }
 .hub-category-filter select { min-width: 0; width: 100%; height: 100%; padding: 0 22px 0 0; border: 0; outline: 0; background: transparent; color: var(--sb-text-secondary); font-size: 11px; }
 .hub-refresh { margin-top: 2px; border-color: var(--hub-rule); }
-.hub-grid, .hub-loading-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 14px; margin-top: 22px; }
-.hub-card { position: relative; display: flex; flex-direction: column; min-width: 0; min-height: 236px; padding: 17px; border: 1px solid var(--hub-rule); border-radius: 7px; background: var(--hub-surface); cursor: pointer; outline: none; overflow: hidden; transition: border-color .18s ease, background .18s ease, box-shadow .18s ease, transform .18s ease; }
-.hub-card::before { position: absolute; top: 0; right: 0; left: 0; height: 2px; background: color-mix(in srgb, var(--sb-accent-solid) 24%, transparent); content: ''; }
-.hub-card:hover, .hub-card:focus-visible { border-color: color-mix(in srgb, var(--sb-accent-solid) 58%, var(--hub-rule)); background: var(--hub-surface-raised); box-shadow: 0 14px 30px rgb(0 0 0 / 12%); transform: translateY(-3px); }
-.hub-card.selected { border-color: var(--sb-accent-solid); background: var(--hub-accent-soft); box-shadow: inset 3px 0 0 var(--sb-accent-solid), 0 8px 22px rgb(0 0 0 / 8%); }
-.hub-card.selected::before { background: var(--sb-accent-solid); }
+.hub-grid, .hub-loading-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(260px, 100%), 1fr)); gap: 16px; margin-top: 22px; }
+.hub-card { position: relative; display: flex; flex-direction: column; min-width: 0; min-height: 248px; padding: 20px 20px 0; border: 1px solid var(--hub-rule); border-radius: 8px; background: var(--hub-surface); cursor: pointer; outline: none; overflow: hidden; box-shadow: 0 2px 4px rgb(0 0 0 / 3%); transition: border-color .18s ease, box-shadow .18s ease, transform .18s ease; }
+.hub-card:hover { border-color: color-mix(in srgb, var(--hub-card-accent) 50%, var(--hub-rule)); box-shadow: 0 8px 22px rgb(0 0 0 / 9%); transform: translateY(-2px); }
+.hub-card:focus-visible { outline: 2px solid var(--sb-accent-solid); outline-offset: 3px; }
+.hub-card.selected { border-color: var(--sb-accent-solid); box-shadow: 0 0 0 1px var(--sb-accent-solid), 0 6px 16px rgb(0 0 0 / 6%); }
 .hub-card__header { justify-content: space-between; gap: 10px; }
-.hub-card__identity { display: flex; align-items: center; min-width: 0; gap: 9px; }
-.hub-plugin-icon { position: relative; display: grid; width: 38px; height: 38px; flex: 0 0 auto; place-items: center; border: 1px solid var(--hub-rule); border-radius: 6px; background: var(--sb-bg-inset); color: var(--sb-text-primary); box-shadow: inset 0 1px 0 rgb(255 255 255 / 9%), 0 2px 8px rgb(0 0 0 / 8%); font-family: var(--font-mono); font-size: 10px; font-weight: 700; letter-spacing: .02em; }
-.hub-plugin-icon::after { position: absolute; right: 6px; bottom: 5px; left: 6px; height: 2px; border-radius: 2px; background: color-mix(in srgb, var(--hub-icon-source) 54%, var(--sb-accent-solid)); content: ''; opacity: .75; }
-.hub-language { max-width: 132px; overflow: hidden; color: var(--sb-text-faint); font-family: var(--font-mono); font-size: 9px; font-weight: 700; letter-spacing: .05em; text-overflow: ellipsis; white-space: nowrap; }
-.hub-card__body { min-width: 0; margin-top: 18px; }
-.hub-card h2 { display: -webkit-box; overflow: hidden; margin: 0; color: var(--sb-text-primary); font-size: 13px; font-weight: 700; line-height: 1.4; -webkit-box-orient: vertical; -webkit-line-clamp: 2; }
-.hub-card__body p { display: -webkit-box; overflow: hidden; margin: 8px 0 0; color: var(--sb-text-muted); font-size: 11px; line-height: 1.6; -webkit-box-orient: vertical; -webkit-line-clamp: 3; }
-.hub-card__footer { justify-content: space-between; gap: 10px; margin-top: auto; padding-top: 12px; border-top: 1px solid color-mix(in srgb, var(--hub-rule) 82%, transparent); }
-.hub-card__meta { display: flex; align-items: center; min-width: 0; gap: 7px; overflow: hidden; color: var(--sb-text-faint); font-size: 10px; white-space: nowrap; }
-.hub-card__meta span { overflow: hidden; text-overflow: ellipsis; }
-.hub-card__installs { flex: 0 0 auto; color: var(--sb-text-faint); font-family: var(--font-mono); font-size: 9px; }
-.hub-card__category { flex: 0 0 auto; padding: 3px 5px; border: 1px solid var(--hub-rule); border-radius: 3px; color: var(--sb-text-muted); font-family: var(--font-mono); font-size: 9px; }
-.hub-card__owner::before { margin-right: 7px; color: var(--sb-text-faint); content: '·'; }
-.hub-card__footer time { flex: 0 0 auto; color: var(--sb-text-faint); font-family: var(--font-mono); font-size: 9px; }
-.hub-install-button { display: inline-grid; width: 30px; height: 30px; flex: 0 0 auto; place-items: center; border: 1px solid color-mix(in srgb, var(--sb-accent-solid) 36%, var(--hub-rule)); border-radius: 4px; background: color-mix(in srgb, var(--sb-accent-solid) 5%, var(--sb-bg-inset)); color: var(--sb-accent-solid); transition: background .15s ease, color .15s ease, border-color .15s ease; }
+.hub-card__identity { display: flex; align-items: center; min-width: 0; gap: 12px; }
+.hub-plugin-icon { display: grid; width: 44px; height: 44px; flex: 0 0 auto; place-items: center; border: 1px solid color-mix(in srgb, var(--hub-card-accent) 22%, var(--hub-rule)); border-radius: 8px; background: color-mix(in srgb, var(--hub-card-accent) 11%, var(--hub-surface)); color: color-mix(in srgb, var(--hub-card-accent) 82%, var(--sb-text-primary)); }
+.hub-card__classification { display: grid; min-width: 0; gap: 5px; }
+.hub-card__category { overflow: hidden; color: var(--sb-text-secondary); font-size: 11px; font-weight: 600; text-overflow: ellipsis; white-space: nowrap; }
+.hub-language { overflow: hidden; color: var(--sb-text-muted); font-family: var(--font-mono); font-size: 9px; letter-spacing: 0; text-overflow: ellipsis; white-space: nowrap; }
+.hub-card__detail-hint { flex: 0 0 auto; align-self: flex-start; color: var(--sb-text-faint); transition: color .18s ease, transform .18s ease; }
+.hub-card:hover .hub-card__detail-hint, .hub-card:focus-visible .hub-card__detail-hint { color: var(--sb-accent-solid); transform: translate(1px, -1px); }
+.hub-card__body { min-width: 0; margin-top: 17px; }
+.hub-card h2 { display: -webkit-box; overflow: hidden; margin: 0; color: var(--sb-text-primary); font-size: 14px; font-weight: 700; line-height: 1.45; overflow-wrap: anywhere; -webkit-box-orient: vertical; -webkit-line-clamp: 2; }
+.hub-card__body p { display: -webkit-box; overflow: hidden; min-height: 54px; margin: 8px 0 0; color: var(--sb-text-muted); font-size: 11px; line-height: 18px; overflow-wrap: anywhere; -webkit-box-orient: vertical; -webkit-line-clamp: 3; }
+.hub-card__credits { display: flex; align-items: center; min-width: 0; gap: 7px; margin-top: auto; padding: 16px 0 13px; color: var(--sb-text-muted); font-size: 10px; }
+.hub-card__owner-avatar { display: grid; width: 20px; height: 20px; flex: 0 0 auto; place-items: center; border: 1px solid var(--hub-rule); border-radius: 50%; background: var(--sb-bg-inset); color: var(--sb-text-secondary); font-size: 9px; }
+.hub-card__owner { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.hub-card__credits time { flex: 0 0 auto; margin-left: auto; color: var(--sb-text-faint); font-family: var(--font-mono); font-size: 9px; }
+.hub-card__footer { justify-content: space-between; gap: 10px; min-height: 51px; margin: 0 -20px; padding: 9px 20px; border-top: 1px solid var(--hub-rule); background: color-mix(in srgb, var(--sb-bg-inset) 45%, var(--hub-surface)); }
+.hub-card__installs { display: flex; align-items: center; min-width: 0; gap: 5px; color: var(--sb-text-muted); font-size: 10px; white-space: nowrap; }
+.hub-card__installs svg { flex: 0 0 auto; color: var(--sb-text-faint); }
+.hub-card__installs b { color: var(--sb-text-secondary); font-family: var(--font-mono); font-size: 10px; font-weight: 600; }
+.hub-install-button { display: inline-flex; align-items: center; justify-content: center; gap: 6px; width: 80px; height: 30px; flex: 0 0 auto; border: 1px solid color-mix(in srgb, var(--sb-accent-solid) 28%, var(--hub-rule)); border-radius: 5px; background: var(--hub-surface); color: var(--sb-accent-solid); font-size: 11px; font-weight: 600; transition: background .15s ease, color .15s ease, border-color .15s ease; }
 .hub-install-button:hover:not(:disabled) { border-color: var(--sb-accent-solid); background: var(--sb-accent-solid); color: #fff; }
+.hub-install-button:focus-visible { outline: 2px solid var(--sb-accent-solid); outline-offset: 2px; }
 .hub-card.installing { border-color: color-mix(in srgb, var(--sb-accent-solid) 60%, var(--hub-rule)); }
 .hub-card.install-failed { border-color: color-mix(in srgb, var(--sb-status-error, #ef4444) 62%, var(--hub-rule)); }
-.hub-install-progress { display: grid; gap: 6px; margin-top: 12px; color: var(--sb-accent-solid); font-family: var(--font-mono); font-size: 9px; line-height: 1.35; }
+.hub-install-progress { display: grid; gap: 6px; margin-bottom: 13px; color: var(--sb-accent-solid); font-family: var(--font-mono); font-size: 9px; line-height: 1.5; overflow-wrap: anywhere; }
 .hub-install-progress.error { color: var(--sb-status-error, #ef4444); }
 .hub-install-progress__track { height: 4px; overflow: hidden; border-radius: 3px; background: color-mix(in srgb, var(--sb-bg-inset) 90%, #000); }
 .hub-install-progress__track span { display: block; height: 100%; min-width: 2px; border-radius: inherit; background: var(--sb-accent-solid); transition: width .18s ease; }
 .hub-install-progress__track span.indeterminate { width: 36%; animation: hub-progress-indeterminate 1.15s ease-in-out infinite; }
-.hub-skeleton-card { min-height: 236px; border: 1px solid var(--hub-rule); border-radius: 7px; background: linear-gradient(100deg, var(--hub-surface) 35%, var(--sb-bg-hover) 50%, var(--hub-surface) 65%); background-size: 230% 100%; animation: hub-loading 1.3s ease-in-out infinite; }
+.hub-skeleton-card { min-height: 268px; border: 1px solid var(--hub-rule); border-radius: 8px; background: linear-gradient(100deg, var(--hub-surface) 35%, var(--sb-bg-hover) 50%, var(--hub-surface) 65%); background-size: 230% 100%; animation: hub-loading 1.3s ease-in-out infinite; }
 .hub-empty-state { display: grid; justify-items: start; gap: 7px; max-width: 360px; margin: 74px auto; color: var(--sb-text-faint); font-size: 12px; text-align: left; }
 .hub-empty-state svg { margin-bottom: 5px; color: var(--sb-text-muted); }
 .hub-empty-state strong { color: var(--sb-text-secondary); font-size: 13px; }
@@ -843,6 +873,13 @@ onUnmounted(() => {
 @keyframes hub-spin { to { transform: rotate(360deg); } }
 @keyframes hub-loading { to { background-position: -130% 0; } }
 @keyframes hub-progress-indeterminate { 0% { transform: translateX(-120%); } 50% { transform: translateX(120%); } 100% { transform: translateX(280%); } }
+
+@media (prefers-reduced-motion: reduce) {
+  .hub-card, .hub-card__detail-hint { transition: none; transform: none; }
+  .hub-card:hover .hub-card__detail-hint, .hub-card:focus-visible .hub-card__detail-hint { transform: none; }
+  .hub-install-progress__track span { transition: none; }
+  .hub-install-progress__track span.indeterminate { animation: none; }
+}
 
 @media (max-width: 1080px) {
   .hub-workbench.has-detail { grid-template-columns: 188px minmax(0, 1fr); }
