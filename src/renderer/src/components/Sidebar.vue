@@ -9,6 +9,7 @@ import {
   Archive,
   BookOpen,
   Clock,
+  GitBranch,
   History,
   LayoutGrid,
   Pencil,
@@ -41,6 +42,7 @@ const emit = defineEmits<{
   category: [key: string | null]
   manageCategories: []
   import: []
+  importFromRepo: []
   settings: []
   devGuide: []
   executionHistory: []
@@ -278,6 +280,15 @@ onUnmounted(() => {
       >
         <Upload class="w-3.5 h-3.5" :stroke-width="1.5" />
         上传脚本
+      </button>
+      <button
+        type="button"
+        class="w-full flex items-center justify-center gap-2 h-7 rounded-lg border sb-border text-[12px] sb-text-secondary hover:sb-text-primary transition-colors"
+        title="从 GitHub / Gitee 仓库导入并转换为脚本包"
+        @click="emit('importFromRepo')"
+      >
+        <GitBranch class="w-3.5 h-3.5" :stroke-width="1.5" />
+        从仓库导入
       </button>
       <div class="flex items-center justify-around gap-0.5 pt-0.5">
         <button

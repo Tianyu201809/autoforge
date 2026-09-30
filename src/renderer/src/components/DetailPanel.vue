@@ -13,6 +13,7 @@ import {
   Save,
   Square,
   Trash2,
+  Wrench,
   X,
   ExternalLink
 } from 'lucide-vue-next'
@@ -29,6 +30,7 @@ import LogConsole from './LogConsole.vue'
 import RunResultViewer from './RunResultViewer.vue'
 import ScriptRunHistoryPanel from './ScriptRunHistoryPanel.vue'
 import ScriptRunProgressPanel from './ScriptRunProgressPanel.vue'
+import ScriptRepairModal from './ScriptRepairModal.vue'
 import { formatScriptRunProgressSummary } from '../../../shared/script-progress'
 import CodeEditor from './CodeEditor.vue'
 import SchemaValueField from './SchemaValueField.vue'
@@ -291,6 +293,19 @@ const latestRunLogs = computed(() => {
   if (!sid) return []
   return props.runner.logsForSession(sid)
 })
+
+const showRepairModal = ref(false)
+
+/** 最近一次运行失败时的可读原因（优先取日志里的 ERROR 行） */
+const latestRunError = computed(() => {
+  const session = latestRunSession.value
+  if (!session || session.status !== 'error') return undefined
+  const errorLine = [...latestRunLogs.value].reverse().find((line) => line.level === 'ERROR')
+  if (errorLine) return errorLine.message
+  return session.exitCode !== undefined ? `退出码 ${session.exitCode}` : '运行失败'
+})
+
+const canRepair = computed(() => latestRunSession.value?.status === 'error')
 
 const isRunning = computed(
   () =>
@@ -1452,6 +1467,16 @@ async function handleRename(): Promise<void> {
           <Trash2 class="w-3 h-3" :stroke-width="1.5" />
           删除
         </button>
+        <button
+          v-if="canRepair"
+          type="button"
+          class="h-7 px-2 flex items-center gap-1 rounded-md text-[11px] text-sky-500 border sb-border hover:border-sky-500/30 transition-colors"
+          title="把失败日志交给模型，让它给出修复方案"
+          @click="showRepairModal = true"
+        >
+          <Wrench class="w-3 h-3" :stroke-width="1.5" />
+          AI 修复
+        </button>
         <div v-if="detailDirty || detailSaving" class="flex-1 flex items-center justify-end gap-1.5 min-w-0">
           <button
             type="button"
@@ -1715,6 +1740,15 @@ async function handleRename(): Promise<void> {
       />
     </div>
   </aside>
+
+  <ScriptRepairModal
+    :open="showRepairModal"
+    :script="script"
+    :logs="latestRunLogs"
+    :last-error="latestRunError"
+    @close="showRepairModal = false"
+    @repaired="emit('refresh')"
+  />
 </template>
 
 <style scoped>

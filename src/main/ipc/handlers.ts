@@ -27,6 +27,17 @@ import { scriptWorkspace } from '../services/script-workspace'
 import { createHubCredentialStore } from '../services/hub-credential-store'
 import { createHubClient } from '../services/hub-client'
 import { installScriptFromHubZip } from '../services/hub-script-installer'
+import { getRepoConversionService } from '../services/repo-conversion-service'
+import {
+  deleteRepoWorkspace,
+  getRepoWorkspacePaths,
+  listRepoWorkspaces,
+  readWorkspaceProfile
+} from '../services/repo-workspace'
+import { getLlmConverter, getScriptRepairer } from '../services/llm-converter-runtime'
+import { getLlmProfileService } from '../services/llm-profile-service'
+import type { RepoFetchRequest } from '../../shared/repo-types'
+import type { LlmUpsertProfileInput, LlmConvertRequest, ScriptRepairRequest } from '../../shared/llm-types'
 import { setHubAuthorizationCallback } from '../services/hub-bridge-server'
 import { broadcastToRenderers } from '../services/window-broadcast'
 import type { HubPluginQuery } from '../../shared/hub-types'
@@ -540,6 +551,142 @@ export function registerIpcHandlers(
   })
 
   ipcMain.handle(IPC.MCP_GET_CLIENT_CONFIG, () => getMcpClientConfig(appEnv))
+
+  ipcMain.handle(IPC.REPO_FETCH, async (event, payload: RepoFetchRequest) => {
+    if (!payload || typeof payload !== 'object' || typeof payload.url !== 'string') {
+      throw new Error('invalid_params: 缺少仓库地址')
+    }
+    const service = getRepoConversionService()
+    return service.convert(payload, (progress) => {
+      if (!event.sender.isDestroyed()) {
+        event.sender.send(IPC.EVENT_REPO_CONVERT_PROGRESS, progress)
+      }
+    })
+  })
+
+  ipcMain.handle(IPC.REPO_LIST_WORKSPACES, () => listRepoWorkspaces())
+
+  ipcMain.handle(IPC.REPO_GET_WORKSPACE, (_event, taskId: unknown) => {
+    if (typeof taskId !== 'string' || !taskId.trim()) return null
+    return getRepoConversionService().getWorkspace(taskId.trim())
+  })
+
+  ipcMain.handle(IPC.REPO_IMPORT, (_event, taskId: unknown) => {
+    if (typeof taskId !== 'string' || !taskId.trim()) {
+      throw new Error('invalid_params: 缺少 taskId')
+    }
+    const meta = getRepoConversionService().importPackage(taskId.trim())
+    scheduler.reload(scriptRegistry.listAll())
+    return enrichScriptItem(meta, runner.listSessions())
+  })
+
+  ipcMain.handle(IPC.REPO_OPEN_WORKSPACE, async (_event, taskId: unknown, target: unknown) => {
+    if (typeof taskId !== 'string' || !taskId.trim()) return false
+    const paths = getRepoWorkspacePaths(taskId.trim())
+    const kind = target === 'repo' || target === 'package' ? target : 'root'
+    const dir =
+      kind === 'repo' ? paths.repoPath : kind === 'package' ? paths.packageDir : paths.workspacePath
+    if (!existsSync(dir)) return false
+    const result = await shell.openPath(dir)
+    return result === ''
+  })
+
+  ipcMain.handle(IPC.REPO_DELETE_WORKSPACE, (_event, taskId: unknown) => {
+    if (typeof taskId !== 'string' || !taskId.trim()) return false
+    return deleteRepoWorkspace(taskId.trim())
+  })
+
+  ipcMain.handle(IPC.REPO_CONVERT_WITH_LLM, async (event, request: LlmConvertRequest) => {
+    if (!request || typeof request !== 'object' || typeof request.taskId !== 'string') {
+      throw new Error('invalid_params: 缺少 taskId')
+    }
+    const taskId = request.taskId.trim()
+    const info = getRepoConversionService().getWorkspace(taskId)
+    if (!info) throw new Error('转换工作区不存在，请重新拉取仓库')
+
+    const profile = readWorkspaceProfile(taskId)
+    if (!profile) throw new Error('转换工作区缺少仓库画像，请重新拉取仓库')
+
+    const allowBuild = request.allowBuild === true && scriptStore.getConfig().llm?.allowBuild === true
+
+    return getLlmConverter().convert({
+      taskId,
+      repoDir: info.repoPath,
+      packageDir: info.packageDir,
+      repoProfile: profile,
+      profileId: request.profileId,
+      allowBuild,
+      instruction: typeof request.instruction === 'string' ? request.instruction : undefined,
+      onProgress: (progress) => {
+        if (!event.sender.isDestroyed()) {
+          event.sender.send(IPC.EVENT_REPO_CONVERT_PROGRESS, progress)
+        }
+      },
+      onLog: (line) => {
+        if (!event.sender.isDestroyed()) {
+          event.sender.send(IPC.EVENT_REPO_CONVERT_LOG, line)
+        }
+      }
+    })
+  })
+
+  ipcMain.handle(IPC.LLM_LIST_PROFILES, () => getLlmProfileService().list())
+
+  ipcMain.handle(IPC.LLM_UPSERT_PROFILE, (_event, input: LlmUpsertProfileInput) => {
+    if (!input || typeof input !== 'object' || !input.profile) {
+      throw new Error('invalid_params: 缺少配置内容')
+    }
+    return getLlmProfileService().upsert(input)
+  })
+
+  ipcMain.handle(IPC.LLM_DELETE_PROFILE, (_event, profileId: unknown) => {
+    if (typeof profileId !== 'string' || !profileId.trim()) return false
+    return getLlmProfileService().remove(profileId.trim())
+  })
+
+  ipcMain.handle(IPC.LLM_SET_ACTIVE_PROFILE, (_event, profileId: unknown) => {
+    if (profileId !== null && typeof profileId !== 'string') {
+      throw new Error('invalid_params: profileId 必须是字符串或 null')
+    }
+    return getLlmProfileService().setActive(typeof profileId === 'string' ? profileId.trim() : null)
+  })
+
+  ipcMain.handle(IPC.LLM_SET_ALLOW_BUILD, (_event, enabled: unknown) => {
+    if (typeof enabled !== 'boolean') throw new Error('invalid_params: enabled 必须是布尔值')
+    return getLlmProfileService().setAllowBuild(enabled)
+  })
+
+  ipcMain.handle(IPC.LLM_TEST_PROFILE, (_event, profileId: unknown) => {
+    if (typeof profileId !== 'string' || !profileId.trim()) {
+      throw new Error('invalid_params: 缺少 profileId')
+    }
+    return getLlmProfileService().test(profileId.trim())
+  })
+
+  ipcMain.handle(IPC.LLM_REPAIR_SCRIPT, async (event, request: ScriptRepairRequest) => {
+    if (!request || typeof request !== 'object' || typeof request.scriptId !== 'string') {
+      throw new Error('invalid_params: 缺少 scriptId')
+    }
+    const scriptId = request.scriptId.trim()
+    if (!scriptRegistry.getById(scriptId)) throw new Error('脚本不存在')
+
+    return getScriptRepairer().repair({
+      scriptId,
+      profileId: request.profileId,
+      instruction: typeof request.instruction === 'string' ? request.instruction : undefined,
+      logs: Array.isArray(request.logs) ? request.logs.filter((line) => typeof line === 'string') : [],
+      onProgress: (progress) => {
+        if (!event.sender.isDestroyed()) {
+          event.sender.send(IPC.EVENT_LLM_REPAIR_PROGRESS, progress)
+        }
+      },
+      onLog: (line) => {
+        if (!event.sender.isDestroyed()) {
+          event.sender.send(IPC.EVENT_LLM_REPAIR_LOG, line)
+        }
+      }
+    })
+  })
 
   ipcMain.handle(IPC.WINDOW_SHOW, () => {
     showMainWindow()

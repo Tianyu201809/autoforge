@@ -37,6 +37,24 @@ import type { ScriptIcon, ScriptLifecycleEvent } from '../shared/script-contract
 import type { ScriptLanguage } from '../shared/script-language'
 import type { McpClientConfig, McpStatus } from '../shared/mcp-types'
 import type { HubInstallProgress, HubPlugin, HubPluginListResult, HubPluginQuery, HubSession, HubTeam } from '../shared/hub-types'
+import type {
+  RepoConvertProgress,
+  RepoFetchRequest,
+  RepoWorkspaceInfo,
+  RepoWorkspaceSummary
+} from '../shared/repo-types'
+import type {
+  LlmConversionLogLine,
+  LlmConversionProgress,
+  LlmConversionResult,
+  LlmConvertRequest,
+  LlmProfileListResult,
+  LlmProfileView,
+  LlmTestResult,
+  LlmUpsertProfileInput,
+  ScriptRepairRequest,
+  ScriptRepairResult
+} from '../shared/llm-types'
 
 export interface EditorFileStatePayload {
   content: string
@@ -283,6 +301,58 @@ const autoforge = {
       const handler = (_event: IpcRendererEvent, status: McpStatus): void => callback(status)
       ipcRenderer.on(IPC.EVENT_MCP_STATUS, handler)
       return () => ipcRenderer.removeListener(IPC.EVENT_MCP_STATUS, handler)
+    }
+  },
+  repo: {
+    fetch: (input: RepoFetchRequest): Promise<RepoWorkspaceInfo> =>
+      ipcRenderer.invoke(IPC.REPO_FETCH, input),
+    listWorkspaces: (): Promise<RepoWorkspaceSummary[]> =>
+      ipcRenderer.invoke(IPC.REPO_LIST_WORKSPACES),
+    getWorkspace: (taskId: string): Promise<RepoWorkspaceInfo | null> =>
+      ipcRenderer.invoke(IPC.REPO_GET_WORKSPACE, taskId),
+    importPackage: (taskId: string): Promise<ScriptItem> =>
+      ipcRenderer.invoke(IPC.REPO_IMPORT, taskId),
+    openWorkspace: (taskId: string, target?: 'root' | 'repo' | 'package'): Promise<boolean> =>
+      ipcRenderer.invoke(IPC.REPO_OPEN_WORKSPACE, taskId, target),
+    deleteWorkspace: (taskId: string): Promise<boolean> =>
+      ipcRenderer.invoke(IPC.REPO_DELETE_WORKSPACE, taskId),
+    convertWithLlm: (request: LlmConvertRequest): Promise<LlmConversionResult> =>
+      ipcRenderer.invoke(IPC.REPO_CONVERT_WITH_LLM, request),
+    onProgress: (callback: (progress: RepoConvertProgress) => void): (() => void) => {
+      const handler = (_event: IpcRendererEvent, progress: RepoConvertProgress): void => callback(progress)
+      ipcRenderer.on(IPC.EVENT_REPO_CONVERT_PROGRESS, handler)
+      return () => ipcRenderer.removeListener(IPC.EVENT_REPO_CONVERT_PROGRESS, handler)
+    },
+    onConvertLog: (callback: (line: LlmConversionLogLine) => void): (() => void) => {
+      const handler = (_event: IpcRendererEvent, line: LlmConversionLogLine): void => callback(line)
+      ipcRenderer.on(IPC.EVENT_REPO_CONVERT_LOG, handler)
+      return () => ipcRenderer.removeListener(IPC.EVENT_REPO_CONVERT_LOG, handler)
+    }
+  },
+  llm: {
+    listProfiles: (): Promise<LlmProfileListResult> => ipcRenderer.invoke(IPC.LLM_LIST_PROFILES),
+    upsertProfile: (input: LlmUpsertProfileInput): Promise<LlmProfileView> =>
+      ipcRenderer.invoke(IPC.LLM_UPSERT_PROFILE, input),
+    deleteProfile: (profileId: string): Promise<boolean> =>
+      ipcRenderer.invoke(IPC.LLM_DELETE_PROFILE, profileId),
+    setActiveProfile: (profileId: string | null): Promise<LlmProfileListResult> =>
+      ipcRenderer.invoke(IPC.LLM_SET_ACTIVE_PROFILE, profileId),
+    setAllowBuild: (enabled: boolean): Promise<LlmProfileListResult> =>
+      ipcRenderer.invoke(IPC.LLM_SET_ALLOW_BUILD, enabled),
+    testProfile: (profileId: string): Promise<LlmTestResult> =>
+      ipcRenderer.invoke(IPC.LLM_TEST_PROFILE, profileId),
+    repairScript: (request: ScriptRepairRequest): Promise<ScriptRepairResult> =>
+      ipcRenderer.invoke(IPC.LLM_REPAIR_SCRIPT, request),
+    onRepairProgress: (callback: (progress: LlmConversionProgress) => void): (() => void) => {
+      const handler = (_event: IpcRendererEvent, progress: LlmConversionProgress): void =>
+        callback(progress)
+      ipcRenderer.on(IPC.EVENT_LLM_REPAIR_PROGRESS, handler)
+      return () => ipcRenderer.removeListener(IPC.EVENT_LLM_REPAIR_PROGRESS, handler)
+    },
+    onRepairLog: (callback: (line: LlmConversionLogLine) => void): (() => void) => {
+      const handler = (_event: IpcRendererEvent, line: LlmConversionLogLine): void => callback(line)
+      ipcRenderer.on(IPC.EVENT_LLM_REPAIR_LOG, handler)
+      return () => ipcRenderer.removeListener(IPC.EVENT_LLM_REPAIR_LOG, handler)
     }
   },
   deps: {

@@ -34,6 +34,11 @@ import type {
 import type { ScriptIcon, ScriptLifecycleEvent } from '../../shared/script-contract'
 import type { McpClientConfig, McpStatus } from '../../shared/mcp-types'
 import type { HubInstallProgress, HubPlugin, HubPluginListResult, HubPluginQuery, HubSession, HubTeam } from '../../shared/hub-types'
+import type {
+  RepoConvertProgress,
+  RepoWorkspaceInfo,
+  RepoWorkspaceSummary
+} from '../../shared/repo-types'
 
 export interface ScriptListResponse {
   scripts: ScriptItem[]
@@ -216,6 +221,42 @@ export interface AutoforgeApi {
     rotateToken: () => Promise<McpStatus>
     getClientConfig: () => Promise<McpClientConfig>
     onStatus: (callback: (status: McpStatus) => void) => () => void
+  }
+  repo: {
+    fetch: (input: import('../../shared/repo-types').RepoFetchRequest) => Promise<RepoWorkspaceInfo>
+    listWorkspaces: () => Promise<RepoWorkspaceSummary[]>
+    getWorkspace: (taskId: string) => Promise<RepoWorkspaceInfo | null>
+    importPackage: (taskId: string) => Promise<ScriptItem>
+    openWorkspace: (taskId: string, target?: 'root' | 'repo' | 'package') => Promise<boolean>
+    deleteWorkspace: (taskId: string) => Promise<boolean>
+    convertWithLlm: (
+      request: import('../../shared/llm-types').LlmConvertRequest
+    ) => Promise<import('../../shared/llm-types').LlmConversionResult>
+    onProgress: (callback: (progress: RepoConvertProgress) => void) => () => void
+    onConvertLog: (
+      callback: (line: import('../../shared/llm-types').LlmConversionLogLine) => void
+    ) => () => void
+  }
+  llm: {
+    listProfiles: () => Promise<import('../../shared/llm-types').LlmProfileListResult>
+    upsertProfile: (
+      input: import('../../shared/llm-types').LlmUpsertProfileInput
+    ) => Promise<import('../../shared/llm-types').LlmProfileView>
+    deleteProfile: (profileId: string) => Promise<boolean>
+    setActiveProfile: (
+      profileId: string | null
+    ) => Promise<import('../../shared/llm-types').LlmProfileListResult>
+    setAllowBuild: (enabled: boolean) => Promise<import('../../shared/llm-types').LlmProfileListResult>
+    testProfile: (profileId: string) => Promise<import('../../shared/llm-types').LlmTestResult>
+    repairScript: (
+      request: import('../../shared/llm-types').ScriptRepairRequest
+    ) => Promise<import('../../shared/llm-types').ScriptRepairResult>
+    onRepairProgress: (
+      callback: (progress: import('../../shared/llm-types').LlmConversionProgress) => void
+    ) => () => void
+    onRepairLog: (
+      callback: (line: import('../../shared/llm-types').LlmConversionLogLine) => void
+    ) => () => void
   }
   deps: {
     installGlobal: (

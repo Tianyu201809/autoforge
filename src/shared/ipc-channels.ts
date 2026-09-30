@@ -96,6 +96,34 @@ export const IPC = {
   HUB_GET_PLUGIN: 'hub:get-plugin',
   HUB_INSTALL_PLUGIN: 'hub:install-plugin',
 
+  REPO_FETCH: 'repo:fetch',
+
+  REPO_LIST_WORKSPACES: 'repo:list-workspaces',
+
+  REPO_GET_WORKSPACE: 'repo:get-workspace',
+
+  REPO_IMPORT: 'repo:import',
+
+  REPO_OPEN_WORKSPACE: 'repo:open-workspace',
+
+  REPO_DELETE_WORKSPACE: 'repo:delete-workspace',
+
+  REPO_CONVERT_WITH_LLM: 'repo:convert-with-llm',
+
+  LLM_LIST_PROFILES: 'llm:list-profiles',
+
+  LLM_UPSERT_PROFILE: 'llm:upsert-profile',
+
+  LLM_DELETE_PROFILE: 'llm:delete-profile',
+
+  LLM_SET_ACTIVE_PROFILE: 'llm:set-active-profile',
+
+  LLM_SET_ALLOW_BUILD: 'llm:set-allow-build',
+
+  LLM_TEST_PROFILE: 'llm:test-profile',
+
+  LLM_REPAIR_SCRIPT: 'llm:repair-script',
+
   MCP_GET_STATUS: 'mcp:get-status',
 
   MCP_SET_ENABLED: 'mcp:set-enabled',
@@ -175,6 +203,14 @@ export const IPC = {
   EVENT_HUB_SCRIPT_INSTALLED: 'event:hub-script-installed',
   EVENT_HUB_INSTALL_PROGRESS: 'event:hub-install-progress',
   EVENT_HUB_AUTHORIZED: 'event:hub-authorized',
+
+  EVENT_REPO_CONVERT_PROGRESS: 'event:repo-convert-progress',
+
+  EVENT_REPO_CONVERT_LOG: 'event:repo-convert-log',
+
+  EVENT_LLM_REPAIR_PROGRESS: 'event:llm-repair-progress',
+
+  EVENT_LLM_REPAIR_LOG: 'event:llm-repair-log',
 
   EVENT_MCP_STATUS: 'event:mcp-status'
 

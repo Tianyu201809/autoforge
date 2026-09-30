@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed, onUnmounted, ref, toRaw, watch } from 'vue'
-import { AppWindow, Boxes, Check, CheckCircle2, ChevronDown, Code2, Copy, Globe2, Plus, ScrollText, Settings, ShieldCheck, Terminal, Trash2, X, XCircle } from 'lucide-vue-next'
+import { AppWindow, Boxes, Check, CheckCircle2, ChevronDown, Code2, Copy, Cpu, Globe2, Plus, ScrollText, Settings, ShieldCheck, Terminal, Trash2, X, XCircle } from 'lucide-vue-next'
 import type { Component } from 'vue'
 import type { AppConfig, BrowserStatusInfo, EnvironmentProfile, GlobalDependency, PythonStatusInfo } from '../../../shared/types/script'
 import { formatCodexMcpAddCommand, formatCodexMcpToml, formatGenericMcpJson } from '../../../shared/mcp-client-config'
@@ -9,6 +9,7 @@ import { DEFAULT_GLOBAL_SHORTCUT } from '../../../shared/accelerator'
 import SkinPicker from './SkinPicker.vue'
 import ShortcutRecorder from './ShortcutRecorder.vue'
 import AppFeatureModal from './AppFeatureModal.vue'
+import LlmProfilesPanel from './LlmProfilesPanel.vue'
 import { askConfirm } from '../composables/useConfirmDialog'
 import { useToast } from '../composables/useToast'
 
@@ -16,7 +17,7 @@ const { pushToast } = useToast()
 
 const props = defineProps<{ open: boolean }>()
 
-type SettingsSectionId = 'overview' | 'mcp' | 'window' | 'runtime' | 'tools' | 'logs'
+type SettingsSectionId = 'overview' | 'mcp' | 'llm' | 'window' | 'runtime' | 'tools' | 'logs'
 type SaveState = 'idle' | 'saving' | 'saved' | 'error'
 type McpConfigTarget = 'codex' | 'generic'
 
@@ -29,6 +30,7 @@ interface SettingsSection {
 
 const SETTINGS_SECTIONS: SettingsSection[] = [
   { id: 'mcp', label: 'MCP', description: '智能体接入', icon: Code2 },
+  { id: 'llm', label: '模型', description: '应用内转换引擎', icon: Cpu },
   { id: 'overview', label: '概览', description: '产品与 Hub', icon: Boxes },
   { id: 'window', label: '窗口与外观', description: '显示与皮肤', icon: AppWindow },
   { id: 'runtime', label: '环境与运行', description: 'Profile 与运行时', icon: Globe2 },
@@ -945,6 +947,10 @@ async function removeGlobalPythonDep(name: string): Promise<void> {
                   <p>Codex 的 stdio 模式会为每个 Codex 会话启动一个轻量 adapter，这是正常行为，但不应打开新的 Autoforge 窗口。若窗口反复出现，请删除旧配置并使用上方 Codex TOML 或 CLI 命令重新接入。</p>
                 </div>
               </section>
+            </template>
+
+            <template v-else-if="activeSection === 'llm'">
+              <LlmProfilesPanel />
             </template>
 
             <template v-else-if="activeSection === 'window'">

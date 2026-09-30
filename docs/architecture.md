@@ -76,6 +76,19 @@ userData/                     # autoforge-development 或 autoforge-production
 | `hub-script-installer` | Hub zip 下载、解压、定位 `autoforge.json` 包根、调用 registry 导入 |
 | `hub-credential-store` | 主进程保存和清理 Hub 凭据；隔离 token 访问，向渲染进程提供脱敏账户信息 |
 | `hub-client` | 调用 Hub 登录、脚本列表、搜索和分类接口；统一处理 `q`、`category`、分页与错误状态 |
+| `repo-url` | 解析 GitHub / Gitee 地址（https、scp、`ssh://`、`/tree/<ref>`）、选择拉取策略、组装 GitHub 归档请求 |
+| `git-clone` | git 可用性探测、浅克隆（SSH `BatchMode`、超时与进程树终止）、stderr 进度解析、commit 与分支回读、失败原因翻译 |
+| `repo-fetcher` | 按策略路由：GitHub 走归档 zip（失败回退 git），Gitee 与 SSH 走 git clone；含停滞超时与 500 MB 上限 |
+| `repo-analyzer` | 有界遍历仓库产出结构化画像（语言、清单、入口、依赖、许可证、风险）与可转换性分级 |
+| `repo-workspace` | 转换工作区生命周期、画像读写、`HANDOFF.md` 与交接提示词生成、产物包根探测 |
+| `repo-conversion-service` | 编排「拉取 → 画像 → 工作区」并导入转换产物；内置单任务锁 |
+| `llm-credential-store` | 按 LLM 配置 id 加密保存 API Key（safeStorage，可注入加密实现）；密钥不进入 AppConfig |
+| `llm-client` | OpenAI 兼容 `/chat/completions` 客户端；SSE 流式（空闲超时、与中止信号竞速、无流式回退）、JSON 模式与降级重试、超时、错误翻译、连通性测试 |
+| `llm-profile-service` | LLM 配置 CRUD、默认配置切换、构建授权开关、密钥解析 |
+| `repo-digest` | 为模型生成有界仓库上下文（画像 → 文件树 → 依赖清单 → README → 入口正文，120k 字符预算） |
+| `repo-build-runner` | 包管理器识别、构建命令白名单与 shell 元字符校验、命令执行与日志流、构建产物探测 |
+| `llm-converter` | 两阶段转换：先取计划骨架（JSON，不含正文），再逐文件生成纯文本内容；解析校验、路径安全、构建产物复制、写包与清单生成 |
+| `llm-repair` / `script-repair-io` | 导入后的修复回路：收集失败上下文与工作区文件，两阶段生成修复方案，路径安全地写回并校验清单 |
 | `HubPluginCenterPanel` | 原生脚本中心 UI：插件市场、我的脚本、团队脚本、详情 Markdown、安装/更新操作 |
 | `mcp-control-server` | 本地 Named Pipe / Unix Socket 控制面、握手、认证、请求路由与连接限制 |
 | `mcp/control-client` | MCP adapter 到主进程的 descriptor 发现、握手和断线重连 |
@@ -237,6 +250,9 @@ Autoforge 渲染进程
 | 运行二次确认 | `useConfirmDialog` · 详情面板与卡片快捷运行 |
 | 功能弹窗 | `AppFeatureModal` · 设置 / 执行历史 / 开发指南居中模态 |
 | 本地 MCP 控制 | `mcp-control-server` / `mcp` · Agent 查询、运行、编辑脚本与环境；默认关闭 |
+| 从仓库导入 | `repo-fetcher` / `repo-analyzer` / `repo-workspace` · 拉取 GitHub / Gitee 仓库（GitHub 归档 zip，Gitee 与 SSH 走 git clone）、产出画像与交接工作区，由 Agent 经 `repo-to-autoforge` 技能转为脚本包后导入 |
+| 应用内 LLM 转换 | `llm-converter` / `llm-client` / `llm-profile-service` · 多套 OpenAI 兼容配置（设置 → 模型），把仓库画像交给模型产出结构化转换计划，校验后写包；可选执行构建命令（双重授权 + 命令白名单） |
+| 导入后 AI 修复 | `llm-repair` / `script-repair-io` · 脚本运行失败时把失败日志与当前代码交给模型，产出最小改动的修复方案并写回工作区；入口保护 + 清单校验 |
 
 ## 还需关注的能力（后续迭代）
 
@@ -279,3 +295,4 @@ Autoforge 渲染进程
 | [脚本包规范](./script-spec.md) | `autoforge.json` 与 zip 分发 |
 | [Hub 安装 · 桌面端规格](./superpowers/specs/2026-07-11-hub-local-install-design.md) | 本机桥契约 |
 | [Hub 安装 · Hub 端规格](./superpowers/specs/2026-07-11-hub-local-install-hub-side-design.md) | 网站侧实现契约 |
+| [仓库转脚本规格](./superpowers/specs/2026-09-30-repo-to-script-design.md) | 仓库拉取、画像分级、转换工作区与交接协议 |

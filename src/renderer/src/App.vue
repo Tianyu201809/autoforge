@@ -22,6 +22,7 @@ import PromptDialogHost from './components/PromptDialogHost.vue'
 import ScratchpadPanel from './components/ScratchpadPanel.vue'
 import ExecutableEntryPickerModal from './components/ExecutableEntryPickerModal.vue'
 import HubPluginCenterPanel from './components/HubPluginCenterPanel.vue'
+import RepoImportModal from './components/RepoImportModal.vue'
 import { askConfirm } from './composables/useConfirmDialog'
 import { useScratchpad } from './composables/useScratchpad'
 import { useToast } from './composables/useToast'
@@ -117,6 +118,7 @@ const trackedSessionIds = ref<string[]>([])
 const terminalDetached = ref(false)
 const dropImporting = ref(false)
 const showHubPluginCenter = ref(false)
+const showRepoImport = ref(false)
 
 const selectedScript = computed(
   () => filteredScripts.value.find((s) => s.id === selectedScriptId.value) ?? null
@@ -318,6 +320,16 @@ async function handleDroppedImport(sourcePath: string): Promise<void> {
   }
 }
 
+async function onRepoImported(script: ScriptItem): Promise<void> {
+  await refresh()
+  setNavFilter('all')
+  searchQuery.value = ''
+  resetListFilter()
+  const index = filteredScripts.value.findIndex((item) => item.id === script.id)
+  if (index >= 0) setListPage(Math.floor(index / listPageSize.value) + 1)
+  selectScript(script)
+}
+
 function handleCloseTerminal(sessionId: string): void {
   trackedSessionIds.value = trackedSessionIds.value.filter((id) => id !== sessionId)
   runner.clearLogs(sessionId)
@@ -461,6 +473,7 @@ onUnmounted(() => {
         @category="setCategoryFilter"
         @manage-categories="openCategoryManager"
         @import="importScript"
+        @import-from-repo="showRepoImport = true"
         @settings="openSettings"
         @dev-guide="openDevGuide"
         @execution-history="openExecutionHistory"
@@ -587,5 +600,10 @@ onUnmounted(() => {
     <PromptDialogHost />
     <ScratchpadPanel />
     <HubPluginCenterPanel :open="showHubPluginCenter" @close="showHubPluginCenter = false" />
+    <RepoImportModal
+      :open="showRepoImport"
+      @close="showRepoImport = false"
+      @imported="onRepoImported"
+    />
   </div>
 </template>

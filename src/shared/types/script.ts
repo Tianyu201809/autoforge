@@ -195,6 +195,14 @@ export interface AppConfig {
   window?: AppWindowConfig
   /** 小记模块 — 独立于环境 Profile 的快速填入信息 */
   scratchpad?: ScratchpadEntry[]
+  /** 应用内 LLM 转换引擎配置（密钥存于独立凭据存储，不在此处） */
+  llm?: {
+    profiles?: import('../llm-types').LlmProfile[]
+    /** 默认使用的配置 id */
+    activeProfileId?: string
+    /** 是否允许在转换工作区执行依赖安装与构建命令 */
+    allowBuild?: boolean
+  }
 }
 
 export interface SystemMemoryInfo {
