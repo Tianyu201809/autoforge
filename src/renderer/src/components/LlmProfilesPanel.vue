@@ -202,8 +202,10 @@ async function test(profileId: string): Promise<void> {
   }
 }
 
-async function toggleAllowBuild(): Promise<void> {
-  const next = !(state.value?.allowBuild ?? false)
+async function onAllowBuildChange(event: Event): Promise<void> {
+  const input = event.target as HTMLInputElement
+  const next = input.checked
+
   if (next) {
     const confirmed = await askConfirm({
       title: '允许执行构建命令',
@@ -212,9 +214,25 @@ async function toggleAllowBuild(): Promise<void> {
       confirmLabel: '我了解风险，开启',
       variant: 'danger'
     })
-    if (!confirmed) return
+    if (!confirmed) {
+      // 原生 checkbox 在点击时已切换视觉状态；取消后 allowBuild 未变化，
+      // Vue 不会重渲染，必须显式把 DOM 回滚，否则会停留在勾选态
+      input.checked = false
+      return
+    }
   }
-  state.value = await window.autoforge.llm.setAllowBuild(next)
+
+  try {
+    state.value = await window.autoforge.llm.setAllowBuild(next)
+    input.checked = state.value.allowBuild
+  } catch (error) {
+    input.checked = state.value?.allowBuild ?? false
+    pushToast({
+      type: 'error',
+      title: '保存失败',
+      message: error instanceof Error ? error.message : '无法更新构建授权'
+    })
+  }
 }
 
 onMounted(() => {
@@ -470,7 +488,7 @@ onMounted(() => {
           type="checkbox"
           class="mt-0.5 flex-shrink-0"
           :checked="state?.allowBuild ?? false"
-          @change="toggleAllowBuild"
+          @change="onAllowBuildChange"
         />
       </label>
 

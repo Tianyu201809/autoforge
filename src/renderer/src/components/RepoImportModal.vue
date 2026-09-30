@@ -504,7 +504,7 @@ onMounted(() => {
                   class="mt-0.5 flex-shrink-0"
                   :checked="allowBuildThisRun"
                   :disabled="converting"
-                  @change="allowBuildThisRun = !allowBuildThisRun"
+                  @change="allowBuildThisRun = ($event.target as HTMLInputElement).checked"
                 />
                 <span class="min-w-0">
                   <span class="block text-[12px] text-amber-600 font-medium">本次允许执行构建命令</span>
