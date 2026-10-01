@@ -10,6 +10,8 @@ import type {
   LlmProfileView
 } from '../../../shared/llm-types'
 import type { ScriptItem } from '../../../shared/types/script'
+import { canSendConversionMessage, workspaceDeleteConfirm } from '../lib/repo-conversion-chat'
+import { askConfirm } from './useConfirmDialog'
 import { useToast } from './useToast'
 
 /** 1 地址 → 2 拉取 → 3 转换 → 4 导入 */
@@ -77,12 +79,19 @@ export function useRepoImport() {
     () => llmProfiles.value.find((profile) => profile.id === selectedProfileId.value) ?? null
   )
 
+  const turns = computed(() => workspace.value?.turns ?? [])
+
+  const canSend = computed(() =>
+    canSendConversionMessage(turns.value, instruction.value, converting.value)
+  )
+
   const canConvert = computed(
     () =>
       Boolean(workspace.value) &&
       !converting.value &&
       Boolean(selectedProfileId.value) &&
-      Boolean(selectedProfile.value?.hasApiKey)
+      Boolean(selectedProfile.value?.hasApiKey) &&
+      canSend.value
   )
 
   const plannedBuildCommands = computed(() => conversionResult.value?.plan.buildCommands ?? [])
@@ -197,33 +206,55 @@ export function useRepoImport() {
   /** 使用应用内 LLM 引擎生成脚本包 */
   async function startLlmConversion(): Promise<void> {
     const current = workspace.value
-    if (!current || converting.value) return
+    if (!current || !canSendConversionMessage(current.turns, instruction.value, converting.value)) return
     if (!selectedProfileId.value) {
       error.value = '请先在设置 → 模型 中添加并选择一个模型配置'
       return
     }
+    const draft = instruction.value.trim()
+    const now = new Date().toISOString()
     converting.value = true
     error.value = null
     conversionLogs.value = []
     conversionResult.value = null
+    instruction.value = ''
+    workspace.value = {
+      ...current,
+      turns: [
+        ...current.turns,
+        { id: `local-user-${now}`, role: 'user', content: draft, status: 'complete', createdAt: now },
+        { id: `local-assistant-${now}`, role: 'assistant', content: '', status: 'running', createdAt: now }
+      ]
+    }
     try {
       const result = await window.autoforge.repo.convertWithLlm({
         taskId: current.taskId,
         profileId: selectedProfileId.value,
         allowBuild: allowBuildThisRun.value,
-        instruction: instruction.value.trim() || undefined
+        instruction: draft || undefined
       })
       conversionResult.value = result
-      await recheckPackageSilently()
       pushToast({
         type: 'success',
         title: '脚本包已生成',
         message: `共写入 ${result.writtenFiles} 个文件，可以导入了`
       })
     } catch (err) {
-      error.value = describeError(err)
+      const message = describeError(err)
+      if (!/已取消/.test(message)) error.value = message
     } finally {
       converting.value = false
+      await recheckPackageSilently()
+    }
+  }
+
+  async function cancelLlmConversion(): Promise<void> {
+    const current = workspace.value
+    if (!current) return
+    try {
+      await window.autoforge.repo.cancelLlm(current.taskId)
+    } catch (err) {
+      error.value = describeError(err)
     }
   }
 
@@ -281,13 +312,21 @@ export function useRepoImport() {
   }
 
   async function deleteWorkspace(taskId: string): Promise<void> {
+    const fromHistory = history.value.find((item) => item.taskId === taskId)
+    const current = workspace.value?.taskId === taskId ? workspace.value : null
+    const repoLabel =
+      fromHistory?.repo ??
+      (current ? `${current.profile.ref.owner}/${current.profile.ref.repo}` : taskId)
+    const workspacePath = fromHistory?.workspacePath ?? current?.workspacePath ?? ''
+    const confirmed = await askConfirm(workspaceDeleteConfirm(repoLabel, workspacePath))
+    if (!confirmed) return
     const ok = await window.autoforge.repo.deleteWorkspace(taskId)
     if (!ok) {
-      pushToast({ type: 'error', title: '删除失败', message: '工作区不存在或无法删除' })
+      pushToast({ type: 'error', title: '删除失败', message: '目录仍在，工作区已保留' })
       return
     }
     if (workspace.value?.taskId === taskId) reset()
-    pushToast({ type: 'success', title: '已删除', message: '转换工作区已清理' })
+    pushToast({ type: 'success', title: '已删除', message: '转换工作区和克隆目录已清理' })
     await loadHistory()
   }
 
@@ -304,9 +343,22 @@ export function useRepoImport() {
     conversionLogs.value = next.length > MAX_CONVERSION_LOG_LINES ? next.slice(-MAX_CONVERSION_LOG_LINES) : next
   })
 
+  const unsubscribeReasoning = window.autoforge.repo.onReasoning((payload) => {
+    const current = workspace.value
+    if (!current || payload.taskId !== current.taskId) return
+    const index = [...current.turns].reverse().findIndex((turn) => turn.role === 'assistant')
+    if (index < 0) return
+    const target = current.turns.length - 1 - index
+    const nextTurns = current.turns.map((turn, turnIndex) =>
+      turnIndex === target ? { ...turn, thinking: payload.thinking } : turn
+    )
+    workspace.value = { ...current, turns: nextTurns }
+  })
+
   onUnmounted(() => {
     unsubscribe()
     unsubscribeLog()
+    unsubscribeReasoning()
   })
 
   return {
@@ -335,6 +387,8 @@ export function useRepoImport() {
     converting,
     conversionLogs,
     conversionResult,
+    turns,
+    canSend,
     plannedBuildCommands,
     canConvert,
     reset,
@@ -345,6 +399,7 @@ export function useRepoImport() {
     recheckPackage,
     resumeWorkspace,
     startLlmConversion,
+    cancelLlmConversion,
     importPackage,
     openFolder,
     copyPrompt,

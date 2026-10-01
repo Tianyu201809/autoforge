@@ -51,6 +51,7 @@ const {
   converting,
   conversionLogs,
   conversionResult,
+  turns,
   plannedBuildCommands,
   canConvert,
   resetAll,
@@ -60,6 +61,7 @@ const {
   recheckPackage,
   resumeWorkspace,
   startLlmConversion,
+  cancelLlmConversion,
   importPackage,
   openFolder,
   copyPrompt,
@@ -100,7 +102,8 @@ const phaseLabel = computed(() => {
   return '处理中'
 })
 
-const isLlmBusy = computed(() => converting.value)
+const hasUserTurn = computed(() => turns.value.some((turn) => turn.role === 'user'))
+const sendLabel = computed(() => (hasUserTurn.value ? '发送' : '开始转换'))
 
 function formatBytes(bytes: number): string {
   if (bytes < 1024) return `${bytes} B`
@@ -482,14 +485,64 @@ onMounted(() => {
               </p>
             </div>
 
+            <div v-if="turns.length" class="space-y-2 max-h-56 overflow-y-auto">
+              <div
+                v-for="turn in turns"
+                :key="turn.id"
+                class="px-3 py-2 rounded-lg border sb-border-subtle space-y-1"
+              >
+                <p class="text-[11px] sb-text-faint">{{ turn.role === 'user' ? '你' : '助手' }}</p>
+                <p class="text-[12px] sb-text-primary whitespace-pre-wrap break-all">
+                  {{
+                    turn.content ||
+                    (turn.status === 'running' ? '正在转换…' : turn.status === 'cancelled' ? '已取消' : '')
+                  }}
+                </p>
+                <p v-if="turn.status === 'error' && turn.error" class="text-[11px] text-rose-500">
+                  {{ turn.error }}
+                </p>
+                <details v-if="turn.thinking">
+                  <summary class="text-[11px] sb-text-muted cursor-pointer">思考过程</summary>
+                  <pre
+                    class="mt-1 px-2 py-1.5 rounded-md sb-bg-inset text-[11px] sb-text-secondary whitespace-pre-wrap break-all font-mono max-h-40 overflow-y-auto"
+                  >{{ turn.thinking }}</pre>
+                </details>
+              </div>
+            </div>
+
+            <div v-if="converting || conversionLogs.length" class="space-y-2">
+              <div class="flex items-center gap-2.5">
+                <Loader2
+                  v-if="converting"
+                  class="w-3.5 h-3.5 text-[var(--sb-accent-solid)] animate-spin"
+                  :stroke-width="1.5"
+                />
+                <Terminal v-else class="w-3.5 h-3.5 sb-text-faint" :stroke-width="1.5" />
+                <span class="text-[12px] sb-text-primary">
+                  {{ converting ? (progress?.message ?? '正在转换') : '转换日志' }}
+                </span>
+                <span class="ml-auto text-[11px] sb-text-faint">{{ phaseLabel }}</span>
+              </div>
+              <div
+                ref="logContainer"
+                class="max-h-44 overflow-y-auto px-3 py-2 rounded-lg sb-bg-log border sb-border-subtle font-mono text-[11px] leading-relaxed space-y-0.5"
+              >
+                <p v-for="(line, index) in conversionLogs" :key="index" :class="logTone(line.level)">
+                  {{ line.message }}
+                </p>
+              </div>
+            </div>
+
             <div class="space-y-2">
-              <label class="text-[11px] sb-text-faint" for="llm-instruction">补充要求（可选）</label>
+              <label class="text-[11px] sb-text-faint" for="llm-instruction">
+                {{ hasUserTurn ? '新的要求' : '要求（可留空）' }}
+              </label>
               <textarea
                 id="llm-instruction"
                 v-model="instruction"
                 rows="2"
                 class="w-full px-2.5 py-2 text-[12px] sb-input border rounded-lg outline-none resize-none"
-                placeholder="例如：只保留导出 CSV 的功能；把接口地址做成环境变量"
+                :placeholder="hasUserTurn ? '写下要改的地方，会按整段对话重新生成脚本包' : '例如：只保留导出 CSV 的功能；把接口地址做成环境变量'"
                 :disabled="converting"
               />
             </div>
@@ -520,29 +573,6 @@ onMounted(() => {
                 构建授权未开启。若仓库需要构建，模型给出的构建命令会被跳过，产物可能无法直接运行。
                 可在「设置 → 模型 → 构建授权」中开启。
               </p>
-            </div>
-
-            <div v-if="converting || conversionLogs.length" class="space-y-2">
-              <div class="flex items-center gap-2.5">
-                <Loader2
-                  v-if="converting"
-                  class="w-3.5 h-3.5 text-[var(--sb-accent-solid)] animate-spin"
-                  :stroke-width="1.5"
-                />
-                <Terminal v-else class="w-3.5 h-3.5 sb-text-faint" :stroke-width="1.5" />
-                <span class="text-[12px] sb-text-primary">
-                  {{ converting ? (progress?.message ?? '正在转换') : '转换日志' }}
-                </span>
-                <span class="ml-auto text-[11px] sb-text-faint">{{ phaseLabel }}</span>
-              </div>
-              <div
-                ref="logContainer"
-                class="max-h-44 overflow-y-auto px-3 py-2 rounded-lg sb-bg-log border sb-border-subtle font-mono text-[11px] leading-relaxed space-y-0.5"
-              >
-                <p v-for="(line, index) in conversionLogs" :key="index" :class="logTone(line.level)">
-                  {{ line.message }}
-                </p>
-              </div>
             </div>
 
             <div
@@ -612,29 +642,46 @@ onMounted(() => {
             拉取仓库
           </button>
         </template>
-        <template v-else-if="step === 3">
-          <template v-if="engine === 'agent'">
-            <button
-              type="button"
-              class="flex items-center gap-1.5 h-8 px-3 rounded-lg border sb-border text-[12px] sb-text-secondary hover:sb-text-primary transition-colors"
-              @click="recheckPackage"
-            >
-              <RefreshCw class="w-3.5 h-3.5" :stroke-width="1.5" />
-              重新检测
-            </button>
-          </template>
-          <template v-else>
-            <button
-              type="button"
-              class="flex items-center gap-1.5 h-8 px-4 rounded-lg sb-btn-accent text-[12px] font-medium transition-colors disabled:opacity-40"
-              :disabled="!canConvert"
-              @click="startLlmConversion"
-            >
-              <Loader2 v-if="isLlmBusy" class="w-3.5 h-3.5 animate-spin" :stroke-width="1.5" />
-              <Play v-else class="w-3.5 h-3.5" :stroke-width="1.5" />
-              {{ conversionResult ? '重新转换' : '开始转换' }}
-            </button>
-          </template>
+        <template v-else-if="workspace && engine === 'agent' && step === 3">
+          <button
+            type="button"
+            class="flex items-center gap-1.5 h-8 px-3 rounded-lg border sb-border text-[12px] sb-text-secondary hover:sb-text-primary transition-colors"
+            @click="recheckPackage"
+          >
+            <RefreshCw class="w-3.5 h-3.5" :stroke-width="1.5" />
+            重新检测
+          </button>
+        </template>
+        <template v-else-if="workspace && engine === 'llm'">
+          <button
+            v-if="converting"
+            type="button"
+            class="flex items-center gap-1.5 h-8 px-4 rounded-lg border sb-border text-[12px] sb-text-secondary hover:sb-text-primary transition-colors"
+            @click="cancelLlmConversion"
+          >
+            取消
+          </button>
+          <button
+            v-else
+            type="button"
+            class="flex items-center gap-1.5 h-8 px-4 rounded-lg sb-btn-accent text-[12px] font-medium transition-colors disabled:opacity-40"
+            :disabled="!canConvert"
+            @click="startLlmConversion"
+          >
+            <Play class="w-3.5 h-3.5" :stroke-width="1.5" />
+            {{ sendLabel }}
+          </button>
+          <button
+            v-if="step === 4 && !converting"
+            type="button"
+            class="flex items-center gap-1.5 h-8 px-4 rounded-lg sb-btn-accent text-[12px] font-medium transition-colors disabled:opacity-40"
+            :disabled="importing"
+            @click="onImport"
+          >
+            <Loader2 v-if="importing" class="w-3.5 h-3.5 animate-spin" :stroke-width="1.5" />
+            <FileJson v-else class="w-3.5 h-3.5" :stroke-width="1.5" />
+            导入并试运行
+          </button>
         </template>
         <template v-else-if="step === 4">
           <button

@@ -652,8 +652,9 @@ export function registerIpcHandlers(
           createdAt: now
         }
       ]
-      const assistant = turns[turns.length - 1]
-      saveWorkspaceConversation(taskId, { turns })
+      const conversationTurns = turns
+      const assistant = conversationTurns[conversationTurns.length - 1]
+      saveWorkspaceConversation(taskId, { turns: conversationTurns })
 
       const result = await getLlmConverter().convert({
         taskId,
@@ -667,7 +668,7 @@ export function registerIpcHandlers(
         signal,
         onReasoning: (thinking) => {
           assistant.thinking = thinking
-          saveWorkspaceConversation(taskId, { turns })
+          saveWorkspaceConversation(taskId, { turns: conversationTurns })
           if (!event.sender.isDestroyed()) {
             event.sender.send(IPC.EVENT_REPO_CONVERT_REASONING, { taskId, thinking })
           }
@@ -691,10 +692,12 @@ export function registerIpcHandlers(
         warnings: result.plan.warnings,
         notes: result.plan.notes
       })
-      saveWorkspaceConversation(taskId, { turns })
+      saveWorkspaceConversation(taskId, { turns: conversationTurns })
       return result
     } catch (error) {
-      const assistant = turns ? [...turns].reverse().find((turn) => turn.role === 'assistant' && turn.status === 'running') : undefined
+      const assistant = turns
+        ? [...turns].reverse().find((turn) => turn.role === 'assistant' && turn.status === 'running')
+        : undefined
       const cancelled = signal.aborted || (error instanceof LlmClientError && error.code === 'cancelled')
       if (assistant && turns) {
         assistant.status = cancelled ? 'cancelled' : 'error'
