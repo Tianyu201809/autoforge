@@ -1,5 +1,5 @@
-import { existsSync, mkdirSync, readdirSync, readFileSync, rmSync, statSync, writeFileSync } from 'node:fs'
-import { join } from 'node:path'
+import { existsSync, mkdirSync, readdirSync, readFileSync, renameSync, rmSync, statSync, writeFileSync } from 'node:fs'
+import { dirname, join } from 'node:path'
 import { UTF8 } from '../../shared/encoding'
 import {
   REPO_HANDOFF_FILENAME,
@@ -265,15 +265,39 @@ function readWorkspaceCreatedAt(path: string): string {
   }
 }
 
+const PACKAGE_PREV_DIR_NAME = 'package-prev'
+
+/** 转换成功后才把暂存目录换成正式产物。中途失败时把旧产物改回去。 */
+export function promoteStagedPackage(stagingDir: string, packageDir: string): void {
+  if (!existsSync(stagingDir)) throw new Error('转换暂存目录不存在')
+  const previous = join(dirname(packageDir), PACKAGE_PREV_DIR_NAME)
+  if (existsSync(packageDir)) {
+    if (existsSync(previous)) rmSync(previous, { recursive: true, force: true })
+    renameSync(packageDir, previous)
+  }
+  try {
+    renameSync(stagingDir, packageDir)
+  } catch (error) {
+    if (existsSync(previous) && !existsSync(packageDir)) renameSync(previous, packageDir)
+    throw error
+  }
+  if (existsSync(previous)) rmSync(previous, { recursive: true, force: true })
+}
+
+/** 删掉目录。路径本来就不在，或删完目录还在，都算失败。 */
+export function removeDirectoryCommitted(targetPath: string): boolean {
+  if (!existsSync(targetPath)) return false
+  try {
+    rmSync(targetPath, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 })
+  } catch {
+    // 重试后仍以目录是否消失为准
+  }
+  return !existsSync(targetPath)
+}
+
 export function deleteRepoWorkspace(taskId: string): boolean {
   const paths = getRepoWorkspacePaths(taskId)
-  if (!existsSync(paths.workspacePath)) return false
-  try {
-    rmSync(paths.workspacePath, { recursive: true, force: true })
-    return true
-  } catch {
-    return false
-  }
+  return removeDirectoryCommitted(paths.workspacePath)
 }
 
 export function toWorkspaceInfo(
