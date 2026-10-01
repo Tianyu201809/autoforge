@@ -2,7 +2,9 @@ import { existsSync, mkdirSync, readdirSync, rmSync, statSync, writeFileSync, co
 import { basename, dirname, join, posix, relative, resolve, sep } from 'node:path'
 import { UTF8 } from '../../shared/encoding'
 import { MANIFEST_FILENAME, validateManifest, type ScriptManifest } from '../../shared/script-contract'
-import type { RepoProfile } from '../../shared/repo-types'
+import type { ConversionTurn } from '../../shared/conversion-conversation'
+import { formatConversionHistory } from '../../shared/conversion-conversation'
+import { REPO_PACKAGE_NEXT_DIR_NAME, type RepoProfile } from '../../shared/repo-types'
 import type {
   ConversionPlan,
   ConversionPlanCopy,
@@ -25,6 +27,7 @@ import {
   MAX_PLAN_TOTAL_BYTES
 } from '../../shared/llm-types'
 import { buildRepoDigest } from './repo-digest'
+import { promoteStagedPackage } from './repo-workspace'
 import { assertSafeBuildCommands, runBuildCommands } from './repo-build-runner'
 import type { createLlmClient } from './llm-client'
 
@@ -458,6 +461,11 @@ export interface ConvertWithLlmInput {
   /** 用户已授权执行构建命令（还需全局 allowBuild 开启） */
   allowBuild: boolean
   instruction?: string
+  /** 本轮之前已完成的对话。思考过程不会进入提示词。 */
+  history?: ConversionTurn[]
+  signal?: AbortSignal
+  /** 截至目前的完整思考文本，含各次模型调用的标签 */
+  onReasoning?: (thinking: string) => void
   onProgress?: (progress: LlmConversionProgress) => void
   onLog?: (line: LlmConversionLogLine) => void
 }
@@ -513,10 +521,20 @@ export function createLlmConverter(deps: LlmConverterDeps): LlmConverter {
       throw new ConversionPlanError(`配置「${profile.name}」还没有填写 API Key`)
     }
 
+    const reasoningSegments: Array<{ label: string; text: string }> = []
+    const publishReasoning = (label: string, text: string): void => {
+      const existing = reasoningSegments.find((item) => item.label === label)
+      if (existing) existing.text = text
+      else reasoningSegments.push({ label, text })
+      input.onReasoning?.(reasoningSegments.map((item) => `${item.label}\n${item.text}`).join('\n\n'))
+    }
+    const historyText = formatConversionHistory(input.history ?? [])
+    const extraRequirement = input.instruction?.trim() ? `额外要求：${input.instruction.trim()}` : ''
+
     const chat = async (
       messages: Array<{ role: 'system' | 'user'; content: string }>,
       json: boolean,
-      context: { phase: LlmConversionPhase; label: string }
+      context: { phase: LlmConversionPhase; label: string; reasoningLabel: string }
     ): Promise<Awaited<ReturnType<typeof deps.client.chatStream>>> =>
       deps.client.chatStream({
         baseUrl: profile.baseUrl,
@@ -529,7 +547,9 @@ export function createLlmConverter(deps: LlmConverterDeps): LlmConverter {
         idleTimeoutSeconds: profile.timeoutSeconds,
         extraHeaders: profile.extraHeaders,
         json,
-        onDelta: createDeltaReporter(report, context.phase, context.label)
+        signal: input.signal,
+        onDelta: createDeltaReporter(report, context.phase, context.label),
+        onReasoning: (thinking) => publishReasoning(context.reasoningLabel, thinking)
       })
 
     // ---------- 阶段一：计划骨架 ----------
@@ -554,7 +574,8 @@ export function createLlmConverter(deps: LlmConverterDeps): LlmConverter {
             '请为下面的仓库设计 Autoforge 脚本包的转换计划。**只输出计划骨架，不要输出任何文件正文。**',
             '',
             `仓库目录（只读参考）：${repoDir}`,
-            input.instruction?.trim() ? `\n额外要求：${input.instruction.trim()}` : '',
+            historyText,
+            extraRequirement,
             '',
             fullDigest
           ]
@@ -563,7 +584,7 @@ export function createLlmConverter(deps: LlmConverterDeps): LlmConverter {
         }
       ],
       true,
-      { phase: 'generating', label: '正在生成转换计划' }
+      { phase: 'generating', label: '正在生成转换计划', reasoningLabel: '转换计划' }
     )
     assertNotTruncated(skeletonResult.finishReason, '生成转换计划')
     log(
@@ -635,7 +656,8 @@ export function createLlmConverter(deps: LlmConverterDeps): LlmConverter {
               planContext,
               `现在输出文件：${spec.path}`,
               `用途：${spec.purpose}`,
-              input.instruction?.trim() ? `额外要求：${input.instruction.trim()}` : '',
+              historyText,
+              extraRequirement,
               '',
               compactDigest
             ]
@@ -644,7 +666,7 @@ export function createLlmConverter(deps: LlmConverterDeps): LlmConverter {
           }
         ],
         false,
-        { phase: 'generating', label }
+        { phase: 'generating', label, reasoningLabel: `文件 ${spec.path}` }
       )
       assertNotTruncated(result.finishReason, `生成 ${spec.path}`)
       const content = parseFileContent(result.content, spec.path)
@@ -663,33 +685,43 @@ export function createLlmConverter(deps: LlmConverterDeps): LlmConverter {
     }))
     const plan = parseConversionPlan(JSON.stringify({ ...skeleton, files, copies }))
 
-    // ---------- 写盘 ----------
+    // ---------- 写盘：先写入同级暂存目录，成功后再替换正式产物 ----------
     report({ phase: 'writing', message: '正在写入脚本包' })
-    if (existsSync(packageDir)) rmSync(packageDir, { recursive: true, force: true })
-    mkdirSync(packageDir, { recursive: true })
-
+    const stagingDir = join(dirname(packageDir), REPO_PACKAGE_NEXT_DIR_NAME)
+    let promoted = false
     let writtenFiles = 0
-    for (const file of plan.files) {
-      const target = resolvePackageFilePath(packageDir, file.path)
-      mkdirSync(dirname(target), { recursive: true })
-      writeFileSync(target, file.content, UTF8)
+    try {
+      if (existsSync(stagingDir)) rmSync(stagingDir, { recursive: true, force: true })
+      mkdirSync(stagingDir, { recursive: true })
+
+      for (const file of plan.files) {
+        const target = resolvePackageFilePath(stagingDir, file.path)
+        mkdirSync(dirname(target), { recursive: true })
+        writeFileSync(target, file.content, UTF8)
+        writtenFiles += 1
+      }
+
+      const copyStats: CopyStats = { files: 0, bytes: 0 }
+      for (const copy of plan.copies) {
+        copyFromRepo(repoDir, stagingDir, copy, copyStats)
+        log('INFO', `复制 ${copy.from} → ${copy.to}`)
+      }
+      writtenFiles += copyStats.files
+
+      const manifest = buildManifestFromPlan(plan)
+      writeFileSync(join(stagingDir, MANIFEST_FILENAME), JSON.stringify(manifest, null, 2), UTF8)
       writtenFiles += 1
-    }
 
-    const copyStats: CopyStats = { files: 0, bytes: 0 }
-    for (const copy of plan.copies) {
-      copyFromRepo(repoDir, packageDir, copy, copyStats)
-      log('INFO', `复制 ${copy.from} → ${copy.to}`)
-    }
-    writtenFiles += copyStats.files
+      const entryPath = resolvePackageFilePath(stagingDir, plan.entry)
+      if (!existsSync(entryPath)) {
+        throw new ConversionPlanError(`入口文件未生成：${plan.entry}（请重新转换）`)
+      }
 
-    const manifest = buildManifestFromPlan(plan)
-    writeFileSync(join(packageDir, MANIFEST_FILENAME), JSON.stringify(manifest, null, 2), UTF8)
-    writtenFiles += 1
-
-    const entryPath = resolvePackageFilePath(packageDir, plan.entry)
-    if (!existsSync(entryPath)) {
-      throw new ConversionPlanError(`入口文件未生成：${plan.entry}（请重新转换）`)
+      promoteStagedPackage(stagingDir, packageDir)
+      promoted = true
+    } catch (error) {
+      if (!promoted && existsSync(stagingDir)) rmSync(stagingDir, { recursive: true, force: true })
+      throw error
     }
 
     log('INFO', `脚本包写入完成：${writtenFiles} 个文件`)

@@ -548,3 +548,46 @@ test('convert 在单个文件内容被截断时指出具体文件', async () => 
     rmSync(base, { recursive: true, force: true })
   }
 })
+
+test('失败的转换保留已有 package，并在提示词中带上历史摘要', async () => {
+  const base = mkdtempSync(join(tmpdir(), 'autoforge-convert-keep-'))
+  const repoDir = join(base, 'repo')
+  const packageDir = join(base, 'package')
+  try {
+    mkdirSync(repoDir, { recursive: true })
+    mkdirSync(packageDir, { recursive: true })
+    writeFileSync(join(packageDir, 'old.txt'), 'keep')
+    const seen: string[] = []
+    const converter = makeConverter((input) => {
+      seen.push(input.lastMessage)
+      throw new Error('boom')
+    })
+    await assert.rejects(() =>
+      converter.convert({
+        taskId: 't-keep',
+        repoDir,
+        packageDir,
+        repoProfile: REPO_PROFILE,
+        allowBuild: false,
+        instruction: '改成只导出 CSV',
+        history: [
+          {
+            id: 'a',
+            role: 'assistant',
+            content: '做成 CLI 包装',
+            thinking: '不要出现的推理',
+            status: 'complete',
+            createdAt: 't'
+          }
+        ]
+      })
+    )
+    assert.equal(readFileSync(join(packageDir, 'old.txt'), 'utf8'), 'keep')
+    assert.equal(existsSync(join(base, 'package-next')), false)
+    assert.match(seen[0] ?? '', /做成 CLI 包装/)
+    assert.match(seen[0] ?? '', /改成只导出 CSV/)
+    assert.doesNotMatch(seen[0] ?? '', /不要出现的推理/)
+  } finally {
+    rmSync(base, { recursive: true, force: true })
+  }
+})

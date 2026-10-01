@@ -51,6 +51,18 @@ export function normalizeInterruptedConversation(
   }
 }
 
+/** 送给模型的先前对话。只有用户原话和助手摘要，跳过思考过程和仍在进行的轮次。 */
+export function formatConversionHistory(turns: ConversionTurn[]): string {
+  const lines: string[] = []
+  for (const turn of turns) {
+    if (turn.status === 'running') continue
+    if (turn.role === 'user') lines.push(`用户：${turn.content}`)
+    else lines.push(`助手：${turn.content}`)
+  }
+  if (lines.length === 0) return ''
+  return ['先前对话：', ...lines].join('\n')
+}
+
 /** 写回对话、也送给模型的结果摘要。只含结论、文件和告警，不含思考过程。 */
 export function summarizeAssistantTurn(input: {
   summary: string

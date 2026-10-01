@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict'
 import { test } from 'node:test'
 import {
+  formatConversionHistory,
   normalizeInterruptedConversation,
   readConversionConversation,
   summarizeAssistantTurn
@@ -32,4 +33,21 @@ test('助手摘要只包含结果，不包含思考', () => {
   assert.match(text, /index\.mjs/)
   assert.match(text, /需要构建/)
   assert.doesNotMatch(text, /思考/)
+})
+
+test('历史只保留用户原话和助手摘要', () => {
+  const text = formatConversionHistory([
+    { id: 'u', role: 'user', content: '只要导出 CSV', status: 'complete', createdAt: 't' },
+    {
+      id: 'a',
+      role: 'assistant',
+      content: '做成 CSV 导出',
+      thinking: '内部推理不该出现',
+      status: 'complete',
+      createdAt: 't'
+    }
+  ])
+  assert.match(text, /只要导出 CSV/)
+  assert.match(text, /做成 CSV 导出/)
+  assert.doesNotMatch(text, /内部推理不该出现/)
 })
