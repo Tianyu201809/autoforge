@@ -1,3 +1,5 @@
+import type { ConversionTurn } from './conversion-conversation'
+
 /**
  * 仓库转脚本（Repo → Autoforge Script）共享类型。
  *
@@ -136,6 +138,8 @@ export interface RepoWorkspaceInfo {
   handoffPath: string
   /** 产物目录中是否已存在可导入的脚本包 */
   packageReady: boolean
+  /** 导入前的多轮转换对话；思考过程只在助手轮次上 */
+  turns: ConversionTurn[]
   createdAt: string
 }
 
@@ -152,6 +156,8 @@ export interface RepoWorkspaceSummary {
 export const REPO_WORKSPACE_DIR_NAME = 'repo-workspaces'
 export const REPO_META_DIR_NAME = '.autoforge'
 export const REPO_PACKAGE_DIR_NAME = 'package'
+export const REPO_PACKAGE_NEXT_DIR_NAME = 'package-next'
+export const REPO_CONVERSATION_FILENAME = 'conversation.json'
 export const REPO_SOURCE_DIR_NAME = 'repo'
 export const REPO_HANDOFF_FILENAME = 'HANDOFF.md'
 export const REPO_PROFILE_FILENAME = 'profile.json'

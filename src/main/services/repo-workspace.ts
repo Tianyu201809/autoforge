@@ -290,6 +290,7 @@ export function toWorkspaceInfo(
     handoffPrompt,
     handoffPath: paths.handoffPath,
     packageReady: detectPackageRoot(paths.taskId) !== null,
+    turns: [],
     createdAt: new Date().toISOString()
   }
 }
