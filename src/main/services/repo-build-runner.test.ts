@@ -9,7 +9,8 @@ import {
   BuildCommandError,
   detectBuildPlan,
   detectExistingBuildOutput,
-  MAX_BUILD_COMMANDS
+  MAX_BUILD_COMMANDS,
+  runBuildCommands
 } from './repo-build-runner'
 
 test('允许白名单内的构建命令', () => {
@@ -111,6 +112,27 @@ test('detectExistingBuildOutput 识别已提交的构建产物', () => {
   const root = makeRepo({ 'dist/index.js': 'x', 'README.md': '# demo' })
   try {
     assert.deepEqual(detectExistingBuildOutput(root), ['dist'])
+  } finally {
+    rmSync(root, { recursive: true, force: true })
+  }
+})
+
+test('取消信号会停掉正在执行的构建命令', { timeout: 10_000 }, async () => {
+  const root = mkdtempSync(join(tmpdir(), 'autoforge-build-cancel-'))
+  writeFileSync(join(root, 'stay.mjs'), 'setInterval(() => {}, 1000)\n')
+  const controller = new AbortController()
+  try {
+    const pending = runBuildCommands({
+      rootDir: root,
+      commands: ['node stay.mjs'],
+      onLog: () => {},
+      signal: controller.signal
+    })
+    controller.abort()
+    const result = await pending
+    if (result.ok) throw new Error('进程没有被取消')
+    assert.equal(result.ok, false)
+    assert.match(result.error ?? '', /已取消/)
   } finally {
     rmSync(root, { recursive: true, force: true })
   }

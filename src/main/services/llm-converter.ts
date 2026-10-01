@@ -616,7 +616,8 @@ export function createLlmConverter(deps: LlmConverterDeps): LlmConverter {
         const buildResult = await runBuildCommands({
           rootDir: repoDir,
           commands: buildCommands,
-          onLog: (level, message) => log(level, message)
+          onLog: (level, message) => log(level, message),
+          signal: input.signal
         })
         if (!buildResult.ok) {
           throw new ConversionPlanError(

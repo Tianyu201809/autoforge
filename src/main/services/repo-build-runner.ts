@@ -190,6 +190,8 @@ export interface RunBuildCommandsInput {
   commands: string[]
   onLog: (level: 'INFO' | 'WARN' | 'ERROR', message: string) => void
   timeoutMs?: number
+  /** 中止后结束整棵构建进程，并返回「已取消」 */
+  signal?: AbortSignal
 }
 
 export interface RunBuildCommandsResult {
@@ -203,15 +205,24 @@ function runSingleCommand(
   command: string,
   cwd: string,
   onLog: RunBuildCommandsInput['onLog'],
-  timeoutMs: number
+  timeoutMs: number,
+  signal?: AbortSignal
 ): Promise<{ ok: boolean; error?: string }> {
+  if (signal?.aborted) return Promise.resolve({ ok: false, error: '已取消' })
   return new Promise((resolve) => {
     let settled = false
     let timedOut = false
+    let cancelled = false
+    let timer: ReturnType<typeof setTimeout>
+    const onAbort = (): void => {
+      cancelled = true
+      killTree(child)
+    }
     const finish = (ok: boolean, error?: string): void => {
       if (settled) return
       settled = true
       clearTimeout(timer)
+      signal?.removeEventListener('abort', onAbort)
       resolve({ ok, error })
     }
 
@@ -230,7 +241,10 @@ function runSingleCommand(
             env: utf8ChildEnv({ CI: '1', NPM_CONFIG_FUND: 'false', NPM_CONFIG_AUDIT: 'false' })
           })
 
-    const timer = setTimeout(() => {
+    signal?.addEventListener('abort', onAbort)
+    if (signal?.aborted) onAbort()
+
+    timer = setTimeout(() => {
       timedOut = true
       killTree(child)
     }, timeoutMs)
@@ -239,8 +253,12 @@ function runSingleCommand(
     child.stdout?.on('data', splitter)
     child.stderr?.on('data', splitter)
 
-    child.on('error', (error) => finish(false, error.message))
+    child.on('error', (error) => finish(false, cancelled ? '已取消' : error.message))
     child.on('close', (code) => {
+      if (cancelled) {
+        finish(false, '已取消')
+        return
+      }
       if (timedOut) {
         finish(false, `执行超时（${Math.round(timeoutMs / 1000)} 秒）`)
         return
@@ -260,8 +278,11 @@ export async function runBuildCommands(input: RunBuildCommandsInput): Promise<Ru
   const executed: string[] = []
 
   for (const command of input.commands) {
+    if (input.signal?.aborted) {
+      return { ok: false, executed, failedCommand: command, error: '已取消' }
+    }
     input.onLog('INFO', `$ ${command}`)
-    const result = await runSingleCommand(command, input.rootDir, input.onLog, timeoutMs)
+    const result = await runSingleCommand(command, input.rootDir, input.onLog, timeoutMs, input.signal)
     if (!result.ok) {
       input.onLog('ERROR', `命令失败：${command}（${result.error ?? '未知原因'}）`)
       return { ok: false, executed, failedCommand: command, error: result.error }
