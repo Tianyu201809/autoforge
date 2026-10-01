@@ -2,8 +2,15 @@ import { existsSync, mkdirSync, readdirSync, readFileSync, renameSync, rmSync, s
 import { dirname, join } from 'node:path'
 import { UTF8 } from '../../shared/encoding'
 import {
+  normalizeInterruptedConversation,
+  readConversionConversation,
+  type ConversionConversation
+} from '../../shared/conversion-conversation'
+import {
+  REPO_CONVERSATION_FILENAME,
   REPO_HANDOFF_FILENAME,
   REPO_META_DIR_NAME,
+  REPO_PACKAGE_NEXT_DIR_NAME,
   REPO_PACKAGE_RELATIVE_PATH,
   REPO_PROFILE_FILENAME,
   REPO_SOURCE_DIR_NAME,
@@ -24,6 +31,8 @@ export interface RepoWorkspacePaths {
   packageDir: string
   profilePath: string
   handoffPath: string
+  conversationPath: string
+  packageNextDir: string
 }
 
 export function getRepoWorkspacesRoot(): string {
@@ -50,7 +59,9 @@ export function getRepoWorkspacePaths(taskId: string): RepoWorkspacePaths {
     metaDir,
     packageDir: join(workspacePath, REPO_PACKAGE_RELATIVE_PATH),
     profilePath: join(metaDir, REPO_PROFILE_FILENAME),
-    handoffPath: join(metaDir, REPO_HANDOFF_FILENAME)
+    handoffPath: join(metaDir, REPO_HANDOFF_FILENAME),
+    conversationPath: join(metaDir, REPO_CONVERSATION_FILENAME),
+    packageNextDir: join(metaDir, REPO_PACKAGE_NEXT_DIR_NAME)
   }
 }
 
@@ -300,6 +311,52 @@ export function deleteRepoWorkspace(taskId: string): boolean {
   return removeDirectoryCommitted(paths.workspacePath)
 }
 
+export function conversationFilePath(metaDir: string): string {
+  return join(metaDir, REPO_CONVERSATION_FILENAME)
+}
+
+export function saveConversationFile(metaDir: string, conversation: ConversionConversation): void {
+  mkdirSync(metaDir, { recursive: true })
+  writeFileSync(conversationFilePath(metaDir), JSON.stringify(conversation, null, 2), UTF8)
+}
+
+/** 读对话。上次中断的助手轮次改成失败并写回，同时丢掉没替换成功的暂存目录。 */
+export function loadConversationFile(metaDir: string): ConversionConversation {
+  const path = conversationFilePath(metaDir)
+  let raw = ''
+  if (existsSync(path)) {
+    try {
+      raw = readFileSync(path, UTF8)
+    } catch {
+      raw = ''
+    }
+  }
+  const parsed = readConversionConversation(raw)
+  const normalized = normalizeInterruptedConversation(parsed)
+  const interrupted = normalized.turns.some(
+    (turn, index) => turn.status !== parsed.turns[index]?.status || turn.error !== parsed.turns[index]?.error
+  )
+  if (interrupted) {
+    saveConversationFile(metaDir, normalized)
+    const staging = join(metaDir, REPO_PACKAGE_NEXT_DIR_NAME)
+    if (existsSync(staging)) rmSync(staging, { recursive: true, force: true })
+  }
+  return normalized
+}
+
+export function loadWorkspaceConversation(taskId: string): ConversionConversation {
+  return loadConversationFile(getRepoWorkspacePaths(taskId).metaDir)
+}
+
+export function saveWorkspaceConversation(taskId: string, conversation: ConversionConversation): void {
+  saveConversationFile(getRepoWorkspacePaths(taskId).metaDir, conversation)
+}
+
+export function discardStagedPackage(taskId: string): void {
+  const staging = getRepoWorkspacePaths(taskId).packageNextDir
+  if (existsSync(staging)) rmSync(staging, { recursive: true, force: true })
+}
+
 export function toWorkspaceInfo(
   paths: RepoWorkspacePaths,
   profile: RepoProfile,
@@ -314,7 +371,7 @@ export function toWorkspaceInfo(
     handoffPrompt,
     handoffPath: paths.handoffPath,
     packageReady: detectPackageRoot(paths.taskId) !== null,
-    turns: [],
+    turns: loadWorkspaceConversation(paths.taskId).turns,
     createdAt: new Date().toISOString()
   }
 }

@@ -232,9 +232,13 @@ export interface AutoforgeApi {
     convertWithLlm: (
       request: import('../../shared/llm-types').LlmConvertRequest
     ) => Promise<import('../../shared/llm-types').LlmConversionResult>
+    cancelLlm: (taskId: string) => Promise<boolean>
     onProgress: (callback: (progress: RepoConvertProgress) => void) => () => void
     onConvertLog: (
       callback: (line: import('../../shared/llm-types').LlmConversionLogLine) => void
+    ) => () => void
+    onReasoning: (
+      callback: (payload: import('../../shared/llm-types').LlmConversionReasoning) => void
     ) => () => void
   }
   llm: {

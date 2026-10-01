@@ -46,6 +46,7 @@ import type {
 import type {
   LlmConversionLogLine,
   LlmConversionProgress,
+  LlmConversionReasoning,
   LlmConversionResult,
   LlmConvertRequest,
   LlmProfileListResult,
@@ -318,6 +319,7 @@ const autoforge = {
       ipcRenderer.invoke(IPC.REPO_DELETE_WORKSPACE, taskId),
     convertWithLlm: (request: LlmConvertRequest): Promise<LlmConversionResult> =>
       ipcRenderer.invoke(IPC.REPO_CONVERT_WITH_LLM, request),
+    cancelLlm: (taskId: string): Promise<boolean> => ipcRenderer.invoke(IPC.REPO_CANCEL_LLM, taskId),
     onProgress: (callback: (progress: RepoConvertProgress) => void): (() => void) => {
       const handler = (_event: IpcRendererEvent, progress: RepoConvertProgress): void => callback(progress)
       ipcRenderer.on(IPC.EVENT_REPO_CONVERT_PROGRESS, handler)
@@ -327,6 +329,11 @@ const autoforge = {
       const handler = (_event: IpcRendererEvent, line: LlmConversionLogLine): void => callback(line)
       ipcRenderer.on(IPC.EVENT_REPO_CONVERT_LOG, handler)
       return () => ipcRenderer.removeListener(IPC.EVENT_REPO_CONVERT_LOG, handler)
+    },
+    onReasoning: (callback: (payload: LlmConversionReasoning) => void): (() => void) => {
+      const handler = (_event: IpcRendererEvent, payload: LlmConversionReasoning): void => callback(payload)
+      ipcRenderer.on(IPC.EVENT_REPO_CONVERT_REASONING, handler)
+      return () => ipcRenderer.removeListener(IPC.EVENT_REPO_CONVERT_REASONING, handler)
     }
   },
   llm: {

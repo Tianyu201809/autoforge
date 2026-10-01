@@ -3,7 +3,7 @@ import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { test } from 'node:test'
-import { promoteStagedPackage, removeDirectoryCommitted } from './repo-workspace'
+import { promoteStagedPackage, removeDirectoryCommitted, loadConversationFile, saveConversationFile } from './repo-workspace'
 
 test('成功时用暂存目录替换旧产物，并留下新内容', () => {
   const root = mkdtempSync(join(tmpdir(), 'autoforge-stage-'))
@@ -20,6 +20,24 @@ test('成功时用暂存目录替换旧产物，并留下新内容', () => {
     assert.equal(existsSync(staging), false)
   } finally {
     rmSync(root, { recursive: true, force: true })
+  }
+})
+
+test('读回未完成的助手轮次时标成失败', () => {
+  const meta = mkdtempSync(join(tmpdir(), 'autoforge-conversation-'))
+  const staging = join(meta, 'package-next')
+  mkdirSync(staging, { recursive: true })
+  writeFileSync(join(staging, 'partial.txt'), 'x')
+  try {
+    saveConversationFile(meta, {
+      turns: [{ id: 'a1', role: 'assistant', content: '', status: 'running', createdAt: 't' }]
+    })
+    const loaded = loadConversationFile(meta)
+    assert.equal(loaded.turns[0]?.status, 'error')
+    assert.equal(loaded.turns[0]?.error, '上次转换未完成')
+    assert.equal(existsSync(staging), false)
+  } finally {
+    rmSync(meta, { recursive: true, force: true })
   }
 })
 

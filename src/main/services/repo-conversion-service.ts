@@ -29,6 +29,24 @@ import {
 
 const SKILL_RELATIVE_PATH = join('skills', 'repo-to-autoforge', 'SKILL.md')
 
+const activeConversions = new Map<string, AbortController>()
+
+/** 开始一轮转换。同一工作区已有进行中的转换时拒绝。 */
+export function beginRepoConversion(taskId: string): AbortSignal {
+  if (activeConversions.has(taskId)) throw new Error('已有仓库正在转换')
+  const controller = new AbortController()
+  activeConversions.set(taskId, controller)
+  return controller.signal
+}
+
+export function cancelRepoConversion(taskId: string): void {
+  activeConversions.get(taskId)?.abort()
+}
+
+export function endRepoConversion(taskId: string): void {
+  activeConversions.delete(taskId)
+}
+
 /** 读取随包分发的 repo-to-autoforge 技能说明，作为交接文档的附录 */
 export function readRepoToAutoforgeSkill(): string | undefined {
   const candidates = app.isPackaged

@@ -1,5 +1,5 @@
 import { dialog, ipcMain, shell, type BrowserWindow } from 'electron'
-import { createHash, randomBytes } from 'crypto'
+import { createHash, randomBytes, randomUUID } from 'crypto'
 import { existsSync, statSync } from 'fs'
 import { IPC } from '../../shared/ipc-channels'
 import { appEnv } from '../../shared/app-env'
@@ -27,12 +27,22 @@ import { scriptWorkspace } from '../services/script-workspace'
 import { createHubCredentialStore } from '../services/hub-credential-store'
 import { createHubClient } from '../services/hub-client'
 import { installScriptFromHubZip } from '../services/hub-script-installer'
-import { getRepoConversionService } from '../services/repo-conversion-service'
+import {
+  beginRepoConversion,
+  cancelRepoConversion,
+  endRepoConversion,
+  getRepoConversionService
+} from '../services/repo-conversion-service'
+import { LlmClientError } from '../services/llm-client'
+import { summarizeAssistantTurn, type ConversionTurn } from '../../shared/conversion-conversation'
 import {
   deleteRepoWorkspace,
+  discardStagedPackage,
   getRepoWorkspacePaths,
   listRepoWorkspaces,
-  readWorkspaceProfile
+  loadWorkspaceConversation,
+  readWorkspaceProfile,
+  saveWorkspaceConversation
 } from '../services/repo-workspace'
 import { getLlmConverter, getScriptRepairer } from '../services/llm-converter-runtime'
 import { getLlmProfileService } from '../services/llm-profile-service'
@@ -596,6 +606,12 @@ export function registerIpcHandlers(
     return deleteRepoWorkspace(taskId.trim())
   })
 
+  ipcMain.handle(IPC.REPO_CANCEL_LLM, (_event, taskId: unknown) => {
+    if (typeof taskId !== 'string' || !taskId.trim()) return false
+    cancelRepoConversion(taskId.trim())
+    return true
+  })
+
   ipcMain.handle(IPC.REPO_CONVERT_WITH_LLM, async (event, request: LlmConvertRequest) => {
     if (!request || typeof request !== 'object' || typeof request.taskId !== 'string') {
       throw new Error('invalid_params: 缺少 taskId')
@@ -608,26 +624,88 @@ export function registerIpcHandlers(
     if (!profile) throw new Error('转换工作区缺少仓库画像，请重新拉取仓库')
 
     const allowBuild = request.allowBuild === true && scriptStore.getConfig().llm?.allowBuild === true
+    const signal = beginRepoConversion(taskId)
+    const instruction = typeof request.instruction === 'string' ? request.instruction.trim() : ''
+    let turns: ConversionTurn[] | null = null
 
-    return getLlmConverter().convert({
-      taskId,
-      repoDir: info.repoPath,
-      packageDir: info.packageDir,
-      repoProfile: profile,
-      profileId: request.profileId,
-      allowBuild,
-      instruction: typeof request.instruction === 'string' ? request.instruction : undefined,
-      onProgress: (progress) => {
-        if (!event.sender.isDestroyed()) {
-          event.sender.send(IPC.EVENT_REPO_CONVERT_PROGRESS, progress)
+    try {
+      const conversation = loadWorkspaceConversation(taskId)
+      const hasUserTurn = conversation.turns.some((turn) => turn.role === 'user')
+      if (hasUserTurn && !instruction) throw new Error('请写下新的要求')
+
+      const history = conversation.turns.filter((turn) => turn.status !== 'running')
+      const now = new Date().toISOString()
+      turns = [
+        ...conversation.turns,
+        {
+          id: randomUUID(),
+          role: 'user' as const,
+          content: instruction,
+          status: 'complete' as const,
+          createdAt: now
+        },
+        {
+          id: randomUUID(),
+          role: 'assistant' as const,
+          content: '',
+          status: 'running' as const,
+          createdAt: now
         }
-      },
-      onLog: (line) => {
-        if (!event.sender.isDestroyed()) {
-          event.sender.send(IPC.EVENT_REPO_CONVERT_LOG, line)
+      ]
+      const assistant = turns[turns.length - 1]
+      saveWorkspaceConversation(taskId, { turns })
+
+      const result = await getLlmConverter().convert({
+        taskId,
+        repoDir: info.repoPath,
+        packageDir: info.packageDir,
+        repoProfile: profile,
+        profileId: request.profileId,
+        allowBuild,
+        instruction: instruction || undefined,
+        history,
+        signal,
+        onReasoning: (thinking) => {
+          assistant.thinking = thinking
+          saveWorkspaceConversation(taskId, { turns })
+          if (!event.sender.isDestroyed()) {
+            event.sender.send(IPC.EVENT_REPO_CONVERT_REASONING, { taskId, thinking })
+          }
+        },
+        onProgress: (progress) => {
+          if (!event.sender.isDestroyed()) {
+            event.sender.send(IPC.EVENT_REPO_CONVERT_PROGRESS, progress)
+          }
+        },
+        onLog: (line) => {
+          if (!event.sender.isDestroyed()) {
+            event.sender.send(IPC.EVENT_REPO_CONVERT_LOG, line)
+          }
         }
+      })
+
+      assistant.status = 'complete'
+      assistant.content = summarizeAssistantTurn({
+        summary: result.plan.summary,
+        files: [...result.plan.files.map((file) => file.path), ...result.plan.copies.map((copy) => copy.to)],
+        warnings: result.plan.warnings,
+        notes: result.plan.notes
+      })
+      saveWorkspaceConversation(taskId, { turns })
+      return result
+    } catch (error) {
+      const assistant = turns ? [...turns].reverse().find((turn) => turn.role === 'assistant' && turn.status === 'running') : undefined
+      const cancelled = signal.aborted || (error instanceof LlmClientError && error.code === 'cancelled')
+      if (assistant && turns) {
+        assistant.status = cancelled ? 'cancelled' : 'error'
+        if (!cancelled) assistant.error = error instanceof Error ? error.message : String(error)
+        saveWorkspaceConversation(taskId, { turns })
       }
-    })
+      discardStagedPackage(taskId)
+      throw error
+    } finally {
+      endRepoConversion(taskId)
+    }
   })
 
   ipcMain.handle(IPC.LLM_LIST_PROFILES, () => getLlmProfileService().list())

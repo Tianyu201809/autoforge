@@ -110,6 +110,8 @@ export const IPC = {
 
   REPO_CONVERT_WITH_LLM: 'repo:convert-with-llm',
 
+  REPO_CANCEL_LLM: 'repo:cancel-llm',
+
   LLM_LIST_PROFILES: 'llm:list-profiles',
 
   LLM_UPSERT_PROFILE: 'llm:upsert-profile',
@@ -207,6 +209,8 @@ export const IPC = {
   EVENT_REPO_CONVERT_PROGRESS: 'event:repo-convert-progress',
 
   EVENT_REPO_CONVERT_LOG: 'event:repo-convert-log',
+
+  EVENT_REPO_CONVERT_REASONING: 'event:repo-convert-reasoning',
 
   EVENT_LLM_REPAIR_PROGRESS: 'event:llm-repair-progress',
 

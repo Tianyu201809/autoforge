@@ -176,6 +176,11 @@ export interface LlmConversionLogLine {
   message: string
 }
 
+export interface LlmConversionReasoning {
+  taskId: string
+  thinking: string
+}
+
 export interface LlmConvertRequest {
   taskId: string
   /** 指定使用的配置；缺省时使用默认配置 */
