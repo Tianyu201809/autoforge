@@ -43,6 +43,8 @@ export interface LlmChatInput {
 export interface LlmStreamInput extends LlmChatInput {
   /** 每收到一段内容回调一次；totalChars 为累计字符数 */
   onDelta?: (delta: string, totalChars: number) => void
+  /** 每收到一段思考过程回调一次；参数是截至目前的完整思考文本 */
+  onReasoning?: (thinking: string) => void
   /**
    * 空闲超时（秒）：多久没有收到新内容视为卡死。
    * 流式下不使用总超时，避免长输出被误杀。
@@ -54,6 +56,8 @@ export interface LlmStreamInput extends LlmChatInput {
 
 export interface LlmChatResult {
   content: string
+  /** 与正文分开的思考过程；模型未提供时为空 */
+  reasoning?: string
   model?: string
   promptTokens?: number
   completionTokens?: number
@@ -128,8 +132,8 @@ function isJsonModeUnsupported(error: unknown): boolean {
 interface ChatCompletionResponse {
   model?: string
   choices?: Array<{
-    message?: { content?: unknown }
-    delta?: { content?: unknown }
+    message?: { content?: unknown; reasoning_content?: unknown; reasoning?: unknown }
+    delta?: { content?: unknown; reasoning_content?: unknown; reasoning?: unknown }
     finish_reason?: unknown
   }>
   usage?: { prompt_tokens?: number; completion_tokens?: number }
@@ -159,6 +163,15 @@ function buildHeaders(input: LlmChatInput): Record<string, string> {
 
 function asNumber(value: unknown): number | undefined {
   return typeof value === 'number' && Number.isFinite(value) ? value : undefined
+}
+
+/** 思考过程优先读 reasoning_content，没有则读 reasoning。正文不从这里取。 */
+export function readReasoningDelta(record: unknown): string {
+  if (!record || typeof record !== 'object') return ''
+  const source = record as { reasoning_content?: unknown; reasoning?: unknown }
+  if (typeof source.reasoning_content === 'string' && source.reasoning_content) return source.reasoning_content
+  if (typeof source.reasoning === 'string' && source.reasoning) return source.reasoning
+  return ''
 }
 
 export function createLlmClient(deps: LlmClientDeps): {
@@ -203,14 +216,17 @@ export function createLlmClient(deps: LlmClientDeps): {
         throw new LlmClientError(`模型返回错误：${payload.error.message}`, 'invalid_response')
       }
 
-      const content = payload.choices?.[0]?.message?.content
+      const message = payload.choices?.[0]?.message
+      const content = message?.content
       if (typeof content !== 'string' || !content.trim()) {
         throw new LlmClientError('模型没有返回任何内容', 'invalid_response')
       }
 
       const finishReason = payload.choices?.[0]?.finish_reason
+      const reasoning = readReasoningDelta(message)
       return {
         content,
+        reasoning: reasoning || undefined,
         model: payload.model,
         promptTokens: asNumber(payload.usage?.prompt_tokens),
         completionTokens: asNumber(payload.usage?.completion_tokens),
@@ -227,12 +243,14 @@ export function createLlmClient(deps: LlmClientDeps): {
     payload: string,
     state: {
       content: string
+      reasoning: string
       finishReason?: string
       model?: string
       promptTokens?: number
       completionTokens?: number
     },
-    onDelta?: (delta: string, totalChars: number) => void
+    onDelta?: (delta: string, totalChars: number) => void,
+    onReasoning?: (thinking: string) => void
   ): boolean {
     if (payload === '[DONE]') return false
 
@@ -258,6 +276,11 @@ export function createLlmClient(deps: LlmClientDeps): {
     if (typeof delta === 'string' && delta) {
       state.content += delta
       onDelta?.(delta, state.content.length)
+    }
+    const reasoningDelta = readReasoningDelta(choice?.delta)
+    if (reasoningDelta) {
+      state.reasoning += reasoningDelta
+      onReasoning?.(state.reasoning)
     }
     if (typeof choice?.finish_reason === 'string') state.finishReason = choice.finish_reason
     return true
@@ -314,11 +337,12 @@ export function createLlmClient(deps: LlmClientDeps): {
 
       const state: {
         content: string
+        reasoning: string
         finishReason?: string
         model?: string
         promptTokens?: number
         completionTokens?: number
-      } = { content: '' }
+      } = { content: '', reasoning: '' }
 
       const reader = response.body.getReader()
       const decoder = new TextDecoder()
@@ -372,7 +396,7 @@ export function createLlmClient(deps: LlmClientDeps): {
             const line = rawLine.trim()
             if (!line || line.startsWith(':')) continue
             if (!line.startsWith('data:')) continue
-            consumeStreamPayload(line.slice(5).trim(), state, input.onDelta)
+            consumeStreamPayload(line.slice(5).trim(), state, input.onDelta, input.onReasoning)
           }
         }
         // 处理最后一段没有换行结尾的数据
@@ -380,7 +404,7 @@ export function createLlmClient(deps: LlmClientDeps): {
         for (const rawLine of buffer.split('\n')) {
           const line = rawLine.trim()
           if (!line || line.startsWith(':') || !line.startsWith('data:')) continue
-          consumeStreamPayload(line.slice(5).trim(), state, input.onDelta)
+          consumeStreamPayload(line.slice(5).trim(), state, input.onDelta, input.onReasoning)
         }
       } catch (error) {
         if (error instanceof LlmClientError) throw error
@@ -397,6 +421,7 @@ export function createLlmClient(deps: LlmClientDeps): {
 
       return {
         content: state.content,
+        reasoning: state.reasoning || undefined,
         model: state.model,
         promptTokens: state.promptTokens,
         completionTokens: state.completionTokens,

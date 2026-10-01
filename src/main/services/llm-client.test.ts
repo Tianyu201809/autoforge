@@ -215,6 +215,33 @@ test('chatStream 累积增量并回调 onDelta', async () => {
   assert.deepEqual(deltas, ['{"ok"|5', ':true}|11'])
 })
 
+test('chatStream 把 reasoning_content 与正文分开累计', async () => {
+  const client = createLlmClient({
+    request: async () =>
+      sseResponse([
+        `data: ${JSON.stringify({
+          choices: [{ delta: { reasoning_content: '先看仓库' }, finish_reason: null }]
+        })}\n\n`,
+        `data: ${JSON.stringify({
+          choices: [{ delta: { reasoning: '再定入口' }, finish_reason: null }]
+        })}\n\n`,
+        sseChunk('{"language":"javascript"}', 'stop'),
+        'data: [DONE]\n\n'
+      ])
+  })
+  const snapshots: string[] = []
+  const result = await client.chatStream({
+    baseUrl: PROFILE.baseUrl,
+    model: PROFILE.model,
+    apiKey: 'key',
+    messages: [{ role: 'user', content: 'hi' }],
+    onReasoning: (thinking) => snapshots.push(thinking)
+  })
+  assert.equal(result.content, '{"language":"javascript"}')
+  assert.equal(result.reasoning, '先看仓库再定入口')
+  assert.deepEqual(snapshots, ['先看仓库', '先看仓库再定入口'])
+})
+
 test('chatStream 忽略注释行与非 data 行', async () => {
   const client = createLlmClient({
     request: async () =>
