@@ -307,6 +307,10 @@ const autoforge = {
   repo: {
     fetch: (input: RepoFetchRequest): Promise<RepoWorkspaceInfo> =>
       ipcRenderer.invoke(IPC.REPO_FETCH, input),
+    pickLocal: (kind: 'directory' | 'files'): Promise<string[] | null> =>
+      ipcRenderer.invoke(IPC.REPO_PICK_LOCAL, kind),
+    importLocal: (paths: string[]): Promise<RepoWorkspaceInfo> =>
+      ipcRenderer.invoke(IPC.REPO_IMPORT_LOCAL, paths),
     listWorkspaces: (): Promise<RepoWorkspaceSummary[]> =>
       ipcRenderer.invoke(IPC.REPO_LIST_WORKSPACES),
     getWorkspace: (taskId: string): Promise<RepoWorkspaceInfo | null> =>

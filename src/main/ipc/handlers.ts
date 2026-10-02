@@ -563,6 +563,25 @@ export function registerIpcHandlers(
 
   ipcMain.handle(IPC.MCP_GET_CLIENT_CONFIG, () => getMcpClientConfig(appEnv))
 
+  ipcMain.handle(IPC.REPO_PICK_LOCAL, async (_event, kind: unknown) => {
+    const win = getWindow()
+    const directory = kind === 'directory'
+    const result = await dialog.showOpenDialog(win ?? undefined, {
+      properties: directory ? ['openDirectory'] : ['openFile', 'multiSelections']
+    })
+    if (result.canceled || result.filePaths.length === 0) return null
+    return result.filePaths
+  })
+
+  ipcMain.handle(IPC.REPO_IMPORT_LOCAL, async (event, paths: unknown) => {
+    if (!Array.isArray(paths) || paths.some((item) => typeof item !== 'string')) {
+      throw new Error('invalid_params: 缺少路径')
+    }
+    return getRepoConversionService().importLocal(paths, (progress) => {
+      if (!event.sender.isDestroyed()) event.sender.send(IPC.EVENT_REPO_CONVERT_PROGRESS, progress)
+    })
+  })
+
   ipcMain.handle(IPC.REPO_FETCH, async (event, payload: RepoFetchRequest) => {
     if (!payload || typeof payload !== 'object' || typeof payload.url !== 'string') {
       throw new Error('invalid_params: 缺少仓库地址')

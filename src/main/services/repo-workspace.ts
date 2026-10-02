@@ -274,7 +274,10 @@ export function listRepoWorkspaces(): RepoWorkspaceSummary[] {
     results.push({
       taskId,
       provider: profile.ref.provider,
-      repo: `${profile.ref.owner}/${profile.ref.repo}`,
+      repo:
+        profile.ref.provider === 'local'
+          ? profile.ref.repo
+          : `${profile.ref.owner}/${profile.ref.repo}`,
       alias: workspaceAliasValue(profile.alias ?? ''),
       resolvedRef: profile.resolvedRef,
       workspacePath: join(root, taskId),

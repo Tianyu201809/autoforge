@@ -98,6 +98,10 @@ export const IPC = {
 
   REPO_FETCH: 'repo:fetch',
 
+  REPO_PICK_LOCAL: 'repo:pick-local',
+
+  REPO_IMPORT_LOCAL: 'repo:import-local',
+
   REPO_LIST_WORKSPACES: 'repo:list-workspaces',
 
   REPO_GET_WORKSPACE: 'repo:get-workspace',

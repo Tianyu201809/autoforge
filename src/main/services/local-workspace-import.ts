@@ -1,5 +1,6 @@
-import { copyFileSync, lstatSync, mkdirSync, readdirSync } from 'node:fs'
+import { copyFileSync, lstatSync, mkdirSync, readdirSync, rmSync } from 'node:fs'
 import { basename, dirname, join, parse, relative, resolve, sep } from 'node:path'
+import { createRepoTaskId } from './repo-workspace'
 
 export const LOCAL_IMPORT_MESSAGES = {
   empty: '没有可复制的文件',
@@ -211,5 +212,43 @@ export function copyLocalImport(input: CopyLocalImportInput): LocalSelection {
   } catch (error) {
     if (error instanceof LocalImportError) throw error
     throw new LocalImportError(LOCAL_IMPORT_MESSAGES.copyFailed)
+  }
+}
+
+export function createLocalWorkspace(input: {
+  selectedPaths: string[]
+  workspacesRoot: string
+  homeDir: string
+}): { taskId: string; repoDir: string; selection: LocalSelection } {
+  const entries: Array<{ path: string; kind: 'file' | 'directory' }> = []
+  for (const selected of input.selectedPaths) {
+    const stat = lstatSync(selected)
+    if (stat.isSymbolicLink()) continue
+    if (stat.isDirectory()) entries.push({ path: selected, kind: 'directory' })
+    else if (stat.isFile()) entries.push({ path: selected, kind: 'file' })
+  }
+  const selection = describeLocalSelection(entries, input.homeDir)
+  const taskId = createRepoTaskId({
+    provider: 'local',
+    owner: '',
+    repo: selection.displayName,
+    url: selection.rootPath ?? '',
+    transport: 'https',
+    cloneUrl: ''
+  })
+  const workspacePath = join(input.workspacesRoot, taskId)
+  const repoDir = join(workspacePath, 'repo')
+  mkdirSync(repoDir, { recursive: true })
+  try {
+    copyLocalImport({
+      selectedPaths: input.selectedPaths,
+      repoDir,
+      workspacesRoot: input.workspacesRoot,
+      homeDir: input.homeDir
+    })
+    return { taskId, repoDir, selection }
+  } catch (error) {
+    rmSync(workspacePath, { recursive: true, force: true })
+    throw error
   }
 }

@@ -1,9 +1,10 @@
 import assert from 'node:assert/strict'
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, symlinkSync, writeFileSync } from 'node:fs'
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, symlinkSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { test } from 'node:test'
-import { copyLocalImport, describeLocalSelection, LocalImportError } from './local-workspace-import'
+import { analyzeRepoDirectory } from './repo-analyzer'
+import { copyLocalImport, createLocalWorkspace, describeLocalSelection, LocalImportError } from './local-workspace-import'
 
 const home = 'C:\\Users\\me'
 
@@ -267,6 +268,57 @@ test('目标不是目录时提示复制失败，源文件仍在', () => {
       (error: unknown) => error instanceof LocalImportError && error.message === '复制失败，工作区未创建。'
     )
     assert.equal(readFileSync(join(source, 'index.mjs'), 'utf8'), 'export {}')
+  } finally {
+    rmSync(root, { recursive: true, force: true })
+  }
+})
+
+test('复制后的目录可以分析成 local 画像，失败时不留下工作区', () => {
+  const root = mkdtempSync(join(tmpdir(), 'autoforge-local-profile-'))
+  const source = join(root, 'demo')
+  const workspaces = join(root, 'repo-workspaces')
+  mkdirSync(source, { recursive: true })
+  writeFileSync(join(source, 'index.mjs'), 'export {}')
+  try {
+    const created = createLocalWorkspace({
+      selectedPaths: [source],
+      workspacesRoot: workspaces,
+      homeDir: root
+    })
+    assert.equal(created.repoDir, join(workspaces, created.taskId, 'repo'))
+    assert.equal(readFileSync(join(created.repoDir, 'index.mjs'), 'utf8'), 'export {}')
+    const profile = analyzeRepoDirectory(
+      created.repoDir,
+      {
+        provider: 'local',
+        owner: '',
+        repo: created.selection.displayName,
+        url: created.selection.rootPath ?? '',
+        transport: 'https',
+        cloneUrl: ''
+      },
+      '本地目录',
+      { fetchMethod: 'local', commitSha: null }
+    )
+    assert.equal(profile.fetchMethod, 'local')
+    assert.equal(profile.ref.provider, 'local')
+    assert.equal(profile.resolvedRef, '本地目录')
+    assert.equal(profile.commitSha, null)
+
+    const inside = join(workspaces, 'nested', 'index.mjs')
+    mkdirSync(join(workspaces, 'nested'), { recursive: true })
+    writeFileSync(inside, 'export {}')
+    const before = readdirSync(workspaces)
+    assert.throws(
+      () =>
+        createLocalWorkspace({
+          selectedPaths: [inside],
+          workspacesRoot: workspaces,
+          homeDir: root
+        }),
+      (error: unknown) => error instanceof LocalImportError && error.message === '不能把工作区目录再次导入'
+    )
+    assert.deepEqual(readdirSync(workspaces).sort(), before.sort())
   } finally {
     rmSync(root, { recursive: true, force: true })
   }

@@ -224,6 +224,8 @@ export interface AutoforgeApi {
   }
   repo: {
     fetch: (input: import('../../shared/repo-types').RepoFetchRequest) => Promise<RepoWorkspaceInfo>
+    pickLocal: (kind: 'directory' | 'files') => Promise<string[] | null>
+    importLocal: (paths: string[]) => Promise<RepoWorkspaceInfo>
     listWorkspaces: () => Promise<RepoWorkspaceSummary[]>
     getWorkspace: (taskId: string) => Promise<RepoWorkspaceInfo | null>
     importPackage: (taskId: string) => Promise<ScriptItem>
