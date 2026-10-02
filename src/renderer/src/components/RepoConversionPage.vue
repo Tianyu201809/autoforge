@@ -297,7 +297,7 @@ onUnmounted(() => {
           <p class="forge-kicker">NEW REPO</p>
           <h2>拉取一个仓库</h2>
           <p class="forge-lead">
-            支持 GitHub 与 Gitee。仓库会放进这个工作区，转换对话和脚本包都留在这里。
+            支持 GitHub、Gitee，也可以从本机放入文件夹或文件。内容会放进这个工作区，转换对话和脚本包都留在这里。
           </p>
           <label for="forge-url">仓库地址</label>
           <input
@@ -330,11 +330,11 @@ onUnmounted(() => {
             class="forge-local"
             :aria-disabled="busy ? 'true' : 'false'"
           >
-            <p>或从本机放入</p>
+            <p class="forge-local-title">或从本机放入</p>
             <p class="forge-local-hint">把文件夹或文件拖到这里</p>
             <div class="forge-local-actions">
-              <button type="button" :disabled="busy" @click="pickLocal('directory')">选择文件夹</button>
-              <button type="button" :disabled="busy" @click="pickLocal('files')">选择文件</button>
+              <button type="button" class="forge-ghost" :disabled="busy" @click="pickLocal('directory')">选择文件夹</button>
+              <button type="button" class="forge-ghost" :disabled="busy" @click="pickLocal('files')">选择文件</button>
             </div>
           </div>
           <div class="forge-pull-actions">
@@ -515,6 +515,7 @@ onUnmounted(() => {
   padding: 12px;
   border: 1px dashed var(--sb-border-subtle);
   border-radius: 10px;
+  background: var(--sb-bg-inset);
 }
 
 .forge-local[aria-disabled='true'] {
@@ -525,14 +526,21 @@ onUnmounted(() => {
   border-color: var(--sb-accent-solid);
 }
 
-.forge-local p {
+.forge-local-title,
+.forge-local-hint {
   margin: 0;
+}
+
+.forge-local-title {
+  font-size: 11px;
+  color: var(--sb-text-faint);
 }
 
 .forge-local-hint {
   margin-top: 4px;
-  color: var(--sb-text-faint);
+  color: var(--sb-text-muted);
   font-size: 12px;
+  line-height: 1.55;
 }
 
 .forge-local-actions {
@@ -541,13 +549,27 @@ onUnmounted(() => {
   margin-top: 10px;
 }
 
-.forge-local-actions button {
+.forge-local-actions .forge-ghost {
+  appearance: none;
+  height: 28px;
+  padding: 0 10px;
   border: 1px solid var(--sb-border-subtle);
-  background: transparent;
-  color: var(--sb-text-secondary);
   border-radius: 8px;
-  padding: 4px 10px;
-  cursor: pointer;
+  background: var(--sb-bg-panel);
+  color: var(--sb-text-secondary);
+  font: inherit;
+  font-size: 12px;
+}
+
+.forge-local-actions .forge-ghost:hover {
+  border-color: color-mix(in srgb, var(--sb-accent-solid) 45%, var(--sb-border-subtle));
+  background: var(--sb-bg-panel);
+  color: var(--sb-text-primary);
+}
+
+.forge-local-actions .forge-ghost:disabled {
+  opacity: 0.45;
+  cursor: default;
 }
 
 .forge-icon,

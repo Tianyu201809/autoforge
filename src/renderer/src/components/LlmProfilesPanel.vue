@@ -251,7 +251,7 @@ onMounted(() => {
     </div>
 
     <p class="text-[11px] sb-text-faint leading-relaxed">
-      配置 OpenAI 兼容接口后，「从仓库导入」可以使用应用内 LLM 引擎自动生成脚本包，
+      配置 OpenAI 兼容接口后，「仓库转换」可以使用应用内 LLM 引擎自动生成脚本包，
       无需外部 Agent。可以配置多个，使用时切换。API Key 使用系统加密存储，不会写入数据库。
     </p>
 
@@ -279,7 +279,7 @@ onMounted(() => {
     <div v-else-if="state && state.profiles.length === 0 && !draft" class="py-6 text-center space-y-1">
       <Cpu class="w-5 h-5 mx-auto sb-text-faint" :stroke-width="1.5" />
       <p class="text-[12px] sb-text-muted">还没有配置模型</p>
-      <p class="text-[11px] sb-text-faint">添加后即可在「从仓库导入」里使用应用内 LLM 转换</p>
+      <p class="text-[11px] sb-text-faint">添加后即可在「仓库转换」里使用应用内 LLM 转换</p>
     </div>
 
     <div v-else-if="state" class="space-y-2">
@@ -486,7 +486,7 @@ onMounted(() => {
         </span>
         <input
           type="checkbox"
-          class="mt-0.5 flex-shrink-0"
+          class="settings-switch"
           :checked="state?.allowBuild ?? false"
           @change="onAllowBuildChange"
         />

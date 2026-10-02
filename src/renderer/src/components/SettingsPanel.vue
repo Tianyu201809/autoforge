@@ -1390,15 +1390,17 @@ async function removeGlobalPythonDep(name: string): Promise<void> {
   border-top: 1px solid var(--sb-border-subtle);
 }
 
-.settings-section-heading {
+.settings-section-heading,
+:deep(.settings-section-heading) {
   display: flex;
   align-items: flex-start;
   justify-content: space-between;
   gap: 1rem;
 }
 
-.settings-eyebrow {
-  margin-bottom: 0.25rem;
+.settings-eyebrow,
+:deep(.settings-eyebrow) {
+  margin: 0 0 0.25rem;
   color: var(--sb-accent-solid);
   font-size: 10px;
   font-weight: 700;
@@ -1406,17 +1408,60 @@ async function removeGlobalPythonDep(name: string): Promise<void> {
   text-transform: uppercase;
 }
 
-.settings-section-title {
+.settings-section-title,
+:deep(.settings-section-title) {
+  margin: 0;
   color: var(--sb-text-secondary);
   font-size: 13px;
   font-weight: 600;
+  line-height: 1.4;
 }
 
-.settings-section-index {
+.settings-section-index,
+:deep(.settings-section-index) {
   color: var(--sb-text-faint);
   font-family: var(--font-mono);
   font-size: 10px;
   letter-spacing: 0.12em;
+}
+
+:deep(.settings-switch) {
+  appearance: none;
+  position: relative;
+  flex-shrink: 0;
+  width: 2.7rem;
+  height: 1.55rem;
+  margin: 0.1rem 0 0;
+  border: 0;
+  border-radius: 999px;
+  background: var(--sb-border);
+  cursor: pointer;
+}
+
+:deep(.settings-switch)::after {
+  content: '';
+  position: absolute;
+  top: 0.18rem;
+  left: 0.18rem;
+  width: 1.18rem;
+  height: 1.18rem;
+  border-radius: 50%;
+  background: var(--sb-text-primary);
+  box-shadow: 0 2px 5px rgb(0 0 0 / 18%);
+  transition: transform 0.18s ease;
+}
+
+:deep(.settings-switch:checked) {
+  background: var(--sb-accent-solid);
+}
+
+:deep(.settings-switch:checked)::after {
+  transform: translateX(1.15rem);
+}
+
+:deep(.settings-switch:focus-visible) {
+  outline: 2px solid color-mix(in srgb, var(--sb-accent-solid) 62%, transparent);
+  outline-offset: 3px;
 }
 
 .settings-save-status {
