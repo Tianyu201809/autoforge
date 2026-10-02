@@ -1,4 +1,5 @@
-import { basename, dirname, parse, relative, resolve, sep } from 'node:path'
+import { copyFileSync, lstatSync, mkdirSync, readdirSync } from 'node:fs'
+import { basename, dirname, join, parse, relative, resolve, sep } from 'node:path'
 
 export const LOCAL_IMPORT_MESSAGES = {
   empty: '没有可复制的文件',
@@ -118,4 +119,97 @@ export function describeLocalSelection(
     throw new LocalImportError(LOCAL_IMPORT_MESSAGES.collision)
   }
   return { displayName: '本地文件', flattened: true, relativePaths }
+}
+
+export interface CopyLocalImportInput {
+  selectedPaths: string[]
+  repoDir: string
+  workspacesRoot: string
+  homeDir: string
+  limits?: { maxFiles: number; maxBytes: number }
+}
+
+function isUnder(target: string, root: string): boolean {
+  const base = resolve(root)
+  const current = resolve(target)
+  if (current.toLowerCase() === base.toLowerCase()) return true
+  const prefix = (base.endsWith(sep) ? base : base + sep).toLowerCase()
+  return current.toLowerCase().startsWith(prefix)
+}
+
+export function copyLocalImport(input: CopyLocalImportInput): LocalSelection {
+  const limits = input.limits ?? { maxFiles: LOCAL_IMPORT_MAX_FILES, maxBytes: LOCAL_IMPORT_MAX_BYTES }
+  try {
+    const entries: Array<{ path: string; kind: 'file' | 'directory' }> = []
+    for (const selected of input.selectedPaths) {
+      if (isUnder(selected, input.workspacesRoot)) {
+        throw new LocalImportError(LOCAL_IMPORT_MESSAGES.insideWorkspace)
+      }
+      const stat = lstatSync(selected)
+      if (stat.isSymbolicLink()) continue
+      if (stat.isDirectory()) entries.push({ path: selected, kind: 'directory' })
+      else if (stat.isFile()) entries.push({ path: selected, kind: 'file' })
+    }
+
+    const selection = describeLocalSelection(entries, input.homeDir)
+    let count = 0
+    let bytes = 0
+    const flatNames = new Set<string>()
+
+    const place = (sourceFile: string, relativePosix: string): void => {
+      const name = selection.flattened ? basename(sourceFile) : relativePosix
+      if (selection.flattened) {
+        const key = name.toLowerCase()
+        if (flatNames.has(key)) throw new LocalImportError(LOCAL_IMPORT_MESSAGES.collision)
+        flatNames.add(key)
+      }
+      const target = join(input.repoDir, ...name.split('/').filter((part) => part.length > 0))
+      const repoBase = resolve(input.repoDir)
+      const targetResolved = resolve(target)
+      const prefix = (repoBase.endsWith(sep) ? repoBase : repoBase + sep).toLowerCase()
+      if (targetResolved.toLowerCase() !== repoBase.toLowerCase() && !targetResolved.toLowerCase().startsWith(prefix)) {
+        throw new LocalImportError(LOCAL_IMPORT_MESSAGES.insideWorkspace)
+      }
+      const size = lstatSync(sourceFile).size
+      count += 1
+      bytes += size
+      if (count > limits.maxFiles || bytes > limits.maxBytes) {
+        throw new LocalImportError(LOCAL_IMPORT_MESSAGES.limit)
+      }
+      mkdirSync(dirname(target), { recursive: true })
+      copyFileSync(sourceFile, target)
+    }
+
+    const walk = (dir: string, prefix: string): void => {
+      for (const child of readdirSync(dir, { withFileTypes: true })) {
+        if (child.isSymbolicLink()) continue
+        const source = join(dir, child.name)
+        if (child.isDirectory()) {
+          if (LOCAL_IMPORT_SKIP_DIRS.has(child.name)) continue
+          walk(source, prefix ? `${prefix}/${child.name}` : child.name)
+          continue
+        }
+        if (!child.isFile()) continue
+        place(source, prefix ? `${prefix}/${child.name}` : child.name)
+      }
+    }
+
+    if (entries.length === 1 && entries[0].kind === 'directory') {
+      walk(entries[0].path, '')
+    } else {
+      entries.forEach((entry, index) => {
+        if (entry.kind === 'file') {
+          place(entry.path, selection.relativePaths[index] ?? basename(entry.path))
+          return
+        }
+        walk(entry.path, selection.flattened ? '' : (selection.relativePaths[index] ?? ''))
+      })
+    }
+
+    if (count === 0) throw new LocalImportError(LOCAL_IMPORT_MESSAGES.empty)
+    return selection
+  } catch (error) {
+    if (error instanceof LocalImportError) throw error
+    throw new LocalImportError(LOCAL_IMPORT_MESSAGES.copyFailed)
+  }
 }

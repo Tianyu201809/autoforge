@@ -1,6 +1,9 @@
 import assert from 'node:assert/strict'
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, symlinkSync, writeFileSync } from 'node:fs'
+import { tmpdir } from 'node:os'
+import { join } from 'node:path'
 import { test } from 'node:test'
-import { describeLocalSelection, LocalImportError } from './local-workspace-import'
+import { copyLocalImport, describeLocalSelection, LocalImportError } from './local-workspace-import'
 
 const home = 'C:\\Users\\me'
 
@@ -94,4 +97,177 @@ test('压平后文件名相撞则拒绝', () => {
       return true
     }
   )
+})
+
+test('单个文件夹的内容落在 repo 根目录，并跳过依赖与版本库', () => {
+  const root = mkdtempSync(join(tmpdir(), 'autoforge-local-import-'))
+  const source = join(root, 'demo')
+  const repoDir = join(root, 'repo')
+  const workspaces = join(root, 'repo-workspaces')
+  mkdirSync(join(source, 'src'), { recursive: true })
+  mkdirSync(join(source, 'node_modules', 'left-pad'), { recursive: true })
+  mkdirSync(join(source, '.git'), { recursive: true })
+  mkdirSync(join(source, 'dist'), { recursive: true })
+  mkdirSync(repoDir, { recursive: true })
+  writeFileSync(join(source, 'src', 'index.mjs'), 'export {}')
+  writeFileSync(join(source, 'node_modules', 'left-pad', 'index.js'), 'x')
+  writeFileSync(join(source, '.git', 'HEAD'), 'ref')
+  writeFileSync(join(source, 'dist', 'app.js'), 'built')
+  symlinkSync(join(source, 'src'), join(source, 'linked'), 'junction')
+  try {
+    const selection = copyLocalImport({
+      selectedPaths: [source],
+      repoDir,
+      workspacesRoot: workspaces,
+      homeDir: root
+    })
+    assert.equal(selection.displayName, 'demo')
+    assert.equal(readFileSync(join(repoDir, 'src', 'index.mjs'), 'utf8'), 'export {}')
+    assert.equal(readFileSync(join(repoDir, 'dist', 'app.js'), 'utf8'), 'built')
+    assert.equal(existsSync(join(repoDir, 'node_modules')), false)
+    assert.equal(existsSync(join(repoDir, '.git')), false)
+    assert.equal(existsSync(join(repoDir, 'linked')), false)
+    assert.equal(existsSync(join(source, 'src', 'index.mjs')), true)
+  } finally {
+    rmSync(root, { recursive: true, force: true })
+  }
+})
+
+test('跳过之后没有文件则失败，源文件仍在', () => {
+  const root = mkdtempSync(join(tmpdir(), 'autoforge-local-empty-'))
+  const source = join(root, 'demo')
+  const repoDir = join(root, 'repo')
+  mkdirSync(join(source, 'node_modules'), { recursive: true })
+  mkdirSync(repoDir, { recursive: true })
+  writeFileSync(join(source, 'node_modules', 'index.js'), 'x')
+  try {
+    assert.throws(
+      () => copyLocalImport({ selectedPaths: [source], repoDir, workspacesRoot: join(root, 'ws'), homeDir: root }),
+      (error: unknown) => error instanceof LocalImportError && error.message === '没有可复制的文件'
+    )
+    assert.equal(existsSync(join(source, 'node_modules', 'index.js')), true)
+  } finally {
+    rmSync(root, { recursive: true, force: true })
+  }
+})
+
+test('压平后目录里的同名文件会拒绝', () => {
+  const root = mkdtempSync(join(tmpdir(), 'autoforge-local-clash-'))
+  const repoDir = join(root, 'repo')
+  mkdirSync(join(root, 'one'), { recursive: true })
+  mkdirSync(join(root, 'two'), { recursive: true })
+  mkdirSync(repoDir, { recursive: true })
+  writeFileSync(join(root, 'one', 'index.ts'), 'a')
+  writeFileSync(join(root, 'two', 'index.ts'), 'b')
+  try {
+    assert.throws(
+      () =>
+        copyLocalImport({
+          selectedPaths: [join(root, 'one', 'index.ts'), join(root, 'two', 'index.ts')],
+          repoDir,
+          workspacesRoot: join(root, 'ws'),
+          homeDir: root
+        }),
+      (error: unknown) =>
+        error instanceof LocalImportError &&
+        error.message === '这些文件压平后会重名，请改成选择它们所在的文件夹。'
+    )
+    assert.equal(existsSync(join(repoDir, 'index.ts')), false)
+  } finally {
+    rmSync(root, { recursive: true, force: true })
+  }
+})
+
+test('不能导入工作区目录内部的路径', () => {
+  const root = mkdtempSync(join(tmpdir(), 'autoforge-local-inside-'))
+  const workspaces = join(root, 'repo-workspaces')
+  const source = join(workspaces, 'old', 'repo', 'index.mjs')
+  mkdirSync(join(workspaces, 'old', 'repo'), { recursive: true })
+  mkdirSync(join(root, 'dest'), { recursive: true })
+  writeFileSync(source, 'export {}')
+  try {
+    assert.throws(
+      () =>
+        copyLocalImport({
+          selectedPaths: [source],
+          repoDir: join(root, 'dest'),
+          workspacesRoot: workspaces,
+          homeDir: root
+        }),
+      (error: unknown) => error instanceof LocalImportError && error.message === '不能把工作区目录再次导入'
+    )
+  } finally {
+    rmSync(root, { recursive: true, force: true })
+  }
+})
+
+test('超过文件数上限时失败', () => {
+  const root = mkdtempSync(join(tmpdir(), 'autoforge-local-count-'))
+  const source = join(root, 'demo')
+  mkdirSync(source, { recursive: true })
+  mkdirSync(join(root, 'repo'), { recursive: true })
+  writeFileSync(join(source, 'a.txt'), 'a')
+  writeFileSync(join(source, 'b.txt'), 'b')
+  try {
+    assert.throws(
+      () =>
+        copyLocalImport({
+          selectedPaths: [source],
+          repoDir: join(root, 'repo'),
+          workspacesRoot: join(root, 'ws'),
+          homeDir: root,
+          limits: { maxFiles: 1, maxBytes: 200 * 1024 * 1024 }
+        }),
+      (error: unknown) => error instanceof LocalImportError && error.message === '本地导入超出上限：最多 6000 个文件、200 MB。'
+    )
+  } finally {
+    rmSync(root, { recursive: true, force: true })
+  }
+})
+
+test('超过字节上限时失败', () => {
+  const root = mkdtempSync(join(tmpdir(), 'autoforge-local-bytes-'))
+  const source = join(root, 'demo')
+  mkdirSync(source, { recursive: true })
+  mkdirSync(join(root, 'repo'), { recursive: true })
+  writeFileSync(join(source, 'big.txt'), '12345')
+  try {
+    assert.throws(
+      () =>
+        copyLocalImport({
+          selectedPaths: [source],
+          repoDir: join(root, 'repo'),
+          workspacesRoot: join(root, 'ws'),
+          homeDir: root,
+          limits: { maxFiles: 6000, maxBytes: 4 }
+        }),
+      (error: unknown) => error instanceof LocalImportError && error.message === '本地导入超出上限：最多 6000 个文件、200 MB。'
+    )
+  } finally {
+    rmSync(root, { recursive: true, force: true })
+  }
+})
+
+test('目标不是目录时提示复制失败，源文件仍在', () => {
+  const root = mkdtempSync(join(tmpdir(), 'autoforge-local-fail-'))
+  const source = join(root, 'demo')
+  const repoDir = join(root, 'not-a-dir')
+  mkdirSync(source, { recursive: true })
+  writeFileSync(join(source, 'index.mjs'), 'export {}')
+  writeFileSync(repoDir, 'blocked')
+  try {
+    assert.throws(
+      () =>
+        copyLocalImport({
+          selectedPaths: [source],
+          repoDir,
+          workspacesRoot: join(root, 'ws'),
+          homeDir: root
+        }),
+      (error: unknown) => error instanceof LocalImportError && error.message === '复制失败，工作区未创建。'
+    )
+    assert.equal(readFileSync(join(source, 'index.mjs'), 'utf8'), 'export {}')
+  } finally {
+    rmSync(root, { recursive: true, force: true })
+  }
 })
