@@ -150,6 +150,7 @@ export interface AutoforgeApi {
   }
   files: {
     setupPathDropTarget: (element: HTMLInputElement | HTMLTextAreaElement) => () => void
+    bindPathDropZone: (element: HTMLElement) => () => void
   }
   categories: {
     list: () => Promise<CategoryDefinition[]>

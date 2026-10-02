@@ -39,6 +39,8 @@ const {
   loadHistory,
   loadLlmProfiles,
   startFetch,
+  importLocalPaths,
+  pickLocal,
   resumeWorkspace,
   startLlmConversion,
   cancelLlmConversion,
@@ -49,6 +51,7 @@ const {
 } = useRepoImport()
 
 const pulling = ref(false)
+const localDropRef = ref<HTMLElement | null>(null)
 const historyReady = ref(false)
 const threadRef = ref<HTMLElement | null>(null)
 const composerRef = ref<HTMLTextAreaElement | null>(null)
@@ -58,7 +61,10 @@ const openThinking = ref<Record<string, boolean>>({})
 const repoLabel = computed(() => {
   const profile = workspace.value?.profile
   if (!profile) return ''
-  return profile.alias?.trim() || `${profile.ref.owner}/${profile.ref.repo}`
+  return (
+    profile.alias?.trim() ||
+    (profile.ref.provider === 'local' ? profile.ref.repo : `${profile.ref.owner}/${profile.ref.repo}`)
+  )
 })
 
 const repoIdentity = computed(() => {
@@ -116,6 +122,17 @@ function openPull(): void {
 async function submitPull(): Promise<void> {
   await startFetch()
   if (workspace.value && !error.value) pulling.value = false
+}
+
+async function submitLocal(paths: string[]): Promise<void> {
+  await importLocalPaths(paths)
+  if (workspace.value && !error.value) pulling.value = false
+}
+
+function onLocalDrop(event: Event): void {
+  const paths = (event as CustomEvent<string[]>).detail
+  if (!Array.isArray(paths) || !paths.length) return
+  void submitLocal(paths)
 }
 
 async function openWorkspace(taskId: string): Promise<void> {
@@ -183,6 +200,16 @@ async function refreshWorkspaces(): Promise<void> {
   await loadLlmProfiles()
 }
 
+watch(localDropRef, (element, _previous, onCleanup) => {
+  if (!element) return
+  const unbind = window.autoforge.files.bindPathDropZone(element)
+  element.addEventListener('autoforge-local-import', onLocalDrop)
+  onCleanup(() => {
+    unbind()
+    element.removeEventListener('autoforge-local-import', onLocalDrop)
+  })
+})
+
 watch(
   () => props.open,
   (open) => {
@@ -236,9 +263,9 @@ onUnmounted(() => {
       <aside class="forge-rail" aria-label="工作区">
         <div class="forge-rail-head">
           <span>工作区</span>
-          <button type="button" :disabled="busy || converting" @click="openPull">拉取</button>
+          <button type="button" :disabled="busy || converting" @click="openPull">新建</button>
         </div>
-        <p v-if="!history.length" class="forge-rail-empty">还没有拉取过的仓库。</p>
+        <p v-if="!history.length" class="forge-rail-empty">还没有工作区。</p>
         <ul v-else class="forge-list">
           <li v-for="item in history" :key="item.taskId" @contextmenu="openWorkspaceMenu(item.taskId, $event)">
             <button
@@ -258,7 +285,7 @@ onUnmounted(() => {
             </button>
           </li>
         </ul>
-        <p class="forge-rail-note">删除工作区时，克隆到本地的仓库会一起删除。已经导入的脚本会留在列表里。</p>
+        <p class="forge-rail-note">删除工作区时，这里的副本会一起删除，原来的文件夹不会动。已经导入的脚本会留在列表里。</p>
       </aside>
 
       <main class="forge-main">
@@ -298,6 +325,18 @@ onUnmounted(() => {
           </div>
           <p v-if="busy" class="forge-status">{{ progress?.message ?? '正在拉取仓库' }}</p>
           <p v-if="error" class="forge-error">{{ error }}</p>
+          <div
+            ref="localDropRef"
+            class="forge-local"
+            :aria-disabled="busy ? 'true' : 'false'"
+          >
+            <p>或从本机放入</p>
+            <p class="forge-local-hint">把文件夹或文件拖到这里</p>
+            <div class="forge-local-actions">
+              <button type="button" :disabled="busy" @click="pickLocal('directory')">选择文件夹</button>
+              <button type="button" :disabled="busy" @click="pickLocal('files')">选择文件</button>
+            </div>
+          </div>
           <div class="forge-pull-actions">
             <button v-if="history.length" type="button" class="forge-ghost" :disabled="busy" @click="pulling = false">
               返回
@@ -313,7 +352,7 @@ onUnmounted(() => {
         <section v-else-if="!workspace" class="forge-blank">
           <GitBranch :size="22" :stroke-width="1.5" />
           <h2>选择一个工作区</h2>
-          <p>左侧是已经拉取的仓库。打开后可以继续对话，让模型按你的要求重做脚本包。</p>
+          <p>左侧是已经放进来的工作区。打开后可以继续对话，让模型按你的要求重做脚本包。</p>
         </section>
 
         <section v-else class="forge-chat">
@@ -321,9 +360,15 @@ onUnmounted(() => {
             <div>
               <h2>{{ repoLabel }}</h2>
               <p>
-                <template v-if="workspace.profile.alias">{{ repoIdentity }} · </template>
-                {{ workspace.profile.resolvedRef }}
-                · {{ workspace.profile.convertibilityReason }}
+                <template v-if="workspace.profile.ref.provider === 'local'">
+                  本地目录 · {{ workspace.profile.ref.url || '多个位置' }}
+                  · {{ workspace.profile.convertibilityReason }}
+                </template>
+                <template v-else>
+                  <template v-if="workspace.profile.alias">{{ repoIdentity }} · </template>
+                  {{ workspace.profile.resolvedRef }}
+                  · {{ workspace.profile.convertibilityReason }}
+                </template>
               </p>
             </div>
             <div class="forge-chat-tools">
@@ -463,6 +508,46 @@ onUnmounted(() => {
   padding: 0 14px 0 8px;
   border-bottom: 1px solid var(--sb-border-subtle);
   flex: 0 0 auto;
+}
+
+.forge-local {
+  margin-top: 16px;
+  padding: 12px;
+  border: 1px dashed var(--sb-border-subtle);
+  border-radius: 10px;
+}
+
+.forge-local[aria-disabled='true'] {
+  opacity: 0.55;
+}
+
+.forge-local.is-local-import-target {
+  border-color: var(--sb-accent-solid);
+}
+
+.forge-local p {
+  margin: 0;
+}
+
+.forge-local-hint {
+  margin-top: 4px;
+  color: var(--sb-text-faint);
+  font-size: 12px;
+}
+
+.forge-local-actions {
+  display: flex;
+  gap: 8px;
+  margin-top: 10px;
+}
+
+.forge-local-actions button {
+  border: 1px solid var(--sb-border-subtle);
+  background: transparent;
+  color: var(--sb-text-secondary);
+  border-radius: 8px;
+  padding: 4px 10px;
+  cursor: pointer;
 }
 
 .forge-icon,

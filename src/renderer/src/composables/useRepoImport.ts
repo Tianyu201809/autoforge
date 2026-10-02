@@ -339,14 +339,51 @@ export function useRepoImport() {
     }
   }
 
+  async function importLocalPaths(paths: string[]): Promise<void> {
+    if (!paths.length || busy.value || converting.value) return
+    const previous = workspace.value
+    error.value = null
+    progress.value = { taskId: '', phase: 'extracting', message: '正在复制到工作区' }
+    busy.value = true
+    try {
+      const info = await window.autoforge.repo.importLocal(paths)
+      workspace.value = info
+      instruction.value = ''
+      allowBuildThisRun.value = false
+      pushToast({
+        type: 'success',
+        title: '工作区已就绪',
+        message: info.profile.ref.repo
+      })
+      await loadHistory()
+    } catch (err) {
+      workspace.value = previous
+      error.value = describeError(err)
+    } finally {
+      busy.value = false
+    }
+  }
+
+  async function pickLocal(kind: 'directory' | 'files'): Promise<void> {
+    const paths = await window.autoforge.repo.pickLocal(kind)
+    if (!paths?.length) return
+    await importLocalPaths(paths)
+  }
+
   async function deleteWorkspace(taskId: string): Promise<void> {
     const fromHistory = history.value.find((item) => item.taskId === taskId)
     const current = workspace.value?.taskId === taskId ? workspace.value : null
+    const local =
+      fromHistory?.provider === 'local' || current?.profile.ref.provider === 'local'
     const repoLabel =
       fromHistory?.repo ??
-      (current ? `${current.profile.ref.owner}/${current.profile.ref.repo}` : taskId)
+      (current
+        ? current.profile.ref.provider === 'local'
+          ? current.profile.ref.repo
+          : `${current.profile.ref.owner}/${current.profile.ref.repo}`
+        : taskId)
     const workspacePath = fromHistory?.workspacePath ?? current?.workspacePath ?? ''
-    const confirmed = await askConfirm(workspaceDeleteConfirm(repoLabel, workspacePath))
+    const confirmed = await askConfirm(workspaceDeleteConfirm(repoLabel, workspacePath, local ? 'local' : 'git'))
     if (!confirmed) return
     const ok = await window.autoforge.repo.deleteWorkspace(taskId)
     if (!ok) {
@@ -424,6 +461,8 @@ export function useRepoImport() {
     loadHistory,
     loadLlmProfiles,
     startFetch,
+    importLocalPaths,
+    pickLocal,
     recheckPackage,
     resumeWorkspace,
     startLlmConversion,

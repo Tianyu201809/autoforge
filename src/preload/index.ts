@@ -2,7 +2,7 @@ import { contextBridge, ipcRenderer, type IpcRendererEvent } from 'electron'
 import pkg from '../../package.json'
 import { appEnv } from '../shared/app-env'
 import { IPC } from '../shared/ipc-channels'
-import { bindFilePathDropTarget, getDroppedFilePath } from './script-drop'
+import { bindFilePathDropTarget, bindPathDropZone, getDroppedFilePath } from './script-drop'
 import type {
   AppConfig,
   AppWindowConfig,
@@ -194,7 +194,8 @@ const autoforge = {
   },
   files: {
     setupPathDropTarget: (element: HTMLInputElement | HTMLTextAreaElement): (() => void) =>
-      bindFilePathDropTarget(element)
+      bindFilePathDropTarget(element),
+    bindPathDropZone: (element: HTMLElement): (() => void) => bindPathDropZone(element)
   },
   categories: {
     list: (): Promise<CategoryDefinition[]> => ipcRenderer.invoke(IPC.CATEGORIES_LIST),

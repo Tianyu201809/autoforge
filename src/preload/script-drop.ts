@@ -64,3 +64,26 @@ export function bindFilePathDropTarget(
     element.removeEventListener('drop', onDrop)
   }
 }
+
+export function bindPathDropZone(element: HTMLElement): () => void {
+  const onDragOver = (event: DragEvent): void => {
+    event.preventDefault()
+    if (event.dataTransfer) event.dataTransfer.dropEffect = 'copy'
+    element.classList.add('is-local-import-target')
+  }
+  const onDragLeave = (): void => element.classList.remove('is-local-import-target')
+  const onDrop = (event: DragEvent): void => {
+    event.preventDefault()
+    element.classList.remove('is-local-import-target')
+    const paths = collectDropPaths(event)
+    element.dispatchEvent(new CustomEvent('autoforge-local-import', { detail: paths }))
+  }
+  element.addEventListener('dragover', onDragOver)
+  element.addEventListener('dragleave', onDragLeave)
+  element.addEventListener('drop', onDrop)
+  return () => {
+    element.removeEventListener('dragover', onDragOver)
+    element.removeEventListener('dragleave', onDragLeave)
+    element.removeEventListener('drop', onDrop)
+  }
+}
