@@ -3,7 +3,13 @@ import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { test } from 'node:test'
-import { promoteStagedPackage, removeDirectoryCommitted, loadConversationFile, saveConversationFile } from './repo-workspace'
+import {
+  loadConversationFile,
+  promoteStagedPackage,
+  removeDirectoryCommitted,
+  saveConversationFile,
+  workspaceAliasValue
+} from './repo-workspace'
 
 test('成功时用暂存目录替换旧产物，并留下新内容', () => {
   const root = mkdtempSync(join(tmpdir(), 'autoforge-stage-'))
@@ -39,6 +45,12 @@ test('读回未完成的助手轮次时标成失败', () => {
   } finally {
     rmSync(meta, { recursive: true, force: true })
   }
+})
+
+test('工作区别名会去掉空白，空名称表示不设置', () => {
+  assert.equal(workspaceAliasValue('  导出工具  '), '导出工具')
+  assert.equal(workspaceAliasValue('   '), undefined)
+  assert.equal(workspaceAliasValue('a'.repeat(50))?.length, 40)
 })
 
 test('目录仍在时删除结果为失败', () => {

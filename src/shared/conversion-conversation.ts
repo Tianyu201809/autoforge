@@ -1,5 +1,12 @@
 export type ConversionTurnStatus = 'running' | 'complete' | 'cancelled' | 'error'
 
+export interface ConversionFileChange {
+  path: string
+  kind: 'generate' | 'copy' | 'manifest'
+  note: string
+  lines?: number
+}
+
 export interface ConversionTurn {
   id: string
   role: 'user' | 'assistant'
@@ -7,6 +14,8 @@ export interface ConversionTurn {
   thinking?: string
   status: ConversionTurnStatus
   error?: string
+  /** 这一轮写进脚本包的文件，供界面列出修改点 */
+  changes?: ConversionFileChange[]
   createdAt: string
 }
 
@@ -16,6 +25,24 @@ export interface ConversionConversation {
 
 const TURN_STATUSES = new Set<ConversionTurnStatus>(['running', 'complete', 'cancelled', 'error'])
 
+const CHANGE_KINDS = new Set<ConversionFileChange['kind']>(['generate', 'copy', 'manifest'])
+
+function readFileChanges(value: unknown): ConversionFileChange[] | undefined {
+  if (!Array.isArray(value)) return undefined
+  const changes: ConversionFileChange[] = []
+  for (const item of value) {
+    if (!item || typeof item !== 'object') continue
+    const change = item as Partial<ConversionFileChange>
+    if (typeof change.path !== 'string' || !change.path.trim()) continue
+    if (typeof change.note !== 'string') continue
+    if (change.kind !== 'generate' && change.kind !== 'copy' && change.kind !== 'manifest') continue
+    if (!CHANGE_KINDS.has(change.kind)) continue
+    const lines = typeof change.lines === 'number' && change.lines >= 0 ? change.lines : undefined
+    changes.push({ path: change.path, kind: change.kind, note: change.note, lines })
+  }
+  return changes.length > 0 ? changes : undefined
+}
+
 function isConversionTurn(value: unknown): value is ConversionTurn {
   if (!value || typeof value !== 'object') return false
   const turn = value as Partial<ConversionTurn>
@@ -23,7 +50,37 @@ function isConversionTurn(value: unknown): value is ConversionTurn {
   if (typeof turn.content !== 'string') return false
   if (typeof turn.id !== 'string' || typeof turn.createdAt !== 'string') return false
   if (typeof turn.status !== 'string' || !TURN_STATUSES.has(turn.status)) return false
+  const changes = readFileChanges((value as { changes?: unknown }).changes)
+  if (changes) turn.changes = changes
+  else delete turn.changes
   return true
+}
+
+/** 把一次转换结果整理成界面上的修改点。 */
+export function describeConversionChanges(input: {
+  entry: string
+  files: Array<{ path: string; content: string }>
+  copies: Array<{ from: string; to: string }>
+}): ConversionFileChange[] {
+  const changes: ConversionFileChange[] = input.files.map((file) => ({
+    path: file.path,
+    kind: 'generate' as const,
+    note: file.path === input.entry ? '脚本入口' : '新生成的文件',
+    lines: file.content ? file.content.split(/\r?\n/).length : undefined
+  }))
+  for (const copy of input.copies) {
+    changes.push({
+      path: copy.to,
+      kind: 'copy',
+      note: `从仓库 ${copy.from} 复制`
+    })
+  }
+  changes.push({
+    path: 'autoforge.json',
+    kind: 'manifest',
+    note: '脚本清单'
+  })
+  return changes
 }
 
 /** 解析对话文件。空内容、坏 JSON、或 turns 不是数组时返回空对话。 */

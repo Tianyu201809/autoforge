@@ -317,6 +317,8 @@ const autoforge = {
       ipcRenderer.invoke(IPC.REPO_OPEN_WORKSPACE, taskId, target),
     deleteWorkspace: (taskId: string): Promise<boolean> =>
       ipcRenderer.invoke(IPC.REPO_DELETE_WORKSPACE, taskId),
+    setAlias: (taskId: string, alias: string): Promise<boolean> =>
+      ipcRenderer.invoke(IPC.REPO_SET_ALIAS, taskId, alias),
     convertWithLlm: (request: LlmConvertRequest): Promise<LlmConversionResult> =>
       ipcRenderer.invoke(IPC.REPO_CONVERT_WITH_LLM, request),
     cancelLlm: (taskId: string): Promise<boolean> => ipcRenderer.invoke(IPC.REPO_CANCEL_LLM, taskId),

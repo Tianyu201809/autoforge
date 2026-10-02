@@ -499,14 +499,65 @@ export function createDeltaReporter(
   }
 }
 
-export function createLlmConverter(deps: LlmConverterDeps): LlmConverter {
-  function assertNotTruncated(finishReason: string | undefined, context: string): void {
-    if (finishReason !== 'length') return
-    throw new ConversionPlanError(
-      `${context}：模型输出达到长度上限被截断。请到「设置 → 模型」调大「最大输出 tokens」后重试`
-    )
-  }
+/** 单次模型调用因输出上限停下后，最多再续写这么多次 */
+const OUTPUT_CONTINUATION_LIMIT = 8
+const SKELETON_DIGEST_BUDGETS = [120_000, 40_000, 12_000]
+const FILE_DIGEST_BUDGETS = [60_000, 20_000, 8_000]
 
+/** 接口明确拒绝是因为提示词超过上下文，而不是输出被截断 */
+export function isPromptLimitError(error: unknown): boolean {
+  const message = error instanceof Error ? error.message : String(error)
+  return /context[_ ]length|maximum context|too many tokens|token limit|max(?:imum)? tokens|context window|超出.{0,12}(?:token|长度|上限)|上下文.{0,8}(?:过长|超限|超出)/i.test(
+    message
+  )
+}
+
+/** 把续写片段接回已有正文，并去掉模型重复的重叠部分 */
+export function joinContinuation(existing: string, next: string): string {
+  if (!existing) return next
+  if (!next) return existing
+  if (next.startsWith(existing)) return next
+  const limit = Math.min(existing.length, next.length, 800)
+  for (let size = limit; size >= 16; size -= 1) {
+    if (existing.endsWith(next.slice(0, size))) return existing + next.slice(size)
+  }
+  return existing + next
+}
+
+/**
+ * 只保留最新一次文本，并限制上报频率。
+ * 思考过程每个 token 都上报时，主进程写盘和界面重绘会把程序卡住。
+ */
+export function createLatestThrottle(
+  emit: (text: string) => void,
+  intervalMs: number
+): { push: (text: string) => void; flush: () => void } {
+  let pending: string | undefined
+  let lastAt = 0
+  let timer: ReturnType<typeof setTimeout> | undefined
+  const flush = (): void => {
+    if (timer) {
+      clearTimeout(timer)
+      timer = undefined
+    }
+    if (pending === undefined) return
+    const text = pending
+    pending = undefined
+    lastAt = Date.now()
+    emit(text)
+  }
+  return {
+    push(text: string) {
+      pending = text
+      const wait = intervalMs - (Date.now() - lastAt)
+      if (wait <= 0) flush()
+      else if (!timer) timer = setTimeout(flush, wait)
+    },
+    flush
+  }
+}
+
+export function createLlmConverter(deps: LlmConverterDeps): LlmConverter {
   async function convert(input: ConvertWithLlmInput): Promise<LlmConversionResult> {
     const { taskId, repoDir, packageDir, repoProfile } = input
     const report = (progress: Omit<LlmConversionProgress, 'taskId'>): void => {
@@ -522,51 +573,132 @@ export function createLlmConverter(deps: LlmConverterDeps): LlmConverter {
     }
 
     const reasoningSegments: Array<{ label: string; text: string }> = []
+    const reasoningGate = createLatestThrottle((thinking) => {
+      input.onReasoning?.(thinking)
+    }, 400)
     const publishReasoning = (label: string, text: string): void => {
       const existing = reasoningSegments.find((item) => item.label === label)
       if (existing) existing.text = text
       else reasoningSegments.push({ label, text })
-      input.onReasoning?.(reasoningSegments.map((item) => `${item.label}\n${item.text}`).join('\n\n'))
+      reasoningGate.push(reasoningSegments.map((item) => `${item.label}\n${item.text}`).join('\n\n'))
     }
     const historyText = formatConversionHistory(input.history ?? [])
     const extraRequirement = input.instruction?.trim() ? `额外要求：${input.instruction.trim()}` : ''
+    let loggedContext = false
 
     const chat = async (
       messages: Array<{ role: 'system' | 'user'; content: string }>,
       json: boolean,
       context: { phase: LlmConversionPhase; label: string; reasoningLabel: string }
-    ): Promise<Awaited<ReturnType<typeof deps.client.chatStream>>> =>
-      deps.client.chatStream({
-        baseUrl: profile.baseUrl,
-        model: profile.model,
-        apiKey,
-        messages,
-        temperature: profile.temperature,
-        maxOutputTokens: profile.maxOutputTokens,
-        // 流式下该值表示「多久没有新内容算卡死」，而不是整次请求的总时长
-        idleTimeoutSeconds: profile.timeoutSeconds,
-        extraHeaders: profile.extraHeaders,
-        json,
-        signal: input.signal,
-        onDelta: createDeltaReporter(report, context.phase, context.label),
-        onReasoning: (thinking) => publishReasoning(context.reasoningLabel, thinking)
-      })
+    ): Promise<Awaited<ReturnType<typeof deps.client.chatStream>>> => {
+      const carried = reasoningSegments.find((item) => item.label === context.reasoningLabel)?.text ?? ''
+      try {
+        return await deps.client.chatStream({
+          baseUrl: profile.baseUrl,
+          model: profile.model,
+          apiKey,
+          messages,
+          temperature: profile.temperature,
+          maxOutputTokens: profile.maxOutputTokens,
+          // 流式下该值表示「多久没有新内容算卡死」，而不是整次请求的总时长
+          idleTimeoutSeconds: profile.timeoutSeconds,
+          extraHeaders: profile.extraHeaders,
+          json,
+          signal: input.signal,
+          onDelta: createDeltaReporter(report, context.phase, context.label),
+          onReasoning: (thinking) =>
+            publishReasoning(context.reasoningLabel, carried ? `${carried}\n${thinking}` : thinking)
+        })
+      } finally {
+        reasoningGate.flush()
+      }
+    }
+
+    const continueUntilDone = async (
+      messages: Array<{ role: 'system' | 'user'; content: string }>,
+      json: boolean,
+      context: { phase: LlmConversionPhase; label: string; reasoningLabel: string }
+    ): Promise<Awaited<ReturnType<typeof deps.client.chatStream>>> => {
+      let content = ''
+      let last: Awaited<ReturnType<typeof deps.client.chatStream>> | undefined
+      for (let part = 0; part <= OUTPUT_CONTINUATION_LIMIT; part += 1) {
+        const requestMessages =
+          part === 0
+            ? messages
+            : [
+                {
+                  role: 'system' as const,
+                  content: json
+                    ? '你正在续写被截断的 JSON。只输出剩余片段，紧接已写内容，不要重复，不要使用 Markdown。'
+                    : '你正在续写被截断的文件正文。只输出剩余片段，紧接已写内容，不要重复，不要解释。'
+                },
+                {
+                  role: 'user' as const,
+                  content: `已写内容的结尾如下，请从截断处接着写：\n${content.slice(-4_000)}`
+                }
+              ]
+        const before = reasoningSegments.find((item) => item.label === context.reasoningLabel)?.text ?? ''
+        last = await chat(requestMessages, part === 0 ? json : false, context)
+        content = part === 0 ? last.content : joinContinuation(content, last.content)
+        if (last.reasoning) {
+          const combined = before ? `${before}\n${last.reasoning}` : last.reasoning
+          const current = reasoningSegments.find((item) => item.label === context.reasoningLabel)?.text
+          if (current !== combined) publishReasoning(context.reasoningLabel, combined)
+        }
+        reasoningGate.flush()
+        if (last.finishReason !== 'length') break
+        if (part === OUTPUT_CONTINUATION_LIMIT) {
+          log('WARN', `${context.label} 已续写 ${OUTPUT_CONTINUATION_LIMIT} 次，将使用已得到的内容继续`)
+          break
+        }
+        log('INFO', `${context.label} 达到输出长度上限，正在续写`)
+      }
+      return { ...last!, content }
+    }
+
+    const chatWithDigest = async (
+      buildMessages: (digest: string) => Array<{ role: 'system' | 'user'; content: string }>,
+      budgets: number[],
+      compact: boolean,
+      json: boolean,
+      context: { phase: LlmConversionPhase; label: string; reasoningLabel: string }
+    ): Promise<Awaited<ReturnType<typeof deps.client.chatStream>>> => {
+      let lastError: unknown
+      for (let index = 0; index < budgets.length; index += 1) {
+        const digest = buildRepoDigest(
+          repoDir,
+          repoProfile,
+          compact
+            ? {
+                includeTree: false,
+                includeReadme: false,
+                maxEntryFiles: 3,
+                totalBudgetChars: budgets[index]
+              }
+            : { totalBudgetChars: budgets[index] }
+        )
+        if (!loggedContext) {
+          log('INFO', `已生成仓库上下文（${digest.length} 字符），模型：${profile.model}`)
+          loggedContext = true
+        }
+        try {
+          return await continueUntilDone(buildMessages(digest), json, context)
+        } catch (error) {
+          lastError = error
+          if (!isPromptLimitError(error) || index === budgets.length - 1) throw error
+          log('WARN', `${context.label} 的上下文超出模型上限，正在缩短仓库摘要后重试`)
+        }
+      }
+      throw lastError
+    }
 
     // ---------- 阶段一：计划骨架 ----------
     report({ phase: 'preparing', message: '正在整理仓库上下文' })
-    const fullDigest = buildRepoDigest(repoDir, repoProfile)
-    const compactDigest = buildRepoDigest(repoDir, repoProfile, {
-      includeTree: false,
-      includeReadme: false,
-      maxEntryFiles: 3,
-      totalBudgetChars: 60_000
-    })
-    log('INFO', `已生成仓库上下文（${fullDigest.length} 字符），模型：${profile.model}`)
-
     report({ phase: 'generating', message: '正在生成转换计划' })
     const skeletonStartedAt = Date.now()
-    const skeletonResult = await chat(
-      [
+    const skeletonContext = { phase: 'generating' as const, label: '正在生成转换计划', reasoningLabel: '转换计划' }
+    const skeletonResult = await chatWithDigest(
+      (digest) => [
         { role: 'system', content: buildSystemPrompt(deps.readSkillMarkdown()) },
         {
           role: 'user',
@@ -577,16 +709,17 @@ export function createLlmConverter(deps: LlmConverterDeps): LlmConverter {
             historyText,
             extraRequirement,
             '',
-            fullDigest
+            digest
           ]
             .filter(Boolean)
             .join('\n')
         }
       ],
+      SKELETON_DIGEST_BUDGETS,
+      false,
       true,
-      { phase: 'generating', label: '正在生成转换计划', reasoningLabel: '转换计划' }
+      skeletonContext
     )
-    assertNotTruncated(skeletonResult.finishReason, '生成转换计划')
     log(
       'INFO',
       `计划骨架返回 ${skeletonResult.content.length} 字符，耗时 ${((Date.now() - skeletonStartedAt) / 1000).toFixed(1)} 秒` +
@@ -648,8 +781,8 @@ export function createLlmConverter(deps: LlmConverterDeps): LlmConverter {
       const label = `正在生成 ${spec.path}（${index + 1}/${generateSpecs.length}）`
       report({ phase: 'generating', message: label })
       const startedAt = Date.now()
-      const result = await chat(
-        [
+      const result = await chatWithDigest(
+        (digest) => [
           { role: 'system', content: FILE_SYSTEM_PROMPT },
           {
             role: 'user',
@@ -660,16 +793,17 @@ export function createLlmConverter(deps: LlmConverterDeps): LlmConverter {
               historyText,
               extraRequirement,
               '',
-              compactDigest
+              digest
             ]
               .filter(Boolean)
               .join('\n')
           }
         ],
+        FILE_DIGEST_BUDGETS,
+        true,
         false,
         { phase: 'generating', label, reasoningLabel: `文件 ${spec.path}` }
       )
-      assertNotTruncated(result.finishReason, `生成 ${spec.path}`)
       const content = parseFileContent(result.content, spec.path)
       files.push({ path: spec.path, content })
       log(

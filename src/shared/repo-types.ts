@@ -80,6 +80,8 @@ export interface RepoProfile {
   convertibilityReason: string
   risks: string[]
   topLevel: RepoProfileEntry[]
+  /** 工作区显示名；为空时界面使用 owner/repo */
+  alias?: string
 }
 
 export type RepoConvertPhase =
@@ -147,6 +149,8 @@ export interface RepoWorkspaceSummary {
   taskId: string
   provider: RepoProvider
   repo: string
+  /** 用户设置的显示名 */
+  alias?: string
   resolvedRef: string
   workspacePath: string
   packageReady: boolean

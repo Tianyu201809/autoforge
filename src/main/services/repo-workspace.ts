@@ -243,6 +243,24 @@ export function readWorkspaceHandoff(taskId: string): string | null {
   }
 }
 
+const WORKSPACE_ALIAS_MAX = 40
+
+/** 空白别名表示恢复成仓库名。过长的名称会截断。 */
+export function workspaceAliasValue(alias: string): string | undefined {
+  const trimmed = alias.trim().replace(/\s+/g, ' ').slice(0, WORKSPACE_ALIAS_MAX)
+  return trimmed || undefined
+}
+
+export function setWorkspaceAlias(taskId: string, alias: string): boolean {
+  const profile = readWorkspaceProfile(taskId)
+  if (!profile) return false
+  const next = workspaceAliasValue(alias)
+  if (next) profile.alias = next
+  else delete profile.alias
+  writeWorkspaceProfile(taskId, profile)
+  return true
+}
+
 export function listRepoWorkspaces(): RepoWorkspaceSummary[] {
   const root = getRepoWorkspacesRoot()
   if (!existsSync(root)) return []
@@ -257,6 +275,7 @@ export function listRepoWorkspaces(): RepoWorkspaceSummary[] {
       taskId,
       provider: profile.ref.provider,
       repo: `${profile.ref.owner}/${profile.ref.repo}`,
+      alias: workspaceAliasValue(profile.alias ?? ''),
       resolvedRef: profile.resolvedRef,
       workspacePath: join(root, taskId),
       packageReady: detectPackageRoot(taskId) !== null,

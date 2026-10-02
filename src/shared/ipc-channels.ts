@@ -108,6 +108,8 @@ export const IPC = {
 
   REPO_DELETE_WORKSPACE: 'repo:delete-workspace',
 
+  REPO_SET_ALIAS: 'repo:set-alias',
+
   REPO_CONVERT_WITH_LLM: 'repo:convert-with-llm',
 
   REPO_CANCEL_LLM: 'repo:cancel-llm',

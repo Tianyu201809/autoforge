@@ -22,7 +22,7 @@ import PromptDialogHost from './components/PromptDialogHost.vue'
 import ScratchpadPanel from './components/ScratchpadPanel.vue'
 import ExecutableEntryPickerModal from './components/ExecutableEntryPickerModal.vue'
 import HubPluginCenterPanel from './components/HubPluginCenterPanel.vue'
-import RepoImportModal from './components/RepoImportModal.vue'
+import RepoConversionPage from './components/RepoConversionPage.vue'
 import { askConfirm } from './composables/useConfirmDialog'
 import { useScratchpad } from './composables/useScratchpad'
 import { useToast } from './composables/useToast'
@@ -600,7 +600,7 @@ onUnmounted(() => {
     <PromptDialogHost />
     <ScratchpadPanel />
     <HubPluginCenterPanel :open="showHubPluginCenter" @close="showHubPluginCenter = false" />
-    <RepoImportModal
+    <RepoConversionPage
       :open="showRepoImport"
       @close="showRepoImport = false"
       @imported="onRepoImported"

@@ -9,7 +9,10 @@ import {
   buildManifestFromPlan,
   ConversionPlanError,
   copyFromRepo,
+  createLatestThrottle,
   createLlmConverter,
+  isPromptLimitError,
+  joinContinuation,
   parseConversionPlan,
   parseFileContent,
   parsePlanSkeleton,
@@ -17,6 +20,7 @@ import {
   stripCodeFence
 } from './llm-converter'
 import { MAX_PLAN_FILES } from '../../shared/llm-types'
+import { LlmClientError } from './llm-client'
 import type { RepoProfile } from '../../shared/repo-types'
 
 function skeletonJson(overrides: Record<string, unknown> = {}): string {
@@ -476,77 +480,126 @@ test('convert 端到端：骨架 + 逐文件生成 + 复制构建产物', async 
   }
 })
 
-test('convert 在计划骨架被截断时给出可操作提示', async () => {
+test('输出达到长度上限时自动续写，转换不会因此中断', async () => {
   const base = mkdtempSync(join(tmpdir(), 'autoforge-convert-trunc-'))
   const repoDir = join(base, 'repo')
   const packageDir = join(base, 'package')
+  const skeletonRest =
+    ',"language":"javascript","entry":"index.mjs","name":"demo","dependencies":{},"env":[],"params":[],"files":[{"path":"index.mjs","purpose":"入口","source":"generate"}],"buildCommands":[]}'
+  const replies = [
+    { content: '{"summary":"包装仓库"', finishReason: 'length' },
+    { content: skeletonRest, finishReason: 'stop' },
+    { content: 'export async function run(ctx) {', finishReason: 'length' },
+    { content: ' return { ok: true } }', finishReason: 'stop' }
+  ]
   try {
     mkdirSync(repoDir, { recursive: true })
-    const converter = makeConverter(() => ({ content: '{"summary":"x"', finishReason: 'length' }))
+    let call = 0
+    const seen: string[] = []
+    const converter = makeConverter((input) => {
+      seen.push(input.lastMessage)
+      const next = replies[call]
+      call += 1
+      if (!next) throw new Error(`意外的第 ${call} 次模型调用`)
+      return next
+    })
 
-    await assert.rejects(
-      () =>
-        converter.convert({
-          taskId: 't2',
-          repoDir,
-          packageDir,
-          repoProfile: REPO_PROFILE,
-          allowBuild: false
-        }),
-      (error: unknown) => {
-        assert.ok(error instanceof ConversionPlanError)
-        assert.match(error.message, /最大输出 tokens/)
-        return true
-      }
+    const result = await converter.convert({
+      taskId: 't2',
+      repoDir,
+      packageDir,
+      repoProfile: REPO_PROFILE,
+      allowBuild: false
+    })
+
+    assert.equal(result.packageReady, true)
+    assert.equal(
+      readFileSync(join(packageDir, 'index.mjs'), 'utf-8'),
+      'export async function run(ctx) { return { ok: true } }'
     )
+    assert.match(seen[1] ?? '', /从截断处接着写/)
+    assert.match(seen[1] ?? '', /包装仓库/)
+    assert.match(seen[3] ?? '', /run\(ctx\)/)
   } finally {
     rmSync(base, { recursive: true, force: true })
   }
 })
 
-test('convert 在单个文件内容被截断时指出具体文件', async () => {
-  const base = mkdtempSync(join(tmpdir(), 'autoforge-convert-file-trunc-'))
+test('上下文超出模型上限时缩短摘要后重试', async () => {
+  const base = mkdtempSync(join(tmpdir(), 'autoforge-convert-context-'))
   const repoDir = join(base, 'repo')
   const packageDir = join(base, 'package')
+  const skeleton = JSON.stringify({
+    summary: 'x',
+    language: 'javascript',
+    entry: 'index.mjs',
+    name: 'demo',
+    dependencies: {},
+    env: [],
+    params: [],
+    files: [{ path: 'index.mjs', purpose: '入口', source: 'generate' }],
+    buildCommands: []
+  })
   try {
     mkdirSync(repoDir, { recursive: true })
-    const converter = makeConverter((input) =>
-      input.json
-        ? {
-            finishReason: 'stop',
-            content: JSON.stringify({
-              summary: 'x',
-              language: 'javascript',
-              entry: 'index.mjs',
-              name: 'demo',
-              dependencies: {},
-              env: [],
-              params: [],
-              files: [{ path: 'index.mjs', purpose: '入口', source: 'generate' }],
-              buildCommands: []
-            })
+    let skeletonTries = 0
+    const converter = createLlmConverter({
+      client: {
+        chat: async () => ({ content: '' }),
+        chatStream: async (input: { messages: Array<{ content: string }> }) => {
+          const last = input.messages[input.messages.length - 1]?.content ?? ''
+          if (last.includes('计划骨架')) {
+            skeletonTries += 1
+            if (skeletonTries === 1) {
+              throw new LlmClientError("This model's maximum context length is 8192 tokens", 'invalid_response')
+            }
+            return { content: skeleton, finishReason: 'stop', streamed: true }
           }
-        : { content: 'export async function run(ctx) {', finishReason: 'length' }
-    )
+          return {
+            content: 'export async function run(ctx) { return { ok: true } }',
+            finishReason: 'stop',
+            streamed: true
+          }
+        },
+        testConnection: async () => ({ ok: true, message: 'ok' })
+      } as unknown as Parameters<typeof createLlmConverter>[0]['client'],
+      resolveProfile: () => ({ profile: LLM_PROFILE, apiKey: 'key' }),
+      readSkillMarkdown: () => undefined
+    })
 
-    await assert.rejects(
-      () =>
-        converter.convert({
-          taskId: 't3',
-          repoDir,
-          packageDir,
-          repoProfile: REPO_PROFILE,
-          allowBuild: false
-        }),
-      (error: unknown) => {
-        assert.ok(error instanceof ConversionPlanError)
-        assert.match(error.message, /index\.mjs/)
-        return true
-      }
-    )
+    const result = await converter.convert({
+      taskId: 't-context',
+      repoDir,
+      packageDir,
+      repoProfile: REPO_PROFILE,
+      allowBuild: false
+    })
+
+    assert.equal(skeletonTries, 2)
+    assert.equal(result.packageReady, true)
   } finally {
     rmSync(base, { recursive: true, force: true })
   }
+})
+
+test('续写会去掉重叠，思考上报会被节流', () => {
+  assert.equal(joinContinuation('export function run() {', ' return 1 }'), 'export function run() { return 1 }')
+  assert.equal(joinContinuation('abcdef', 'abcdefghi'), 'abcdefghi')
+  assert.equal(
+    joinContinuation('abcdefghijklmnopqrstuvwxyz', 'klmnopqrstuvwxyz0123'),
+    'abcdefghijklmnopqrstuvwxyz0123'
+  )
+  assert.equal(isPromptLimitError(new Error('maximum context length is 8192 tokens')), true)
+  assert.equal(isPromptLimitError(new Error('网络中断')), false)
+
+  const seen: string[] = []
+  const gate = createLatestThrottle((text) => seen.push(text), 1_000)
+  gate.push('第一次')
+  gate.push('第二次')
+  gate.push('第三次')
+  assert.deepEqual(seen, ['第一次'])
+  gate.flush()
+  assert.deepEqual(seen, ['第一次', '第三次'])
 })
 
 test('失败的转换保留已有 package，并在提示词中带上历史摘要', async () => {

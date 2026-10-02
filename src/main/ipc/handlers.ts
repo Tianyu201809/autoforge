@@ -34,10 +34,11 @@ import {
   getRepoConversionService
 } from '../services/repo-conversion-service'
 import { LlmClientError } from '../services/llm-client'
-import { summarizeAssistantTurn, type ConversionTurn } from '../../shared/conversion-conversation'
+import { describeConversionChanges, summarizeAssistantTurn, type ConversionTurn } from '../../shared/conversion-conversation'
 import {
   deleteRepoWorkspace,
   discardStagedPackage,
+  setWorkspaceAlias,
   getRepoWorkspacePaths,
   listRepoWorkspaces,
   loadWorkspaceConversation,
@@ -590,20 +591,28 @@ export function registerIpcHandlers(
     return enrichScriptItem(meta, runner.listSessions())
   })
 
-  ipcMain.handle(IPC.REPO_OPEN_WORKSPACE, async (_event, taskId: unknown, target: unknown) => {
+  ipcMain.handle(IPC.REPO_OPEN_WORKSPACE, (_event, taskId: unknown, target: unknown) => {
     if (typeof taskId !== 'string' || !taskId.trim()) return false
     const paths = getRepoWorkspacePaths(taskId.trim())
     const kind = target === 'repo' || target === 'package' ? target : 'root'
     const dir =
       kind === 'repo' ? paths.repoPath : kind === 'package' ? paths.packageDir : paths.workspacePath
     if (!existsSync(dir)) return false
-    const result = await shell.openPath(dir)
-    return result === ''
+    // 在这次调用里等待系统打开文件夹时，Windows 会回头等界面，整个程序就卡住。
+    setImmediate(() => {
+      void shell.openPath(dir)
+    })
+    return true
   })
 
   ipcMain.handle(IPC.REPO_DELETE_WORKSPACE, (_event, taskId: unknown) => {
     if (typeof taskId !== 'string' || !taskId.trim()) return false
     return deleteRepoWorkspace(taskId.trim())
+  })
+
+  ipcMain.handle(IPC.REPO_SET_ALIAS, (_event, taskId: unknown, alias: unknown) => {
+    if (typeof taskId !== 'string' || !taskId.trim() || typeof alias !== 'string') return false
+    return setWorkspaceAlias(taskId.trim(), alias)
   })
 
   ipcMain.handle(IPC.REPO_CANCEL_LLM, (_event, taskId: unknown) => {
@@ -668,7 +677,6 @@ export function registerIpcHandlers(
         signal,
         onReasoning: (thinking) => {
           assistant.thinking = thinking
-          saveWorkspaceConversation(taskId, { turns: conversationTurns })
           if (!event.sender.isDestroyed()) {
             event.sender.send(IPC.EVENT_REPO_CONVERT_REASONING, { taskId, thinking })
           }
@@ -686,6 +694,11 @@ export function registerIpcHandlers(
       })
 
       assistant.status = 'complete'
+      assistant.changes = describeConversionChanges({
+        entry: result.plan.entry,
+        files: result.plan.files,
+        copies: result.plan.copies
+      })
       assistant.content = summarizeAssistantTurn({
         summary: result.plan.summary,
         files: [...result.plan.files.map((file) => file.path), ...result.plan.copies.map((copy) => copy.to)],

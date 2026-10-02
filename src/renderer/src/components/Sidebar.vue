@@ -284,11 +284,11 @@ onUnmounted(() => {
       <button
         type="button"
         class="w-full flex items-center justify-center gap-2 h-7 rounded-lg border sb-border text-[12px] sb-text-secondary hover:sb-text-primary transition-colors"
-        title="从 GitHub / Gitee 仓库导入并转换为脚本包"
+        title="拉取仓库并在工作区里转换成脚本"
         @click="emit('importFromRepo')"
       >
         <GitBranch class="w-3.5 h-3.5" :stroke-width="1.5" />
-        从仓库导入
+        仓库工作区
       </button>
       <div class="flex items-center justify-around gap-0.5 pt-0.5">
         <button

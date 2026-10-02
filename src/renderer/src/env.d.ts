@@ -229,6 +229,7 @@ export interface AutoforgeApi {
     importPackage: (taskId: string) => Promise<ScriptItem>
     openWorkspace: (taskId: string, target?: 'root' | 'repo' | 'package') => Promise<boolean>
     deleteWorkspace: (taskId: string) => Promise<boolean>
+    setAlias: (taskId: string, alias: string) => Promise<boolean>
     convertWithLlm: (
       request: import('../../shared/llm-types').LlmConvertRequest
     ) => Promise<import('../../shared/llm-types').LlmConversionResult>

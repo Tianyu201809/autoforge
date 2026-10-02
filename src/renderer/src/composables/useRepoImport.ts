@@ -12,6 +12,7 @@ import type {
 import type { ScriptItem } from '../../../shared/types/script'
 import { canSendConversionMessage, workspaceDeleteConfirm } from '../lib/repo-conversion-chat'
 import { askConfirm } from './useConfirmDialog'
+import { askPrompt } from './usePromptDialog'
 import { useToast } from './useToast'
 
 /** 1 地址 → 2 拉取 → 3 转换 → 4 导入 */
@@ -141,7 +142,11 @@ export function useRepoImport() {
 
   async function startFetch(): Promise<void> {
     if (!canSubmit.value) return
-    reset()
+    const previous = workspace.value
+    error.value = null
+    progress.value = null
+    conversionLogs.value = []
+    conversionResult.value = null
     busy.value = true
     try {
       const info = await window.autoforge.repo.fetch({
@@ -150,6 +155,8 @@ export function useRepoImport() {
         token: token.value.trim() || undefined
       })
       workspace.value = info
+      instruction.value = ''
+      allowBuildThisRun.value = false
       pushToast({
         type: 'success',
         title: '仓库已就绪',
@@ -158,6 +165,7 @@ export function useRepoImport() {
       await loadHistory()
       await loadLlmProfiles()
     } catch (err) {
+      workspace.value = previous
       error.value = describeError(err)
     } finally {
       busy.value = false
@@ -300,14 +308,34 @@ export function useRepoImport() {
     }
   }
 
-  async function copyPrompt(): Promise<void> {
-    const current = workspace.value
-    if (!current) return
-    try {
-      await navigator.clipboard.writeText(current.handoffPrompt)
-      pushToast({ type: 'success', title: '已复制', message: '交接提示词已复制到剪贴板' })
-    } catch {
-      pushToast({ type: 'error', title: '复制失败', message: '请手动选择文本复制' })
+  async function renameWorkspace(taskId: string): Promise<void> {
+    const fromHistory = history.value.find((item) => item.taskId === taskId)
+    const current = workspace.value?.taskId === taskId ? workspace.value : null
+    const repoName =
+      fromHistory?.repo ??
+      (current ? `${current.profile.ref.owner}/${current.profile.ref.repo}` : taskId)
+    const next = await askPrompt({
+      title: '设置别名',
+      message: `「${repoName}」在工作区里显示的名称。留空则恢复仓库名。`,
+      label: '别名',
+      defaultValue: fromHistory?.alias ?? current?.profile.alias ?? '',
+      placeholder: '例如：每日导出',
+      confirmLabel: '保存'
+    })
+    if (next == null) return
+    const ok = await window.autoforge.repo.setAlias(taskId, next)
+    if (!ok) {
+      pushToast({ type: 'error', title: '保存失败', message: '工作区不存在或无法写入别名' })
+      return
+    }
+    await loadHistory()
+    if (workspace.value?.taskId === taskId) {
+      try {
+        const info = await window.autoforge.repo.getWorkspace(taskId)
+        if (info) workspace.value = info
+      } catch {
+        /* 列表已更新，打开中的标题下次进入时会刷新 */
+      }
     }
   }
 
@@ -402,7 +430,7 @@ export function useRepoImport() {
     cancelLlmConversion,
     importPackage,
     openFolder,
-    copyPrompt,
+    renameWorkspace,
     deleteWorkspace
   }
 }
