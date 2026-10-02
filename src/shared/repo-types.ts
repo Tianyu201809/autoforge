@@ -7,13 +7,13 @@ import type { ConversionTurn } from './conversion-conversation'
  * 由 AI（外部 Agent 经 MCP，或应用内引擎）产出符合 Autoforge 脚本包规范的产物。
  */
 
-export type RepoProvider = 'github' | 'gitee'
+export type RepoProvider = 'github' | 'gitee' | 'local'
 
 /** 拉取仓库使用的传输方式 */
 export type RepoTransport = 'https' | 'ssh'
 
 /** 实际采用的拉取手段 */
-export type RepoFetchMethod = 'archive' | 'git'
+export type RepoFetchMethod = 'archive' | 'git' | 'local'
 
 /** 解析后的仓库定位信息 */
 export interface RepoRef {
@@ -82,6 +82,13 @@ export interface RepoProfile {
   topLevel: RepoProfileEntry[]
   /** 工作区显示名；为空时界面使用 owner/repo */
   alias?: string
+  /** 本地导入的来源。Git 拉取的画像没有这个字段。 */
+  localOrigin?: {
+    selectedPaths: string[]
+    /** 未压平时的根路径。压平时省略。 */
+    rootPath?: string
+    flattened: boolean
+  }
 }
 
 export type RepoConvertPhase =
