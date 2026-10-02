@@ -147,7 +147,13 @@ export function buildHandoffDocument(
     '',
     `- 主要语言：${profile.languages.slice(0, 3).map((l) => `${l.name}(${l.files} 文件)`).join('、') || '未知'}`,
     `- 规模：${profile.fileCount} 个文件 / ${formatBytes(profile.totalBytes)}`,
-    `- 拉取方式：${profile.fetchMethod === 'git' ? 'git clone（浅克隆）' : '归档 zip'}${
+    `- 拉取方式：${
+      profile.fetchMethod === 'git'
+        ? 'git clone（浅克隆）'
+        : profile.fetchMethod === 'local'
+          ? '本地目录'
+          : '归档 zip'
+    }${
       profile.commitSha ? ` · commit ${profile.commitSha.slice(0, 8)}` : ''
     }`,
     `- 许可证：${profile.license ?? '未发现'}`,
@@ -186,7 +192,7 @@ export function buildHandoffDocument(
     '',
     '- `direct`：入口本身接近脚本，直接改写为 `run(ctx)` 契约即可。',
     '- `wrappable`：写一个薄适配入口，调用其 CLI（子进程）或库 API（import），把结果通过 `ctx.log` / 返回值回传。',
-    '- `needs-build`：需要构建才能运行。优先寻找仓库中已提交的构建产物；否则在 `HANDOFF-NOTES.md` 里说明需要用户手动构建，并给出准确命令。',
+    '- `needs-build`：需要构建才能运行。用户已授权时，把仓库真实命令写入 buildCommands，构建成功后再复制产物。没有授权、也没有已提交产物时，在 `run(ctx)` 里执行构建并等待结束。不要把入口写成独立 CLI。',
     '- `unsupported`：不要强行生成脚本包。改为在 `HANDOFF-NOTES.md` 中说明原因，并给出替代建议（如改用 Docker、或包装其 CLI）。',
     '',
     '## 完成后的自检',

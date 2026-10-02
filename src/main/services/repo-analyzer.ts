@@ -366,7 +366,7 @@ function decideConvertibility(input: DecisionInput): { level: RepoConvertibility
   if (input.hasBuildScript) {
     return {
       level: 'needs-build',
-      reason: '源码需要构建（TypeScript 或打包器），Autoforge 没有 build 生命周期，需一并提交构建产物'
+      reason: '源码需要构建（TypeScript 或打包器）。转换已授权时用仓库自己的构建命令；否则在 run(ctx) 里构建并等待结束'
     }
   }
   if (input.entryCandidates.length === 0) {

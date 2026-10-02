@@ -37,6 +37,7 @@ description: 把 GitHub / Gitee 上的既有项目转换成一个可直接在 Au
 |---------------|------|------|
 | `archive` | GitHub 归档 zip | 无 `.git`，拿不到提交历史；`commitSha` 通常为 `null` |
 | `git` | `git clone --depth 1` | 有 `.git`，可用 `git log -1`、`git describe` 补充上下文；`commitSha` 有值 |
+| `local` | 用户拖入或选择的本机目录 | 无远程地址；按目录内容判断，不要假设存在 `.git` |
 
 `git` 方式克隆的是**浅克隆**（`--depth 1`），`git log` 只有一条记录，不要试图回溯历史。
 
@@ -50,16 +51,22 @@ Gitee 与 SSH 地址必然走 `git`（Gitee 已不提供公开归档下载）；
 |------|------|----------|
 | `direct` | 本身就是脚本 | 直接改写成 `run(ctx)` 契约 |
 | `wrappable` | 库 / CLI，需要适配 | 写薄适配入口调用其 CLI 或 API |
-| `needs-build` | 源码需先构建 | 先找已提交的构建产物；没有就如实告知用户，不要假装能跑。产物要**原样复制**进包目录（如 `dist/` → `vendor/dist/`），不要试图复述打包后的 bundle |
+| `needs-build` | 源码需先构建 | 用户已授权时，把仓库真实命令写入 `buildCommands`，转换器会在仓库目录先构建，再把产物**原样复制**进包（如 `dist/` → `vendor/dist/`）。没有授权、也没有已提交产物时，在 `run(ctx)` 里执行构建并等待结束。不要复述 bundle，也不要把入口改成独立 CLI |
 | `unsupported` | 形态不适合脚本化 | **不要硬造包**，说明原因并给替代建议 |
 
 `unsupported` 的典型形态，遇到就不要勉强：
 
-- 长期运行的 Web 服务 / 常驻进程（Express、Django、FastAPI 等）
+- 依赖外部数据库、消息队列、K8s，或必须多进程一起起的服务端整站（Express / Django / FastAPI 且拆不成一次任务或一个本地静态服务）
 - 纯 GUI 应用
-- 依赖外部数据库、消息队列、K8s 等基础设施
 - 只有原生二进制、且没有可用的源码构建路径
 - 主要语言不是 JavaScript / Python，且没有可调用的 CLI
+
+下面这些**可以转**，不要因为「会一直跑着」就判 unsupported：
+
+- 纯前端 SPA、静态站点
+- 只用 Node 内置 `http`（或等价的单进程静态服务）把构建产物提供出来的本地页面
+
+这类入口仍然是 `export async function run(ctx)`：从 `ctx.env` / `ctx.params` 读地址和端口，`ctx.log` 打出用户能打开的完整 URL（含 Vite `base` 这类前缀），然后**等待 `ctx.signal` abort** 再关端口。禁止写成 `require.main === module` 的独立脚本。
 
 **诚实优先。** 一个跑不起来的包比一个「明确说不能转」的结论更糟。
 
@@ -109,13 +116,46 @@ export async function run(ctx) {
 
 Python 同理，优先 `subprocess` 调 CLI，其次 `import`。
 
+**模式 C — 本地静态页 / 单进程 Web（用户要「打开就能用」时）**
+
+```javascript
+import { createServer } from 'node:http'
+import { join } from 'node:path'
+
+export async function run(ctx) {
+  const host = ctx.env.HOST || '127.0.0.1'
+  const port = Number(ctx.params.PORT || '3000')
+  const root = join(ctx.sdk.paths.scriptDir, 'vendor', 'dist')
+  const server = createServer((_req, res) => {
+    res.end('ok')
+  })
+  await new Promise((resolve, reject) => {
+    server.once('error', reject)
+    server.listen(port, host, () => resolve())
+  })
+  const url = `http://${host}:${port}/`
+  ctx.log('INFO', `已启动 ${url}`)
+  await new Promise((resolve) => {
+    if (ctx.signal.aborted) {
+      resolve()
+      return
+    }
+    ctx.signal.addEventListener('abort', () => resolve(), { once: true })
+  })
+  await new Promise((resolve) => server.close(() => resolve()))
+  return { url, outputDir: root }
+}
+```
+
+不要在这个文件里再写 `main()`、`require` 或 `module.exports`。页面的 public base 不是 `/` 时，URL 和静态路径都要带上那个前缀。
+
 ## 第 2 步：让包自包含
 
 Autoforge 导入脚本包时是**整目录复制**，所以：
 
 1. 把适配入口需要的仓库文件**复制**进 `.autoforge/package/`（通常放 `vendor/` 子目录）。
 2. 只复制真正会用到的文件，不要整仓拷贝。
-3. **绝对不要**把 `node_modules`、`.venv`、`.git`、`dist`、构建缓存复制进去 —— 依赖由 Autoforge 按清单安装。
+3. **绝对不要**把 `node_modules`、`.venv`、`.git`、构建缓存复制进去。依赖由 Autoforge 按清单安装。已经提交或刚刚构建出来的 `dist/`、`build/`、`out/` 要原样 `copy` 到 `vendor/`，不要让模型重写这些文件。
 4. 检查复制进来的代码有没有相对路径假设（`__dirname`、`import.meta.url`、`sys.path`），必要时修正。
 
 ## 第 3 步：写 `autoforge.json`
@@ -162,7 +202,7 @@ Autoforge 导入脚本包时是**整目录复制**，所以：
 导入前逐条确认：
 
 1. `autoforge.json` 是合法 JSON，`entry` 指向包目录内真实存在的文件。
-2. 入口导出了 `run(ctx)` / `main(ctx)` / `default`（Python 为 `def run(ctx)` / `async def run(ctx)` / `main(ctx)`）。
+2. 入口导出了 `run(ctx)`（JS 为 `export async function run(ctx)`，Python 为 `def run(ctx)` / `async def run(ctx)`）。`.mjs` 里不能出现 `require`、`module.exports`、`process.exit`。
 3. 包目录内不存在 `.git` / `node_modules` / `.venv`。
 4. 入口里所有路径都基于 `ctx.sdk.paths.scriptDir` 解析，没有硬编码的绝对路径。
 5. 需要联网 / 调用外部 CLI 的，在 `description` 或返回值里说明，便于用户理解风险。

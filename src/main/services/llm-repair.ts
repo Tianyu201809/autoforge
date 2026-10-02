@@ -20,6 +20,7 @@ import {
   ConversionPlanError,
   createDeltaReporter,
   normalizeSchemaFields,
+  ENTRY_RUNTIME_CONTRACT,
   parseFileContent
 } from './llm-converter'
 import type { createLlmClient } from './llm-client'
@@ -287,16 +288,19 @@ const REPAIR_FILE_SYSTEM_PROMPT = [
   '',
   '1. 只输出文件内容本身：不要解释、不要用 Markdown 代码块包裹、不要输出 JSON。',
   '2. 输出的是**整个文件**，不是补丁片段。',
-  '3. 入口必须保持 `run(ctx)` 契约。',
+  '3. 如果这个文件是入口，必须遵守下面的运行契约，不要改回独立 CLI 或 CommonJS。',
   '4. 不要引入新的未声明依赖；需要新依赖时应在计划阶段就写进 manifestPatch。',
-  '5. 不要写占位符、`TODO` 或省略号。'
+  '5. 不要写占位符、`TODO` 或省略号。',
+  '',
+  ENTRY_RUNTIME_CONTRACT
 ].join('\n')
 
 const REPAIR_SYSTEM_PROMPT = [
   '你是 Autoforge 脚本包的调试与修复专家。脚本在运行时失败了，你需要根据失败日志与当前代码给出最小改动的修复方案。',
   '',
-  'Autoforge 脚本包的结构：`autoforge.json`（清单）+ 入口文件（导出 `run(ctx)`）。',
-  'JavaScript 在 Node 主进程运行；Python 在子进程运行。`ctx.env` / `ctx.params` 都是字符串字典。',
+  'Autoforge 脚本包的结构：`autoforge.json`（清单）+ 入口文件。',
+  'JavaScript 入口是 ESM，由主进程 import 后调用 `run(ctx)`。Python 在子进程调用 `run(ctx)`。',
+  '`ctx.env` / `ctx.params` 都是字符串。常驻服务必须等待 `ctx.signal`，不能用 require 或 process.exit。',
   '',
   REPAIR_SKELETON_CONTRACT
 ].join('\n')

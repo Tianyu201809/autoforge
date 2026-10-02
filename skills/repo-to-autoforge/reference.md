@@ -24,14 +24,14 @@
 |------|------|----------|
 | `convertibility` | 启发式可转换性级别 | **必须自己复核**，不要盲信 |
 | `convertibilityReason` | 判定理由 | 用于向用户解释 |
-| `fetchMethod` | `archive`（GitHub 归档 zip）或 `git`（浅克隆） | 决定 `repo/` 里有没有 `.git` |
+| `fetchMethod` | `archive`（GitHub 归档 zip）、`git`（浅克隆）或 `local`（本机目录） | 决定 `repo/` 里有没有 `.git` |
 | `commitSha` | 仓库快照 commit；归档方式通常为 `null` | 引用来源时用 |
 | `languages` | 按字节排序的语言分布 | 决定选 Python 还是 JavaScript |
 | `entryCandidates` | 疑似入口文件 | 适配入口的调用目标 |
 | `runtimeDependencies` | 运行期依赖名（npm + pip 合并） | 筛选后写入 `dependencies` |
 | `manifests` | 依赖清单文件 | 进一步确认依赖来源 |
 | `hasBuildScript` | 是否需要构建 | 为 true 时重点找已提交的构建产物 |
-| `hasWebServer` | 是否识别到 Web 服务依赖 | 为 true 通常应判 `unsupported` |
+| `hasWebServer` | 是否识别到 Express / Django / FastAPI 一类服务端依赖 | 为 true 时先看能否收成一次任务或本地静态服务；整站依赖外部基础设施才判 `unsupported` |
 | `hasMonorepo` | 是否 monorepo | 需要先确定目标子包 |
 | `hasNativeBinary` | 是否含原生二进制 | 跨平台不可移植 |
 | `license` | 许可证 | 无许可证要提醒用户 |
@@ -40,7 +40,8 @@
 ## 可转换性判定规则
 
 ```
-识别到 Web 服务依赖                  → unsupported
+识别到必须依赖外部基础设施的 Web 服务 → unsupported
+纯前端 / 单进程本地静态服务           → 可按 run(ctx) 常驻转换
 无 JS/Python 源码 且 有原生二进制     → unsupported
 无 JS/Python 源码                    → unsupported
 monorepo / workspace                 → needs-build

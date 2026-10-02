@@ -37,7 +37,7 @@ export type RepoConvertibilityLevel =
   | 'wrappable'
   /** 源码需要先构建（TS / 打包器），Autoforge 无 build 生命周期 */
   | 'needs-build'
-  /** 形态不适合脚本化（长期运行的 Web 服务、纯原生程序等） */
+  /** 形态不适合脚本化（依赖外部基础设施的服务端整站、纯原生程序等） */
   | 'unsupported'
 
 export interface RepoProfileEntry {

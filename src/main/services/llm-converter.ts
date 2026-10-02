@@ -1,4 +1,4 @@
-import { existsSync, mkdirSync, readdirSync, rmSync, statSync, writeFileSync, copyFileSync } from 'node:fs'
+import { copyFileSync, existsSync, mkdirSync, readFileSync, readdirSync, rmSync, statSync, writeFileSync } from 'node:fs'
 import { basename, dirname, join, posix, relative, resolve, sep } from 'node:path'
 import { UTF8 } from '../../shared/encoding'
 import { MANIFEST_FILENAME, validateManifest, type ScriptManifest } from '../../shared/script-contract'
@@ -226,6 +226,38 @@ export function parsePlanSkeleton(raw: string): ConversionPlanSkeleton {
   return { ...metadata, files }
 }
 
+/**
+ * 入口文件能否被 Autoforge 直接加载。
+ * 生成阶段只看到很短的文件提示，模型容易写成独立 CLI；这里把跑不起来的形态挡在写盘之前。
+ */
+export function findEntryContractViolations(
+  filePath: string,
+  content: string,
+  entry: string,
+  language: string
+): string[] {
+  if (filePath !== entry) return []
+  const violations: string[] = []
+  if (language === 'javascript') {
+    const hasRun =
+      /export\s+async\s+function\s+run\s*\(/.test(content) ||
+      /export\s+function\s+run\s*\(/.test(content) ||
+      /export\s*\{[^}]*\brun\b[^}]*\}/.test(content)
+    if (!hasRun) {
+      violations.push('没有 export async function run(ctx)。不要改成 main()、default 或 CommonJS 导出')
+    }
+    if (/\brequire\s*(?:\.\s*main\b|\()|\bmodule\s*\.\s*exports\b|\bexports\s*\.\s*[A-Za-z_$]/.test(content)) {
+      violations.push('这是 ESM 入口，不能使用 require、require.main、module.exports 或 exports.xxx')
+    }
+    if (/\bprocess\s*\.\s*exit\s*\(/.test(content)) {
+      violations.push('不能 process.exit。失败请 throw new Error，停止请等待 ctx.signal')
+    }
+  } else if (language === 'python' && !/^\s*(?:async\s+)?def\s+run\s*\(/m.test(content)) {
+    violations.push('没有 def run(ctx) 或 async def run(ctx)')
+  }
+  return violations
+}
+
 /** 阶段二：把单个文件的纯文本输出规范化为文件内容 */
 export function parseFileContent(raw: string, expectedPath: string): string {
   const content = stripCodeFence(raw)
@@ -429,19 +461,41 @@ const SKELETON_CONTRACT = [
   '8. `generate` 的文件不要超过 12 个，尽量精简。'
 ].join('\n')
 
+/** 写入口文件时必须遵守的运行契约。修复流程复用同一段，避免两套提示词各说各话。 */
+export const ENTRY_RUNTIME_CONTRACT = [
+  'Autoforge 只会动态加载入口并调用 `run(ctx)`，不会执行 `main()`，也不会把文件当命令行程序启动。',
+  '',
+  'JavaScript 入口是 ESM（`.mjs`）：',
+  '- 必须写出 `export async function run(ctx) { ... }`，这是唯一入口。',
+  '- 禁止 `require()`、`require.main`、`module.exports`、`exports.xxx`、`process.exit()`、`if (require.main === module)`。',
+  '- 禁止再写一个独立的 `main()` 当作启动方式。业务逻辑都放进 `run(ctx)`。',
+  '',
+  'Python 入口必须写出 `def run(ctx):` 或 `async def run(ctx):`。',
+  '',
+  'ctx 只有这些字段，不要发明别的：',
+  '- `ctx.env.KEY`、`ctx.params.KEY`：都是字符串。清单里的 env 读 env，params 读 params。不要读 `ctx.config`、`ctx.options` 或 `process.argv`。',
+  '- `ctx.log("INFO" | "WARN" | "ERROR", message)`。',
+  '- `ctx.signal`：用户停止时 abort。本地 HTTP / 静态站点启动并打出 URL 后，必须一直等到 `ctx.signal` abort，关闭端口，再 return。不要听完端口就 return，否则界面会显示已结束、服务却无人停止。',
+  '- `ctx.sdk.paths.scriptDir`（Python 为 `ctx.sdk.paths.script_dir`）是包目录。所有路径从这里拼，禁止硬编码绝对路径，也不要依赖 `process.cwd()`。',
+  '',
+  '失败用 `throw new Error("...")`，不要吞掉错误，也不要 `process.exit`。',
+  '有文件产物时，返回值对象带 `outputDir` 绝对路径。常驻服务停止后返回 `{ url }`。'
+].join('\n')
+
 const FILE_SYSTEM_PROMPT = [
   '你是 Autoforge 脚本包代码生成器。用户会指定一个文件路径，你只需输出**该文件的完整内容**。',
   '',
   '规则：',
   '',
   '1. 只输出文件内容本身：不要解释、不要用 Markdown 代码块包裹、不要输出 JSON、不要重复文件路径。',
-  '2. 入口文件必须导出 `run(ctx)`：JavaScript 用 `export async function run(ctx) { ... }`，'
-    + 'Python 用 `def run(ctx):` 或 `async def run(ctx):`。',
-  '3. 所有文件路径必须基于 `ctx.sdk.paths.scriptDir`（JS）或 `ctx.sdk.paths.script_dir`（Python）解析，'
-    + '不要硬编码绝对路径。',
-  '4. 需要读取同包内的其他文件时，用相对当前文件的相对路径（JS 可用 `new URL(..., import.meta.url)`）。',
-  '5. 不要写占位符、`TODO`、`...` 或伪代码，必须是完整可运行的实现。',
-  '6. 日志用 `ctx.log("INFO", msg)`；有产物时在返回值里给出 `outputDir` 绝对路径。'
+  '2. 如果用户说明这个文件就是入口，必须遵守下面的运行契约。其他文件不要导出第二个 `run`。',
+  '3. 同包文件用相对路径。JS 用 `path.join(ctx.sdk.paths.scriptDir, ...)` 或 `new URL(..., import.meta.url)`。',
+  '   需要 `__dirname` 时，先 `path.dirname(fileURLToPath(import.meta.url))`，不要假设 CommonJS。',
+  '4. 构建产物应已由转换阶段的 buildCommands 生成并复制进包。只有产物确实不存在时，才在 `run(ctx)` 里执行构建并等待结束。',
+  '5. 本地静态站点要按仓库的 public base（例如 Vite `base: "/coord"`）给出用户能打开的完整 URL，并让静态路径对得上产物目录。',
+  '6. 不要写占位符、`TODO`、`...` 或伪代码，必须是完整可运行的实现。',
+  '',
+  ENTRY_RUNTIME_CONTRACT
 ].join('\n')
 
 export interface LlmConverterDeps {
@@ -781,30 +835,44 @@ export function createLlmConverter(deps: LlmConverterDeps): LlmConverter {
       const label = `正在生成 ${spec.path}（${index + 1}/${generateSpecs.length}）`
       report({ phase: 'generating', message: label })
       const startedAt = Date.now()
-      const result = await chatWithDigest(
-        (digest) => [
-          { role: 'system', content: FILE_SYSTEM_PROMPT },
-          {
-            role: 'user',
-            content: [
-              planContext,
-              `现在输出文件：${spec.path}`,
-              `用途：${spec.purpose}`,
-              historyText,
-              extraRequirement,
-              '',
-              digest
-            ]
-              .filter(Boolean)
-              .join('\n')
-          }
-        ],
-        FILE_DIGEST_BUDGETS,
-        true,
-        false,
-        { phase: 'generating', label, reasoningLabel: `文件 ${spec.path}` }
-      )
-      const content = parseFileContent(result.content, spec.path)
+      const isEntry = spec.path === skeleton.entry
+      let correction = ''
+      let content = ''
+      for (let attempt = 0; attempt < 2; attempt += 1) {
+        const result = await chatWithDigest(
+          (digest) => [
+            { role: 'system', content: FILE_SYSTEM_PROMPT },
+            {
+              role: 'user',
+              content: [
+                planContext,
+                `现在输出文件：${spec.path}`,
+                `用途：${spec.purpose}`,
+                isEntry ? '这个文件就是入口，必须能被 Autoforge 直接 import 并调用 run(ctx)。' : '',
+                correction ? `上次输出不能直接运行，请整文件重写并只修正这些问题：${correction}` : '',
+                historyText,
+                extraRequirement,
+                '',
+                digest
+              ]
+                .filter(Boolean)
+                .join('\n')
+            }
+          ],
+          FILE_DIGEST_BUDGETS,
+          true,
+          false,
+          { phase: 'generating', label, reasoningLabel: `文件 ${spec.path}` }
+        )
+        content = parseFileContent(result.content, spec.path)
+        const violations = findEntryContractViolations(spec.path, content, skeleton.entry, skeleton.language)
+        if (violations.length === 0) break
+        correction = violations.join('；')
+        log('WARN', `${spec.path} 不符合可运行入口契约，准备重写：${correction}`)
+        if (attempt === 1) {
+          throw new ConversionPlanError(`入口 ${spec.path} 仍不能直接运行：${correction}`)
+        }
+      }
       files.push({ path: spec.path, content })
       log(
         'INFO',
@@ -851,6 +919,15 @@ export function createLlmConverter(deps: LlmConverterDeps): LlmConverter {
       if (!existsSync(entryPath)) {
         throw new ConversionPlanError(`入口文件未生成：${plan.entry}（请重新转换）`)
       }
+      const entryViolations = findEntryContractViolations(
+        plan.entry,
+        readFileSync(entryPath, UTF8),
+        plan.entry,
+        plan.language
+      )
+      if (entryViolations.length > 0) {
+        throw new ConversionPlanError(`入口 ${plan.entry} 不能直接运行：${entryViolations.join('；')}`)
+      }
 
       promoteStagedPackage(stagingDir, packageDir)
       promoted = true
@@ -879,8 +956,10 @@ function buildSystemPrompt(skillMarkdown?: string): string {
   return [
     '你是 Autoforge 脚本包转换专家。你的任务是把一个既有仓库改造成符合 Autoforge 规范的脚本包。',
     '',
-    'Autoforge 脚本包最小结构：`autoforge.json`（清单）+ 入口文件（导出 run(ctx)）。',
-    '运行期只支持 JavaScript（主进程 import）与 Python（子进程），没有构建阶段。',
+    'Autoforge 脚本包最小结构：`autoforge.json`（清单）+ 入口文件。',
+    'JavaScript 入口由主进程按 ESM 动态 import，必须 `export async function run(ctx)`。Python 入口在子进程执行，必须 `def run(ctx)`。',
+    '转换阶段可以在用户授权后于仓库目录执行 `buildCommands`，再把产物复制进脚本包。运行阶段不会自动再构建一次。',
+    '本地静态站点或单进程 HTTP 服务可以转换：在 `run(ctx)` 里启动，打出 URL，并等待 `ctx.signal` 后再关闭。依赖数据库、消息队列或外部基础设施的整站不要硬转。',
     '',
     skillMarkdown?.trim() ? `# 转换技能说明\n\n${skillMarkdown.trim()}` : '',
     '',

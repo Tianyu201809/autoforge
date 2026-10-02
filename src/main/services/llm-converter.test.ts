@@ -14,6 +14,7 @@ import {
   isPromptLimitError,
   joinContinuation,
   parseConversionPlan,
+  findEntryContractViolations,
   parseFileContent,
   parsePlanSkeleton,
   resolvePackageFilePath,
@@ -172,6 +173,26 @@ test('parseFileContent 拒绝空内容', () => {
 
 test('parseFileContent 拒绝超限内容', () => {
   assert.throws(() => parseFileContent('x'.repeat(600 * 1024), 'big.js'), ConversionPlanError)
+})
+
+test('入口契约拒绝 CommonJS，并接受 ESM run', () => {
+  const broken = 'import { createServer } from "node:http"\nif (require.main === module) main()\nmodule.exports = {}\n'
+  const violations = findEntryContractViolations('index.mjs', broken, 'index.mjs', 'javascript')
+  assert.ok(violations.some((item) => item.includes('run(ctx)')))
+  assert.ok(violations.some((item) => item.includes('require')))
+  assert.deepEqual(
+    findEntryContractViolations(
+      'index.mjs',
+      'export async function run(ctx) { ctx.log("INFO", "ok") }',
+      'index.mjs',
+      'javascript'
+    ),
+    []
+  )
+  assert.deepEqual(
+    findEntryContractViolations('vendor/app.js', 'module.exports = {}', 'index.mjs', 'javascript'),
+    []
+  )
 })
 
 // ---------- 合并校验 ----------
@@ -475,6 +496,59 @@ test('convert 端到端：骨架 + 逐文件生成 + 复制构建产物', async 
     assert.equal(manifest.entry, 'index.mjs')
     assert.equal(manifest.name, 'demo-runner')
     assert.ok(logs.some((line) => line.includes('复制 dist/app.js')))
+  } finally {
+    rmSync(base, { recursive: true, force: true })
+  }
+})
+
+test('入口写成 CommonJS 时会要求重写一次', async () => {
+  const base = mkdtempSync(join(tmpdir(), 'autoforge-convert-retry-'))
+  const repoDir = join(base, 'repo')
+  const packageDir = join(base, 'package')
+  try {
+    mkdirSync(repoDir, { recursive: true })
+    let fileCalls = 0
+    const seen: string[] = []
+    const converter = makeConverter((input) => {
+      if (input.json) {
+        return {
+          finishReason: 'stop',
+          content: JSON.stringify({
+            summary: '静态服务',
+            language: 'javascript',
+            entry: 'index.mjs',
+            name: 'demo',
+            dependencies: {},
+            env: [],
+            params: [],
+            files: [{ path: 'index.mjs', purpose: '入口', source: 'generate' }],
+            buildCommands: []
+          })
+        }
+      }
+      seen.push(input.lastMessage)
+      fileCalls += 1
+      if (fileCalls === 1) {
+        return { finishReason: 'stop', content: 'if (require.main === module) main()\nmodule.exports = {}' }
+      }
+      return { finishReason: 'stop', content: 'export async function run(ctx) { return { ok: true } }' }
+    })
+
+    const result = await converter.convert({
+      taskId: 'retry',
+      repoDir,
+      packageDir,
+      repoProfile: REPO_PROFILE,
+      allowBuild: false
+    })
+
+    assert.equal(result.packageReady, true)
+    assert.equal(fileCalls, 2)
+    assert.match(seen[1] ?? '', /不能直接运行/)
+    assert.equal(
+      readFileSync(join(packageDir, 'index.mjs'), 'utf-8'),
+      'export async function run(ctx) { return { ok: true } }'
+    )
   } finally {
     rmSync(base, { recursive: true, force: true })
   }
