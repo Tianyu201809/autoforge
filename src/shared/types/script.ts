@@ -386,6 +386,8 @@ export interface DevGuideSkillCreateInfo {
   markdown: string
   /** 完整 SKILL.md 原文，供复制到 Cursor */
   raw: string
+  /** 可直接粘贴到任意 Agent 的开场提示词（含澄清阶段与契约） */
+  agentPrompt: string
   name: string
   description: string
   path: string

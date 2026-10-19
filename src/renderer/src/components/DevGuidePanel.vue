@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed, ref, watch } from 'vue'
-import { BookOpen, Check, Copy, Download, FileCode2, Sparkles, X } from 'lucide-vue-next'
+import { BookOpen, Check, Copy, Download, FileCode2, MessageSquareText, X } from 'lucide-vue-next'
 import type { BundledExampleInfo, DevGuideSkillCreateInfo } from '../../../shared/types/script'
 import { useToast } from '../composables/useToast'
 import AppFeatureModal from './AppFeatureModal.vue'
@@ -9,14 +9,30 @@ const props = defineProps<{ open: boolean }>()
 const emit = defineEmits<{ close: []; imported: [] }>()
 const { pushToast } = useToast()
 
-const activeTab = ref<'guide' | 'skillCreate' | 'examples'>('guide')
+const activeTab = ref<'agent' | 'guide' | 'examples'>('agent')
 const markdown = ref('')
 const skillCreate = ref<DevGuideSkillCreateInfo | null>(null)
 const examples = ref<BundledExampleInfo[]>([])
 const importingId = ref<string | null>(null)
 const loading = ref(false)
 const skillCopied = ref(false)
+const promptCopied = ref(false)
+const promptExpanded = ref(false)
 const loaded = ref(false)
+
+const forgeStages = [
+  { n: '01', title: '开场', detail: '把规则提示词贴进新对话，用自己的话描述要自动化的事' },
+  { n: '02', title: '澄清', detail: 'Agent 一次只问一组问题，把语言、字段和产物问明确' },
+  { n: '03', title: '确认', detail: '核对《脚本确认清单》，回复「确认」。在此之前不会写代码' },
+  { n: '04', title: '锻造', detail: '按 Autoforge 契约生成脚本包，并说明去哪个 Tab 填写、如何导入' }
+] as const
+
+const agentPrompt = computed(() => skillCreate.value?.agentPrompt?.trim() ?? '')
+const promptLineCount = computed(() => (agentPrompt.value ? agentPrompt.value.split('\n').length : 0))
+const promptPreview = computed(() => {
+  if (!agentPrompt.value || promptExpanded.value || promptLineCount.value <= 18) return agentPrompt.value
+  return agentPrompt.value.split('\n').slice(0, 18).join('\n')
+})
 
 async function loadContent(): Promise<void> {
   if (loaded.value) return
@@ -44,27 +60,44 @@ watch(
   { immediate: true }
 )
 
-async function copySkill(): Promise<void> {
-  const raw = skillCreate.value?.raw
-  if (!raw) {
-    pushToast({ type: 'error', title: '复制失败', message: 'Skill 内容为空' })
+async function copyText(text: string, onCopied: () => void, title: string, message: string): Promise<void> {
+  if (!text) {
+    pushToast({ type: 'error', title: '复制失败', message: '内容为空' })
     return
   }
   try {
-    await navigator.clipboard.writeText(raw)
-    skillCopied.value = true
-    pushToast({
-      type: 'success',
-      title: '已复制 Skill',
-      message: '可在 Cursor 中粘贴或保存为 SKILL.md',
-      duration: 2200
-    })
+    await navigator.clipboard.writeText(text)
+    onCopied()
+    pushToast({ type: 'success', title, message, duration: 2800 })
     window.setTimeout(() => {
       skillCopied.value = false
-    }, 2000)
+      promptCopied.value = false
+    }, 2200)
   } catch {
     pushToast({ type: 'error', title: '复制失败', message: '无法写入剪贴板' })
   }
+}
+
+async function copyPrompt(): Promise<void> {
+  await copyText(
+    agentPrompt.value,
+    () => {
+      promptCopied.value = true
+    },
+    '已复制规则提示词',
+    '粘贴到新的 Agent 对话，再用一句话说明要做的脚本'
+  )
+}
+
+async function copySkill(): Promise<void> {
+  await copyText(
+    skillCreate.value?.raw ?? '',
+    () => {
+      skillCopied.value = true
+    },
+    '已复制 Skill',
+    '保存为 .cursor/skills/autoforge-script-create/SKILL.md，并放上同目录的 reference.md'
+  )
 }
 
 const GUIDE_MARKDOWN_FILENAME = 'script-spec.md'
@@ -224,7 +257,7 @@ const guideHtml = computed(() => renderMarkdown(markdown.value))
         </div>
       <div>
         <h1 id="dev-guide-modal-title" class="text-[15px] font-semibold sb-text-primary tracking-tight">脚本开发指南</h1>
-        <p class="text-[11px] sb-text-muted mt-0.5">Autoforge 脚本包规范、API 说明与内置示例</p>
+        <p class="text-[11px] sb-text-muted mt-0.5">复制规则提示词，与 Agent 多轮澄清后再生成脚本</p>
       </div>
       </div>
       <button type="button" class="w-8 h-8 flex items-center justify-center rounded-md sb-text-muted hover:sb-text-secondary sb-bg-hover flex-shrink-0" title="关闭" @click="emit('close')">
@@ -236,20 +269,20 @@ const guideHtml = computed(() => renderMarkdown(markdown.value))
       <button
         type="button"
         class="flex items-center gap-1.5 px-3 py-2.5 text-[13px] transition-colors"
+        :class="activeTab === 'agent' ? 'font-medium sb-text-primary border-b-2 border-[var(--sb-text-primary)] -mb-px' : 'sb-text-muted hover:sb-text-secondary'"
+        @click="activeTab = 'agent'"
+      >
+        <MessageSquareText class="w-3.5 h-3.5" :stroke-width="1.5" />
+        交给 Agent
+      </button>
+      <button
+        type="button"
+        class="flex items-center gap-1.5 px-3 py-2.5 text-[13px] transition-colors"
         :class="activeTab === 'guide' ? 'font-medium sb-text-primary border-b-2 border-[var(--sb-text-primary)] -mb-px' : 'sb-text-muted hover:sb-text-secondary'"
         @click="activeTab = 'guide'"
       >
         <BookOpen class="w-3.5 h-3.5" :stroke-width="1.5" />
         开发规范
-      </button>
-      <button
-        type="button"
-        class="flex items-center gap-1.5 px-3 py-2.5 text-[13px] transition-colors"
-        :class="activeTab === 'skillCreate' ? 'font-medium sb-text-primary border-b-2 border-[var(--sb-text-primary)] -mb-px' : 'sb-text-muted hover:sb-text-secondary'"
-        @click="activeTab = 'skillCreate'"
-      >
-        <Sparkles class="w-3.5 h-3.5" :stroke-width="1.5" />
-        Skill
       </button>
       <button
         type="button"
@@ -267,10 +300,17 @@ const guideHtml = computed(() => renderMarkdown(markdown.value))
 
     <!-- 开发规范 -->
     <div v-else-if="activeTab === 'guide'" class="flex-1 flex flex-col min-h-0 overflow-hidden">
-      <div class="flex-shrink-0 flex items-center justify-end px-6 pt-4 pb-2">
+      <div class="flex-shrink-0 flex items-center justify-between gap-3 px-6 pt-4 pb-2">
         <button
           type="button"
-          class="flex items-center gap-1.5 h-8 px-3 rounded-lg border sb-border text-[12px] sb-text-secondary hover:sb-bg-hover transition-colors"
+          class="text-left text-[12px] sb-text-muted hover:sb-text-secondary transition-colors min-w-0"
+          @click="activeTab = 'agent'"
+        >
+          想直接开工？去「交给 Agent」复制规则提示词，先澄清再生成。
+        </button>
+        <button
+          type="button"
+          class="flex items-center gap-1.5 h-8 px-3 rounded-lg border sb-border text-[12px] sb-text-secondary hover:sb-bg-hover transition-colors flex-shrink-0"
           @click="downloadGuideMarkdown"
         >
           <Download class="w-3.5 h-3.5" :stroke-width="1.5" />
@@ -282,45 +322,81 @@ const guideHtml = computed(() => renderMarkdown(markdown.value))
       </div>
     </div>
 
-    <!-- autoforge-script-create Skill -->
-    <div v-else-if="activeTab === 'skillCreate'" class="flex-1 overflow-y-auto px-6 py-6">
-      <div
-        v-if="skillCreate"
-        class="dev-guide-skill-banner max-w-3xl rounded-xl border sb-border sb-bg-surface p-4"
-      >
-        <div class="flex items-start gap-3">
-          <div class="w-9 h-9 rounded-lg sb-bg-inset flex items-center justify-center flex-shrink-0">
-            <Sparkles class="w-4 h-4 text-[var(--sb-accent-solid)]" :stroke-width="1.5" />
+    <!-- 交给 Agent -->
+    <div v-else-if="activeTab === 'agent'" class="flex-1 overflow-y-auto px-6 py-5 min-h-0">
+      <div class="dev-guide-forge">
+        <aside class="dev-guide-rail" aria-label="对话阶段">
+          <p class="dev-guide-kicker">Session</p>
+          <ol class="dev-guide-stages">
+            <li v-for="stage in forgeStages" :key="stage.n" class="dev-guide-stage">
+              <span class="dev-guide-stage-no">{{ stage.n }}</span>
+              <div>
+                <p class="dev-guide-stage-title">{{ stage.title }}</p>
+                <p class="dev-guide-stage-detail">{{ stage.detail }}</p>
+              </div>
+            </li>
+          </ol>
+          <div class="dev-guide-transcript" aria-hidden="true">
+            <p class="dev-guide-kicker">一轮会这样走</p>
+            <p><span>你</span>把订单表按日期拆开，结果要能在界面里打开。</p>
+            <p><span>Agent</span>先定三件：语言用 Python 还是 JavaScript？文件是每次上传，还是固定目录？要不要产物目录？</p>
+            <p><span>Agent</span>《脚本确认清单》已齐。回复「确认」后我才写代码。</p>
           </div>
-          <div class="min-w-0 flex-1">
-            <div class="flex items-center gap-2 flex-wrap">
-              <span class="text-[10px] font-semibold uppercase tracking-wider text-[var(--sb-accent-solid)]">
-                Cursor Agent Skill
-              </span>
-              <code class="text-[11px] sb-text-muted font-mono">{{ skillCreate.name }}</code>
+        </aside>
+
+        <section class="dev-guide-brief min-w-0">
+          <p class="dev-guide-kicker">Forge brief</p>
+          <h2 class="dev-guide-brief-title">先问清楚，再锻造</h2>
+          <p class="dev-guide-brief-lead">
+            复制规则提示词，整段发给 Agent。它会先澄清目录名、语言、env / params 和产物，你回复「确认」之后，才按 Autoforge 规范写脚本包。
+          </p>
+
+          <div class="flex flex-wrap items-center gap-2 mt-4">
+            <button
+              type="button"
+              class="sb-btn-accent flex items-center gap-1.5 h-9 px-3.5 rounded-lg text-[13px] font-medium disabled:opacity-50"
+              :disabled="!agentPrompt"
+              @click="copyPrompt"
+            >
+              <Check v-if="promptCopied" class="w-3.5 h-3.5" :stroke-width="1.5" />
+              <Copy v-else class="w-3.5 h-3.5" :stroke-width="1.5" />
+              {{ promptCopied ? '已复制，去新对话粘贴' : '复制规则提示词' }}
+            </button>
+            <button
+              type="button"
+              class="flex items-center gap-1.5 h-9 px-3 rounded-lg border sb-border text-[12px] sb-text-secondary hover:sb-bg-hover transition-colors disabled:opacity-50"
+              :disabled="!skillCreate?.raw"
+              @click="copySkill"
+            >
+              <Check v-if="skillCopied" class="w-3.5 h-3.5 text-emerald-400" :stroke-width="1.5" />
+              <Copy v-else class="w-3.5 h-3.5" :stroke-width="1.5" />
+              {{ skillCopied ? '已复制 Skill' : '复制 Skill' }}
+            </button>
+          </div>
+          <p class="text-[11px] sb-text-faint mt-2 leading-relaxed">
+            提示词自包含，贴到任意 Agent 即可开聊。Skill 给 Cursor 安装用：放到
+            <code class="dev-guide-inline-code">.cursor/skills/autoforge-script-create/</code>
+            ，并带上同目录的 <code class="dev-guide-inline-code">reference.md</code>。对话里输入
+            <code class="dev-guide-inline-code">/autoforge-script-create</code>
+            也会走同一套澄清。
+          </p>
+
+          <div class="dev-guide-ticket mt-4">
+            <div class="dev-guide-ticket-head">
+              <span class="dev-guide-stamp">确认前不写代码</span>
+              <span class="dev-guide-ticket-meta">agent-prompt · {{ promptLineCount }} 行</span>
+              <button
+                v-if="promptLineCount > 18"
+                type="button"
+                class="dev-guide-ticket-toggle"
+                @click="promptExpanded = !promptExpanded"
+              >
+                {{ promptExpanded ? '收起' : '展开全文' }}
+              </button>
             </div>
-            <p v-if="skillCreate.description" class="text-[12px] sb-text-muted mt-1.5 leading-relaxed">
-              {{ skillCreate.description }}
-            </p>
-            <p class="text-[11px] sb-text-faint mt-2 font-mono">{{ skillCreate.path }}</p>
-            <p class="text-[11px] sb-text-muted mt-2 leading-relaxed">
-              在 Cursor 中通过
-              <code class="dev-guide-inline-code">@{{ skillCreate.path }}</code>
-              引用，或在对话中输入
-              <code class="dev-guide-inline-code">/autoforge-script-create</code>
-              触发脚本创建流程。
-            </p>
+            <pre class="dev-guide-ticket-body" :class="{ 'is-expanded': promptExpanded }">{{ promptPreview || '未找到 agent-prompt.md' }}</pre>
           </div>
-          <button
-            type="button"
-            class="flex items-center gap-1.5 h-8 px-3 rounded-lg border sb-border text-[12px] sb-text-secondary hover:sb-bg-hover transition-colors flex-shrink-0"
-            @click="copySkill"
-          >
-            <Check v-if="skillCopied" class="w-3.5 h-3.5 text-emerald-400" :stroke-width="1.5" />
-            <Copy v-else class="w-3.5 h-3.5" :stroke-width="1.5" />
-            {{ skillCopied ? '已复制' : '复制 Skill' }}
-          </button>
-        </div>
+        </section>
       </div>
     </div>
 
@@ -463,12 +539,199 @@ const guideHtml = computed(() => renderMarkdown(markdown.value))
   height: 0.25rem;
 }
 
-.dev-guide-skill-banner .dev-guide-inline-code {
-  font-family: ui-monospace, monospace;
+.dev-guide-inline-code {
+  font-family: "JetBrains Mono", ui-monospace, monospace;
   font-size: 0.6875rem;
   background: var(--sb-bg-inset);
   padding: 0.1rem 0.35rem;
   border-radius: 0.25rem;
   color: var(--sb-text-secondary);
+}
+
+.dev-guide-forge {
+  display: grid;
+  grid-template-columns: 232px minmax(0, 1fr);
+  gap: 1.5rem;
+  align-items: start;
+}
+
+.dev-guide-kicker {
+  font-family: "JetBrains Mono", ui-monospace, monospace;
+  font-size: 10px;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: var(--sb-text-faint);
+}
+
+.dev-guide-stages {
+  list-style: none;
+  margin: 0.75rem 0 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.85rem;
+}
+
+.dev-guide-stage {
+  display: grid;
+  grid-template-columns: 1.6rem minmax(0, 1fr);
+  gap: 0.55rem;
+  position: relative;
+}
+
+.dev-guide-stage:not(:last-child)::before {
+  content: "";
+  position: absolute;
+  left: 0.72rem;
+  top: 1.15rem;
+  bottom: -0.85rem;
+  width: 1px;
+  background: color-mix(in srgb, var(--sb-accent-solid) 35%, var(--sb-border-subtle));
+}
+
+.dev-guide-stage-no {
+  font-family: Syne, ui-sans-serif, system-ui, sans-serif;
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--sb-accent-solid);
+  padding-top: 0.1rem;
+}
+
+.dev-guide-stage-title {
+  font-family: Syne, ui-sans-serif, system-ui, sans-serif;
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--sb-text-primary);
+  line-height: 1.2;
+}
+
+.dev-guide-stage-detail {
+  margin-top: 0.2rem;
+  font-size: 11px;
+  line-height: 1.45;
+  color: var(--sb-text-muted);
+}
+
+.dev-guide-transcript {
+  margin-top: 1.25rem;
+  padding-top: 0.9rem;
+  border-top: 1px dashed var(--sb-border-subtle);
+  display: flex;
+  flex-direction: column;
+  gap: 0.65rem;
+}
+
+.dev-guide-transcript p {
+  font-size: 11px;
+  line-height: 1.5;
+  color: var(--sb-text-muted);
+}
+
+.dev-guide-transcript span {
+  display: block;
+  font-family: "JetBrains Mono", ui-monospace, monospace;
+  font-size: 9px;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--sb-text-faint);
+  margin-bottom: 0.15rem;
+}
+
+.dev-guide-brief-title {
+  font-family: Syne, ui-sans-serif, system-ui, sans-serif;
+  font-size: 1.65rem;
+  font-weight: 700;
+  letter-spacing: -0.03em;
+  line-height: 1.05;
+  color: var(--sb-text-primary);
+  margin-top: 0.35rem;
+}
+
+.dev-guide-brief-lead {
+  margin-top: 0.65rem;
+  max-width: 38rem;
+  font-size: 13px;
+  line-height: 1.6;
+  color: var(--sb-text-muted);
+}
+
+.dev-guide-ticket {
+  position: relative;
+  border: 1px solid var(--sb-border-subtle);
+  border-radius: 0.85rem;
+  background: var(--sb-bg-log, rgba(0, 0, 0, 0.28));
+  overflow: hidden;
+}
+
+.dev-guide-ticket::before {
+  content: "";
+  position: absolute;
+  left: 0;
+  top: 0;
+  bottom: 0;
+  width: 14px;
+  background: radial-gradient(circle at 0 11px, var(--sb-bg-panel) 6px, transparent 7px) 0 0 / 14px 22px repeat-y;
+  pointer-events: none;
+}
+
+.dev-guide-ticket-head {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  padding: 0.55rem 0.8rem 0.55rem 1.15rem;
+  border-bottom: 1px dashed var(--sb-border-subtle);
+}
+
+.dev-guide-stamp {
+  font-family: Syne, ui-sans-serif, system-ui, sans-serif;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  color: var(--sb-accent-solid);
+  border: 1.5px solid color-mix(in srgb, var(--sb-accent-solid) 70%, transparent);
+  border-radius: 999px;
+  padding: 0.1rem 0.45rem;
+  transform: rotate(-2deg);
+}
+
+.dev-guide-ticket-meta,
+.dev-guide-ticket-toggle {
+  font-family: "JetBrains Mono", ui-monospace, monospace;
+  font-size: 10px;
+  color: var(--sb-text-faint);
+}
+
+.dev-guide-ticket-toggle {
+  margin-left: auto;
+  color: var(--sb-text-secondary);
+}
+
+.dev-guide-ticket-toggle:hover {
+  color: var(--sb-text-primary);
+}
+
+.dev-guide-ticket-body {
+  margin: 0;
+  padding: 0.85rem 0.9rem 1rem 1.35rem;
+  max-height: 280px;
+  overflow: auto;
+  white-space: pre-wrap;
+  word-break: break-word;
+  font-family: "JetBrains Mono", ui-monospace, monospace;
+  font-size: 11px;
+  line-height: 1.55;
+  color: var(--sb-text-secondary);
+  user-select: text;
+  cursor: text;
+}
+
+.dev-guide-ticket-body.is-expanded {
+  max-height: min(52vh, 520px);
+}
+
+@media (max-width: 860px) {
+  .dev-guide-forge {
+    grid-template-columns: 1fr;
+  }
 }
 </style>

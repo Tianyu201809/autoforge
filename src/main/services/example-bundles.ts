@@ -59,7 +59,8 @@ export function importBundledExample(exampleId: string): ScriptMeta {
   return scriptWorkspace.importFromDirectory(example.sourcePath)
 }
 
-const SKILL_CREATE_REL_PATH = 'skills/autoforge-script-create/SKILL.md'
+const SKILL_CREATE_DIR = 'autoforge-script-create'
+const SKILL_CREATE_REL_PATH = `skills/${SKILL_CREATE_DIR}/SKILL.md`
 
 /** 解析 Cursor skill 文件顶部的 YAML frontmatter */
 function parseYamlFrontmatter(markdown: string): { meta: Record<string, string>; body: string } {
@@ -78,15 +79,16 @@ function parseYamlFrontmatter(markdown: string): { meta: Record<string, string>;
   return { meta, body: markdown.slice(end + 3).replace(/^\s*\n/, '') }
 }
 
-function readSkillCreateFile(): string | null {
-  const candidates = app.isPackaged
-    ? [join(process.resourcesPath, 'skills', 'autoforge-script-create', 'SKILL.md')]
-    : [join(app.getAppPath(), 'skills', 'autoforge-script-create', 'SKILL.md')]
+function skillCreateDirCandidates(): string[] {
+  return app.isPackaged
+    ? [join(process.resourcesPath, 'skills', SKILL_CREATE_DIR)]
+    : [join(app.getAppPath(), 'skills', SKILL_CREATE_DIR)]
+}
 
-  for (const path of candidates) {
-    if (existsSync(path)) {
-      return readFileSync(path, UTF8)
-    }
+function readSkillCreateFile(name: string): string | null {
+  for (const dir of skillCreateDirCandidates()) {
+    const path = join(dir, name)
+    if (existsSync(path)) return readFileSync(path, UTF8)
   }
   return null
 }
@@ -105,13 +107,15 @@ export function readDevGuideMarkdown(): string {
   return '# 脚本开发规范\n\n未找到 script-spec.md'
 }
 
-/** 读取 autoforge-script-create Skill（skills/autoforge-script-create/SKILL.md） */
+/** 读取 autoforge-script-create Skill 与可粘贴的规则提示词 */
 export function readDevGuideSkillCreateInfo(): DevGuideSkillCreateInfo {
-  const raw = readSkillCreateFile()
+  const raw = readSkillCreateFile('SKILL.md')
+  const agentPrompt = readSkillCreateFile('agent-prompt.md')?.trim() ?? ''
   if (!raw) {
     return {
       markdown: '# 脚本创建 Skill\n\n未找到 autoforge-script-create/SKILL.md',
       raw: '',
+      agentPrompt,
       name: 'autoforge-script-create',
       description: '',
       path: SKILL_CREATE_REL_PATH
@@ -121,6 +125,7 @@ export function readDevGuideSkillCreateInfo(): DevGuideSkillCreateInfo {
   return {
     markdown: body,
     raw,
+    agentPrompt,
     name: meta.name ?? 'autoforge-script-create',
     description: meta.description ?? '',
     path: SKILL_CREATE_REL_PATH
