@@ -21,7 +21,9 @@ describe('脚本开发指南 · 交给 Agent', () => {
     assert.match(panelSource, /复制规则提示词/)
     assert.match(panelSource, /确认前不写代码/)
     assert.match(panelSource, /agentPrompt/)
-    assert.match(panelSource, /《脚本确认清单》/)
+    assert.match(panelSource, /下载 Skill/)
+    assert.match(panelSource, /autoforge-script-create\.zip/)
+    assert.doesNotMatch(panelSource, /复制 Skill/)
   })
 
   it('提示词要求多轮澄清，并在确认后才允许写脚本', () => {

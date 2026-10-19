@@ -384,8 +384,10 @@ export interface BundledExampleInfo {
 export interface DevGuideSkillCreateInfo {
   /** 展示用正文（已去掉 YAML frontmatter） */
   markdown: string
-  /** 完整 SKILL.md 原文，供复制到 Cursor */
+  /** 完整 SKILL.md 原文 */
   raw: string
+  /** 同目录 reference.md，与 SKILL.md 一起下载 */
+  reference: string
   /** 可直接粘贴到任意 Agent 的开场提示词（含澄清阶段与契约） */
   agentPrompt: string
   name: string

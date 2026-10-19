@@ -3,6 +3,7 @@ import { computed, ref, watch } from 'vue'
 import { BookOpen, Check, Copy, Download, FileCode2, MessageSquareText, X } from 'lucide-vue-next'
 import type { BundledExampleInfo, DevGuideSkillCreateInfo } from '../../../shared/types/script'
 import { useToast } from '../composables/useToast'
+import { createStoreZip } from '../lib/store-zip'
 import AppFeatureModal from './AppFeatureModal.vue'
 
 const props = defineProps<{ open: boolean }>()
@@ -15,7 +16,6 @@ const skillCreate = ref<DevGuideSkillCreateInfo | null>(null)
 const examples = ref<BundledExampleInfo[]>([])
 const importingId = ref<string | null>(null)
 const loading = ref(false)
-const skillCopied = ref(false)
 const promptCopied = ref(false)
 const promptExpanded = ref(false)
 const loaded = ref(false)
@@ -70,7 +70,6 @@ async function copyText(text: string, onCopied: () => void, title: string, messa
     onCopied()
     pushToast({ type: 'success', title, message, duration: 2800 })
     window.setTimeout(() => {
-      skillCopied.value = false
       promptCopied.value = false
     }, 2200)
   } catch {
@@ -89,15 +88,40 @@ async function copyPrompt(): Promise<void> {
   )
 }
 
-async function copySkill(): Promise<void> {
-  await copyText(
-    skillCreate.value?.raw ?? '',
-    () => {
-      skillCopied.value = true
-    },
-    '已复制 Skill',
-    '保存为 .cursor/skills/autoforge-script-create/SKILL.md，并放上同目录的 reference.md'
-  )
+const SKILL_ZIP_FILENAME = 'autoforge-script-create.zip'
+
+function downloadBlob(blob: Blob, filename: string): void {
+  const url = URL.createObjectURL(blob)
+  const link = document.createElement('a')
+  link.href = url
+  link.download = filename
+  link.click()
+  URL.revokeObjectURL(url)
+}
+
+function downloadSkill(): void {
+  const skill = skillCreate.value
+  const raw = skill?.raw?.trim() ?? ''
+  if (!raw) {
+    pushToast({ type: 'error', title: '下载失败', message: 'Skill 内容为空' })
+    return
+  }
+
+  const folder = 'autoforge-script-create'
+  const files = [
+    { name: `${folder}/SKILL.md`, content: skill?.raw ?? '' },
+    { name: `${folder}/reference.md`, content: skill?.reference ?? '' },
+    { name: `${folder}/agent-prompt.md`, content: skill?.agentPrompt ?? '' }
+  ].filter((file) => file.content.trim())
+
+  const zip = createStoreZip(files)
+  downloadBlob(new Blob([zip], { type: 'application/zip' }), SKILL_ZIP_FILENAME)
+  pushToast({
+    type: 'success',
+    title: '已开始下载',
+    message: '解压到 .cursor/skills/ 即可安装',
+    duration: 2800
+  })
 }
 
 const GUIDE_MARKDOWN_FILENAME = 'script-spec.md'
@@ -110,12 +134,7 @@ function downloadGuideMarkdown(): void {
   }
 
   const blob = new Blob([content], { type: 'text/markdown;charset=utf-8' })
-  const url = URL.createObjectURL(blob)
-  const link = document.createElement('a')
-  link.href = url
-  link.download = GUIDE_MARKDOWN_FILENAME
-  link.click()
-  URL.revokeObjectURL(url)
+  downloadBlob(blob, GUIDE_MARKDOWN_FILENAME)
 
   pushToast({
     type: 'success',
@@ -366,17 +385,16 @@ const guideHtml = computed(() => renderMarkdown(markdown.value))
               type="button"
               class="flex items-center gap-1.5 h-9 px-3 rounded-lg border sb-border text-[12px] sb-text-secondary hover:sb-bg-hover transition-colors disabled:opacity-50"
               :disabled="!skillCreate?.raw"
-              @click="copySkill"
+              @click="downloadSkill"
             >
-              <Check v-if="skillCopied" class="w-3.5 h-3.5 text-emerald-400" :stroke-width="1.5" />
-              <Copy v-else class="w-3.5 h-3.5" :stroke-width="1.5" />
-              {{ skillCopied ? '已复制 Skill' : '复制 Skill' }}
+              <Download class="w-3.5 h-3.5" :stroke-width="1.5" />
+              下载 Skill
             </button>
           </div>
           <p class="text-[11px] sb-text-faint mt-2 leading-relaxed">
-            提示词自包含，贴到任意 Agent 即可开聊。Skill 给 Cursor 安装用：放到
-            <code class="dev-guide-inline-code">.cursor/skills/autoforge-script-create/</code>
-            ，并带上同目录的 <code class="dev-guide-inline-code">reference.md</code>。对话里输入
+            提示词自包含，贴到任意 Agent 即可开聊。下载的 zip 解压到
+            <code class="dev-guide-inline-code">.cursor/skills/</code>
+            后，对话里输入
             <code class="dev-guide-inline-code">/autoforge-script-create</code>
             也会走同一套澄清。
           </p>

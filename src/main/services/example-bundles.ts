@@ -110,11 +110,13 @@ export function readDevGuideMarkdown(): string {
 /** 读取 autoforge-script-create Skill 与可粘贴的规则提示词 */
 export function readDevGuideSkillCreateInfo(): DevGuideSkillCreateInfo {
   const raw = readSkillCreateFile('SKILL.md')
+  const reference = readSkillCreateFile('reference.md') ?? ''
   const agentPrompt = readSkillCreateFile('agent-prompt.md')?.trim() ?? ''
   if (!raw) {
     return {
       markdown: '# 脚本创建 Skill\n\n未找到 autoforge-script-create/SKILL.md',
       raw: '',
+      reference,
       agentPrompt,
       name: 'autoforge-script-create',
       description: '',
@@ -125,6 +127,7 @@ export function readDevGuideSkillCreateInfo(): DevGuideSkillCreateInfo {
   return {
     markdown: body,
     raw,
+    reference,
     agentPrompt,
     name: meta.name ?? 'autoforge-script-create',
     description: meta.description ?? '',
