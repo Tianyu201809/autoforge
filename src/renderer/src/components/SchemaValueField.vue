@@ -212,17 +212,17 @@ function onNumberCommit(event: FocusEvent): void {
         {{ opt.label }}
       </label>
     </div>
-    <label
-      v-else-if="def.type === 'boolean'"
-      class="mt-1.5 flex items-center gap-2 text-[13px] sb-text-secondary cursor-pointer"
-    >
+    <label v-else-if="def.type === 'boolean'" class="schema-switch mt-1.5">
       <input
         type="checkbox"
+        role="switch"
         :checked="modelValue === 'true'"
-        class="accent-[var(--sb-accent)]"
+        :aria-checked="modelValue === 'true'"
+        :aria-label="`${def.label}：${modelValue === 'true' ? '已开启' : '已关闭'}`"
         @change="setBoolean(($event.target as HTMLInputElement).checked)"
       />
-      {{ modelValue === 'true' ? '已开启' : '已关闭' }}
+      <span class="schema-switch__track" aria-hidden="true"><span class="schema-switch__thumb" /></span>
+      <span class="text-[13px] sb-text-secondary">{{ modelValue === 'true' ? '已开启' : '已关闭' }}</span>
     </label>
     <div v-else-if="def.type === 'number' && numberSlider" class="mt-1 flex items-center gap-3">
       <input
@@ -279,3 +279,54 @@ function onNumberCommit(event: FocusEvent): void {
     <p v-if="showKey" class="mt-0.5 text-[10px] sb-text-faint font-mono">{{ def.key }}</p>
   </div>
 </template>
+
+<style scoped>
+.schema-switch {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  cursor: pointer;
+}
+
+.schema-switch input {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  margin: 0;
+  opacity: 0;
+}
+
+.schema-switch input:focus-visible + .schema-switch__track {
+  outline: 2px solid color-mix(in srgb, var(--sb-accent-solid) 62%, transparent);
+  outline-offset: 3px;
+}
+
+.schema-switch__track {
+  display: inline-flex;
+  align-items: center;
+  width: 2.7rem;
+  height: 1.55rem;
+  padding: 0.18rem;
+  border-radius: 999px;
+  background: var(--sb-border);
+  transition: background 0.18s ease;
+}
+
+.schema-switch input:checked + .schema-switch__track {
+  background: var(--sb-accent-solid);
+}
+
+.schema-switch__thumb {
+  width: 1.18rem;
+  height: 1.18rem;
+  border-radius: 50%;
+  background: var(--sb-accent-text);
+  box-shadow: 0 2px 5px rgb(0 0 0 / 18%);
+  transition: transform 0.18s ease;
+}
+
+.schema-switch input:checked + .schema-switch__track .schema-switch__thumb {
+  transform: translateX(1.15rem);
+}
+</style>
