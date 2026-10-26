@@ -48,7 +48,7 @@ Agent 会先多轮澄清，给你一份《脚本确认清单》。你回复「�
 5. **配置归属**（禁止混用）：
    - 换环境才变（URL、账号、Token）→ `env`，平台在 **配置** Tab
    - 每次运行才变（单号、日期、本次文件）→ `params`，平台在 **运行参数** Tab
-6. **每个字段**：`key`、`label`、`type`、是否必填、`options`、`default`。`type` 只能是 `text`、`textarea`、`number`、`select`、`radio`、`checkbox`、`boolean`、`attachment`
+6. **每个字段**：`key`、`label`、`type`、是否必填、`options`、`default`。`type` 只能是 `text`、`textarea`、`number`、`select`、`radio`、`checkbox`、`boolean`、`attachment`。`number` 需要调整柄时加 `ui: "slider"`，并给出数字 `min`、`max`、`step`
 7. **浏览器**：是否调用 `launch()`。验证码或 2FA 必须有头（`headless: false`）
 8. **依赖**：npm 或 pip 的包名和版本
 9. **产物**：要不要在界面出现「产物目录」。要的话，返回值必须带本机绝对路径 `outputDir`

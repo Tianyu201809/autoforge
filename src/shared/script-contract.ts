@@ -1,5 +1,6 @@
 /** Autoforge 脚本包规范 — autoforge.json 字段定义 */
 
+import { parseNumberSlider, type NumberSliderDeclaration } from './number-slider'
 import type { ScriptLanguage } from './script-language'
 
 export const AUTOFORGE_MANIFEST_VERSION = '1.0'
@@ -45,7 +46,7 @@ export type ScriptIcon =
   | 'shopping-cart'
   | 'package'
 
-export interface EnvVarDefinition {
+export interface EnvVarDefinition extends NumberSliderDeclaration {
   /** 环境变量名，合并后通过 ctx.env[key] 注入 */
   key: string
   /** UI 展示标签 */
@@ -87,7 +88,7 @@ export interface ParamOption {
 }
 
 /** 运行业务参数 schema — 与 env 区分：params 用于每次运行的业务输入，不绑定环境 Profile */
-export interface ParamDefinition {
+export interface ParamDefinition extends NumberSliderDeclaration {
   key: string
   label: string
   description?: string
@@ -310,6 +311,13 @@ function normalizeParamDefault(raw: unknown, type: ParamValueType): string | und
 
 function normalizeSchemaField(item: Record<string, unknown>): EnvVarDefinition {
   const type = normalizeParamType(item.type)
+  const slider = parseNumberSlider({
+    type,
+    ui: item.ui,
+    min: item.min,
+    max: item.max,
+    step: item.step
+  })
   return {
     key: String(item.key ?? ''),
     label: String(item.label ?? item.key ?? ''),
@@ -318,7 +326,8 @@ function normalizeSchemaField(item: Record<string, unknown>): EnvVarDefinition {
     secret: item.secret === true,
     type,
     options: normalizeParamOptions(item.options),
-    default: normalizeParamDefault(item.default, type)
+    default: normalizeParamDefault(item.default, type),
+    ...(slider ?? {})
   }
 }
 

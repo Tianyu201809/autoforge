@@ -63,7 +63,7 @@ my-script/
 |------|-----|------------|--------|
 | `text`（默认） | 单行 | 字符串 | 直接用。仅此类型支持 `secret: true` |
 | `textarea` | 多行 | 字符串 | 直接用 |
-| `number` | 数字 | 数字字符串 | `Number(raw)` / `int(raw or 0)` |
+| `number` | 数字框；`ui: "slider"` 时为滑块加数字框 | 数字字符串 | `Number(raw)` / `int(raw or 0)`。滑块需 `min`、`max`、`step` |
 | `select` / `radio` | 下拉 / 单选 | 选项 value | 直接用。必须有 `options` |
 | `checkbox` | 多选 | JSON 数组字符串 | `JSON.parse` / `json.loads`。必须有 `options` |
 | `boolean` | 开关 | `"true"` / `"false"` | `raw === "true"` |

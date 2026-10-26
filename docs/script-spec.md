@@ -176,6 +176,8 @@ Autoforge 将脚本输入分为两个维度，**不要在脚本中混用**：
 | `type` | 见下表 | 值类型，默认 `text` |
 | `options` | `(string \| {label,value})[]` | `select` / `radio` / `checkbox` 的候选项 |
 | `default` | string | 默认值（见各类型说明） |
+| `ui` | `"slider"` | 仅 `number`。与数字框一起显示调整柄 |
+| `min` / `max` / `step` | number | 调整柄的最小值、最大值、步进。规则与运行参数相同 |
 
 **支持的 `type`（与 `params` 一致）：**
 
@@ -183,7 +185,7 @@ Autoforge 将脚本输入分为两个维度，**不要在脚本中混用**：
 |--------|---------|----------------------|------|
 | `text`（默认） | 单行文本框 | 普通字符串 | 支持 `secret` 掩码 |
 | `textarea` | 多行文本框 | 普通字符串 | |
-| `number` | 数字输入框 | 数字字符串 | 脚本内用 `Number()` 转换 |
+| `number` | 数字输入框，或调整柄 + 数字框 | 数字字符串 | 脚本内用 `Number()` 转换。`ui: "slider"` 时需 `min`、`max`、`step` |
 | `select` | 下拉单选 | 选项 `value` 字符串 | 需 `options` |
 | `radio` | 单选按钮组 | 选项 `value` 字符串 | 需 `options` |
 | `checkbox` | 多选框组 | **JSON 数组字符串** | 需 `options`，默认 `[]` |
@@ -242,6 +244,10 @@ Autoforge 将脚本输入分为两个维度，**不要在脚本中混用**：
 | `type` | 见下表 | 参数类型，默认 `text` |
 | `options` | `(string \| {label,value})[]` | `select` / `radio` / `checkbox` 的候选项 |
 | `default` | string | 默认值（见各类型说明） |
+| `ui` | `"slider"` | 仅 `number`。与数字框一起显示调整柄 |
+| `min` | number | 调整柄最小值 |
+| `max` | number | 调整柄最大值 |
+| `step` | number | 调整柄步进，必须大于 0 |
 
 **支持的 `type`：**
 
@@ -249,12 +255,14 @@ Autoforge 将脚本输入分为两个维度，**不要在脚本中混用**：
 |--------|---------|------------------------|------|
 | `text`（默认） | 单行文本框 | 普通字符串 | 支持 `secret` 掩码 |
 | `textarea` | 多行文本框 | 普通字符串 | |
-| `number` | 数字输入框 | 数字字符串 | 脚本内用 `Number()` 转换 |
+| `number` | 数字输入框，或调整柄 + 数字框 | 数字字符串 | 脚本内用 `Number()` 转换。`ui: "slider"` 时需 `min`、`max`、`step` |
 | `select` | 下拉单选 | 选项 `value` 字符串 | 需 `options` |
 | `radio` | 单选按钮组 | 选项 `value` 字符串 | 需 `options` |
 | `checkbox` | 多选框组 | **JSON 数组字符串** | 需 `options`，默认 `[]` |
 | `boolean` | 开关 | `"true"` / `"false"` | 默认 `"false"` |
 | `attachment` | 文件上传 + 附件列表 | **JSON 数组字符串** | 默认 `[]` |
+
+`type: "number"` 且 `ui: "slider"` 时，表单同一行显示滑块和数字框，改的是同一个数字字符串。拖动滑块会立刻把值限制在 `min` 与 `max` 之间，并按从 `min` 起算的 `step` 对齐。数字框在输入过程中保留原文，失焦后再做同样的限制和对齐。留空则保持空字符串，滑块停在 `min`，不会因此写入。`min`、`max`、`step` 必须是有限数字，`step` 大于 0，且 `min` 不大于 `max`；否则忽略 `ui`，仍显示普通数字框。运行时不因为超出范围而拒绝该值。环境变量使用同一套规则。
 
 ```json
 {
@@ -270,6 +278,16 @@ Autoforge 将脚本输入分为两个维度，**不要在脚本中混用**：
       "label": "试运行",
       "type": "boolean",
       "default": "false"
+    },
+    {
+      "key": "QUALITY",
+      "label": "质量",
+      "type": "number",
+      "ui": "slider",
+      "min": 0,
+      "max": 100,
+      "step": 1,
+      "default": "80"
     },
     {
       "key": "EXPORT_FORMAT",

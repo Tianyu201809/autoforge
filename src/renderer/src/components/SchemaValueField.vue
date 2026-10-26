@@ -2,11 +2,18 @@
 import { computed, ref } from 'vue'
 import { Eye, EyeOff, X } from 'lucide-vue-next'
 import type { ParamOption, ParamValueType } from '../../../shared/script-contract'
+import {
+  commitNumberInput,
+  commitSliderValue,
+  parseNumberSlider,
+  sliderThumbValue,
+  type NumberSliderDeclaration
+} from '../../../shared/number-slider'
 import { parseParamAttachments } from '../../../shared/param-attachments'
 import { parseCheckboxValue, toggleCheckboxValue } from '../../../shared/param-choices'
 import ParamAttachmentField from './ParamAttachmentField.vue'
 
-export interface SchemaFieldDef {
+export interface SchemaFieldDef extends NumberSliderDeclaration {
   key: string
   label: string
   description?: string
@@ -80,6 +87,42 @@ function handleClear(): void {
 }
 
 const attachmentKey = computed(() => props.attachmentStorageKey ?? props.def.key)
+const numberSlider = computed(() =>
+  parseNumberSlider({
+    type: props.def.type,
+    ui: props.def.ui,
+    min: props.def.min,
+    max: props.def.max,
+    step: props.def.step
+  })
+)
+const numberPlaceholder = computed(() =>
+  props.def.default ? `默认: ${props.def.default}` : props.def.required ? '必填' : '可选'
+)
+const sliderThumb = computed(() =>
+  numberSlider.value ? sliderThumbValue(props.modelValue, numberSlider.value) : 0
+)
+let sliderCommitPending = false
+
+function onSliderInput(event: Event): void {
+  if (!numberSlider.value) return
+  sliderCommitPending = true
+  updateValue(commitSliderValue((event.target as HTMLInputElement).value, numberSlider.value))
+  setTimeout(() => {
+    sliderCommitPending = false
+  }, 0)
+}
+
+function onNumberDraft(event: Event): void {
+  updateValue((event.target as HTMLInputElement).value)
+}
+
+function onNumberCommit(event: FocusEvent): void {
+  if (!numberSlider.value || sliderCommitPending) return
+  const next = event.relatedTarget
+  if (next instanceof HTMLElement && next.dataset.schemaSlider === 'true') return
+  updateValue(commitNumberInput((event.target as HTMLInputElement).value, numberSlider.value))
+}
 </script>
 
 <template>
@@ -181,12 +224,34 @@ const attachmentKey = computed(() => props.attachmentStorageKey ?? props.def.key
       />
       {{ modelValue === 'true' ? '已开启' : '已关闭' }}
     </label>
+    <div v-else-if="def.type === 'number' && numberSlider" class="mt-1 flex items-center gap-3">
+      <input
+        :value="sliderThumb"
+        type="range"
+        class="h-8 min-w-0 flex-1 cursor-pointer accent-[var(--sb-accent-solid)]"
+        :min="numberSlider.min"
+        :max="numberSlider.max"
+        :step="numberSlider.step"
+        :aria-label="def.label"
+        data-schema-slider="true"
+        @input="onSliderInput"
+      />
+      <input
+        :value="modelValue"
+        type="number"
+        class="h-8 w-24 shrink-0 px-3 rounded-lg sb-bg-input border sb-border text-[13px] outline-none focus:sb-input"
+        :placeholder="numberPlaceholder"
+        :aria-label="def.label"
+        @input="onNumberDraft"
+        @blur="onNumberCommit"
+      />
+    </div>
     <input
       v-else-if="def.type === 'number'"
       :value="modelValue"
       type="number"
       class="mt-1 w-full h-8 px-3 rounded-lg sb-bg-input border sb-border text-[13px] outline-none focus:sb-input"
-      :placeholder="def.default ? `默认: ${def.default}` : def.required ? '必填' : '可选'"
+      :placeholder="numberPlaceholder"
       @input="updateValue(($event.target as HTMLInputElement).value)"
     />
     <div v-else class="relative mt-1">

@@ -48,7 +48,7 @@ Task Progress:
 | 取消 | 长任务是否检查中止信号 | 否则用户点停止后脚本仍继续 |
 | 说明 | 是否写包根 `README.md` | 对应脚本详情「说明」Tab |
 
-`type` 只能是 `text`、`textarea`、`number`、`select`、`radio`、`checkbox`、`boolean`、`attachment`。`select` / `radio` / `checkbox` 必须有 `options`。
+`type` 只能是 `text`、`textarea`、`number`、`select`、`radio`、`checkbox`、`boolean`、`attachment`。`select` / `radio` / `checkbox` 必须有 `options`。`number` 需要调整柄时加 `ui: "slider"`，并给出数字 `min`、`max`、`step`。
 
 ### 2 · 确认清单
 
