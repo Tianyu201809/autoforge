@@ -219,10 +219,13 @@ export async function installScriptFromHubZip(input: {
   }
 
   if (input.scriptName || input.hubScriptId) {
+    const loggedUrl = new URL(url)
+    loggedUrl.search = ''
+    loggedUrl.hash = ''
     console.info('[hub-install]', {
       scriptName: input.scriptName,
       hubScriptId,
-      zipUrl: url
+      zipUrl: loggedUrl.toString()
     })
   }
 
