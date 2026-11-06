@@ -157,6 +157,7 @@ export interface AutoforgeApi {
   }
   env: {
     list: () => Promise<EnvironmentProfile[]>
+    encryptionAvailable: () => Promise<boolean>
     create: (profile: Omit<EnvironmentProfile, 'id'>) => Promise<EnvironmentProfile>
     update: (id: string, patch: Partial<EnvironmentProfile>) => Promise<EnvironmentProfile | null>
     delete: (id: string) => Promise<boolean>

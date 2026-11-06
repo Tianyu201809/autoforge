@@ -55,6 +55,8 @@ export const IPC = {
 
   ENV_LIST: 'env:list',
 
+  ENV_ENCRYPTION_AVAILABLE: 'env:encryption-available',
+
   ENV_CREATE: 'env:create',
 
   ENV_UPDATE: 'env:update',

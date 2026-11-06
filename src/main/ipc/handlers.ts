@@ -416,6 +416,7 @@ export function registerIpcHandlers(
   })
 
   ipcMain.handle(IPC.ENV_LIST, () => scriptStore.getEnvironments())
+  ipcMain.handle(IPC.ENV_ENCRYPTION_AVAILABLE, () => scriptStore.environmentEncryptionAvailable())
 
   ipcMain.handle(IPC.ENV_CREATE, (_event, profile: Omit<EnvironmentProfile, 'id'>) => {
     return scriptStore.addEnvironment(profile)

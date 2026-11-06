@@ -193,6 +193,7 @@ const autoforge = {
   },
   env: {
     list: (): Promise<EnvironmentProfile[]> => ipcRenderer.invoke(IPC.ENV_LIST),
+    encryptionAvailable: (): Promise<boolean> => ipcRenderer.invoke(IPC.ENV_ENCRYPTION_AVAILABLE),
     create: (profile: Omit<EnvironmentProfile, 'id'>): Promise<EnvironmentProfile> =>
       ipcRenderer.invoke(IPC.ENV_CREATE, profile),
     update: (id: string, patch: Partial<EnvironmentProfile>): Promise<EnvironmentProfile | null> =>

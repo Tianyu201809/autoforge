@@ -10,6 +10,7 @@ import SkinPicker from './SkinPicker.vue'
 import ShortcutRecorder from './ShortcutRecorder.vue'
 import AppFeatureModal from './AppFeatureModal.vue'
 import { askConfirm } from '../composables/useConfirmDialog'
+import { environmentEncryptionNotice, environmentReadable } from '../lib/environment-encryption-status'
 import { useToast } from '../composables/useToast'
 
 const { pushToast } = useToast()
@@ -79,6 +80,7 @@ const mcpConfigTarget = ref<McpConfigTarget>('codex')
 const mcpRotated = ref(false)
 
 const environments = ref<EnvironmentProfile[]>([])
+const encryptionAvailable = ref(true)
 const editingEnv = ref<EnvironmentProfile | null>(null)
 const envVarKey = ref('')
 const envVarValue = ref('')
@@ -180,6 +182,7 @@ async function initializeSettings(): Promise<void> {
     pythonStatus.value = await window.autoforge.system.pythonDetect()
     await loadGlobalPythonDeps()
     environments.value = await window.autoforge.env.list()
+    encryptionAvailable.value = await window.autoforge.env.encryptionAvailable()
     editingEnv.value = environments.value.find((e) => e.isDefault) ?? environments.value[0] ?? null
     savedEnvSnapshot = editingEnv.value ? environmentSnapshot(editingEnv.value) : ''
 
@@ -402,7 +405,7 @@ function selectEnv(id: string): void {
 
 async function saveEnvironmentNow(): Promise<void> {
   const current = editingEnv.value
-  if (!current || !initialized.value || hydrating) return
+  if (!current || !initialized.value || hydrating || !environmentReadable(current)) return
   if (envSaveInFlight) {
     envSaveQueued = true
     return
@@ -509,14 +512,14 @@ async function deleteEnv(id: string): Promise<void> {
 }
 
 function addEnvVar(): void {
-  if (!editingEnv.value || !envVarKey.value.trim()) return
+  if (!editingEnv.value || !environmentReadable(editingEnv.value) || !envVarKey.value.trim()) return
   editingEnv.value.variables[envVarKey.value.trim()] = envVarValue.value
   envVarKey.value = ''
   envVarValue.value = ''
 }
 
 function removeEnvVar(key: string): void {
-  if (!editingEnv.value) return
+  if (!editingEnv.value || !environmentReadable(editingEnv.value)) return
   delete editingEnv.value.variables[key]
 }
 
@@ -1043,7 +1046,11 @@ async function removeGlobalPythonDep(name: string): Promise<void> {
 
                   <div>
                     <label class="text-[12px] sb-text-muted">环境变量</label>
-                    <div class="mt-2 space-y-1.5">
+                    <p v-if="environmentEncryptionNotice(encryptionAvailable)" class="mt-1 text-[12px] text-amber-600">
+                      {{ environmentEncryptionNotice(encryptionAvailable) }}
+                    </p>
+                    <p v-if="editingEnv && !environmentReadable(editingEnv)" class="mt-2 text-[12px] text-rose-500">此环境的变量无法读取</p>
+                    <div v-if="environmentReadable(editingEnv)" class="mt-2 space-y-1.5">
                       <div v-for="(val, key) in editingEnv.variables" :key="key" class="flex items-center gap-2">
                         <span class="text-[12px] font-mono sb-text-muted flex-1 truncate">{{ key }}</span>
                         <span class="text-[12px] sb-text-faint flex-1 truncate">{{ val ? '••••' : '(空)' }}</span>
@@ -1053,9 +1060,9 @@ async function removeGlobalPythonDep(name: string): Promise<void> {
                       </div>
                     </div>
                     <div class="mt-2 flex gap-2">
-                      <input v-model="envVarKey" placeholder="KEY" class="flex-1 h-8 px-3 rounded-lg sb-input border text-[12px] font-mono outline-none" />
-                      <input v-model="envVarValue" placeholder="VALUE" class="flex-1 h-8 px-3 rounded-lg sb-input border text-[12px] outline-none" />
-                      <button type="button" class="h-8 px-3 rounded-lg sb-bg-inset sb-text-secondary text-[12px]" @click="addEnvVar">添加</button>
+                      <input v-model="envVarKey" placeholder="KEY" class="flex-1 h-8 px-3 rounded-lg sb-input border text-[12px] font-mono outline-none" :disabled="!environmentReadable(editingEnv)" />
+                      <input v-model="envVarValue" placeholder="VALUE" class="flex-1 h-8 px-3 rounded-lg sb-input border text-[12px] outline-none" :disabled="!environmentReadable(editingEnv)" />
+                      <button type="button" class="h-8 px-3 rounded-lg sb-bg-inset sb-text-secondary text-[12px]" :disabled="!environmentReadable(editingEnv)" @click="addEnvVar">添加</button>
                     </div>
                   </div>
 

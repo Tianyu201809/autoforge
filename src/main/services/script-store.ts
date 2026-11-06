@@ -179,6 +179,10 @@ export class ScriptStore {
     return this.ensureInitialized().environments.listAll()
   }
 
+  environmentEncryptionAvailable(): boolean {
+    return defaultEnvCipher().isAvailable()
+  }
+
   getEnvironment(id: string): EnvironmentProfile | undefined {
     return this.ensureInitialized().environments.getById(id)
   }
