@@ -22,6 +22,14 @@ export default defineConfig(({ mode }) => {
         alias: {
           '@shared': resolve('src/shared')
         }
+      },
+      build: {
+        rollupOptions: {
+          input: {
+            index: resolve('src/main/index.ts'),
+            'script-host': resolve('src/main/services/script-host.ts')
+          }
+        }
       }
     },
     preload: {
