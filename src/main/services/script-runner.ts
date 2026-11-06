@@ -54,7 +54,12 @@ export interface ScriptHostHandle {
 type LaunchScriptHost = (hostFile: string) => ScriptHostHandle | Promise<ScriptHostHandle>
 
 const HOST_GRACE_MS = 1000
-const BROWSER_CLOSED_MESSAGE = '浏览器已关闭'
+
+function readBrowserClose(message: { type: 'browser'; pid: number }): 'unexpected' | 'intentional' | undefined {
+  const closed = (message as { closed?: unknown }).closed
+  if (closed === 'unexpected' || closed === 'intentional') return closed
+  return undefined
+}
 const EMPTY_BROWSER_PLAN_ERROR =
   '未找到可用浏览器。请安装 Google Chrome、Microsoft Edge 或 Mozilla Firefox，或运行 npm run install:browsers 安装内置 Chromium。'
 
@@ -843,16 +848,12 @@ export class ScriptRunnerService {
         this.handleScriptControl(active.session, { kind: 'progress', ...parsed.progress })
         break
       case 'browser':
-        active.browserPids = [...(active.browserPids ?? []), parsed.pid]
+        this.handleBrowserMessage(active, parsed)
         break
       case 'result':
         this.completeSession(sessionId, parsed.value)
         break
       case 'error':
-        if (parsed.message === BROWSER_CLOSED_MESSAGE) {
-          this.handleBrowserClosed(sessionId)
-          break
-        }
         this.pushLog(sessionId, 'ERROR', parsed.message)
         this.failSession(sessionId, parsed.message)
         break
@@ -872,21 +873,34 @@ export class ScriptRunnerService {
     this.killBrowserPids(active.browserPids)
   }
 
-  /** 没有浏览器窗口时收回宿主；已经打开的窗口留在成功或脚本错误之后。 */
+  /** 没有仍打开的浏览器窗口时收回宿主。 */
   private releaseScriptHost(active: ActiveSession): void {
     if (active.browserPids?.length) return
     this.killHostProcess(active)
   }
 
-  private handleBrowserClosed(sessionId: string): void {
-    const active = this.sessions.get(sessionId)
-    if (!active) return
-    if (active.session.status === 'running') {
-      this.pushLog(sessionId, 'ERROR', BROWSER_CLOSED_MESSAGE)
-      this.stop(sessionId)
+  private handleBrowserMessage(
+    active: ActiveSession,
+    message: { type: 'browser'; pid: number }
+  ): void {
+    const closed = readBrowserClose(message)
+    if (closed === 'unexpected' && active.session.status === 'running') {
+      this.forgetBrowserPid(active, message.pid)
+      this.stop(active.session.id)
       return
     }
-    this.killHostProcess(active)
+    if (closed === 'unexpected' || closed === 'intentional') {
+      this.forgetBrowserPid(active, message.pid)
+      if (active.session.status !== 'running') this.releaseScriptHost(active)
+      return
+    }
+    if (!(active.browserPids ?? []).includes(message.pid)) {
+      active.browserPids = [...(active.browserPids ?? []), message.pid]
+    }
+  }
+
+  private forgetBrowserPid(active: ActiveSession, pid: number): void {
+    active.browserPids = (active.browserPids ?? []).filter((item) => item !== pid)
   }
 
   private killHostProcess(active: ActiveSession): void {

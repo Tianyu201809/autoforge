@@ -218,7 +218,7 @@ test('javascript sessions start, finish, and stop through the host process', asy
     finishedHost.emit({ type: 'result', value: 2 })
     await waitFor(() => runner.getSession(closedAfterSuccess.id)?.status === 'success')
     assert.equal(finishedHost.killed, false)
-    finishedHost.emit({ type: 'error', message: '浏览器已关闭' })
+    finishedHost.emit({ type: 'browser', pid: keptBrowserPid, closed: 'unexpected' })
     assert.equal(finishedHost.killed, true)
     assert.deepEqual(killedPids, [])
     assert.equal(runner.getSession(closedAfterSuccess.id)?.status, 'success')
@@ -227,17 +227,32 @@ test('javascript sessions start, finish, and stop through the host process', asy
     await waitFor(() => hosts.length === 6 && hosts[5].messages.length > 0)
     const failedHost = hosts[5]
     failedHost.emit({ type: 'browser', pid: keptBrowserPid })
-    failedHost.emit({ type: 'error', message: '脚本出错' })
+    failedHost.emit({ type: 'error', message: '浏览器已关闭' })
     await waitFor(() => runner.getSession(failedWithBrowser.id)?.status === 'error')
     assert.equal(failedHost.killed, false)
     assert.deepEqual(killedPids, [])
+    assert.equal(runner.getSession(failedWithBrowser.id)?.status, 'error')
+
+    const closedThenDone = await runner.start(script.id)
+    await waitFor(() => hosts.length === 7 && hosts[6].messages.length > 0)
+    const intentionalHost = hosts[6]
+    intentionalHost.emit({ type: 'browser', pid: keptBrowserPid })
+    intentionalHost.emit({ type: 'browser', pid: keptBrowserPid, closed: 'intentional' })
+    assert.equal(runner.getSession(closedThenDone.id)?.status, 'running')
+    intentionalHost.emit({ type: 'result', value: 3 })
+    await waitFor(() => runner.getSession(closedThenDone.id)?.status === 'success')
+    assert.equal(intentionalHost.killed, true)
+    assert.deepEqual(killedPids, [])
 
     const disconnected = await runner.start(script.id)
-    await waitFor(() => hosts.length === 7 && hosts[6].messages.length > 0)
-    const disconnectHost = hosts[6]
-    disconnectHost.emit({ type: 'error', message: '浏览器已关闭' })
+    await waitFor(() => hosts.length === 8 && hosts[7].messages.length > 0)
+    const disconnectHost = hosts[7]
+    disconnectHost.emit({ type: 'browser', pid: keptBrowserPid })
+    disconnectHost.emit({ type: 'browser', pid: keptBrowserPid, closed: 'unexpected' })
     await waitFor(() => runner.getSession(disconnected.id)?.status === 'stopped')
-    assert.notDeepEqual(runner.getSession(disconnected.id)?.result, { error: '浏览器已关闭' })
+    assert.equal(disconnectHost.killed, false)
+    await waitFor(() => disconnectHost.killed, 3000)
+    assert.deepEqual(killedPids, [])
     assert.equal(runner.getSession(disconnected.id)?.status, 'stopped')
   } finally {
     process.kill = restoreKill
@@ -251,8 +266,8 @@ test('javascript sessions start, finish, and stop through the host process', asy
   logBus.on('log', onLog)
   try {
     const timed = await runner.start(script.id)
-    await waitFor(() => hosts.length === 8 && hosts[7].messages.length > 0)
-    const timeoutHost = hosts[7]
+    await waitFor(() => hosts.length === 9 && hosts[8].messages.length > 0)
+    const timeoutHost = hosts[8]
     await waitFor(() => runner.getSession(timed.id)?.status === 'error', 5000)
     assert.equal(logs.includes('运行超时（1 秒），已自动停止'), true)
     assert.equal(timeoutHost.killed, false)
@@ -264,46 +279,74 @@ test('javascript sessions start, finish, and stop through the host process', asy
   }
 })
 
-test('unexpected browser disconnect posts 浏览器已关闭', async () => {
+test('browser disconnect posts closed on the browser message', async () => {
   const { EventEmitter } = await import('node:events')
   const { runHostMessage } = await import('./script-host')
-  const posted: unknown[] = []
-  const browser = new EventEmitter() as EventEmitter & {
+  const start = {
+    type: 'start' as const,
+    entryPath: 'entry.js',
+    sessionId: 's',
+    scriptId: 'script',
+    env: {},
+    params: {},
+    paths: { userData: 'user', scriptDir: 'dir' }
+  }
+
+  const unexpected = new EventEmitter() as EventEmitter & {
     process: () => { pid: number }
     close: () => Promise<void>
   }
-  browser.process = () => ({ pid: 7 })
-  browser.close = async () => {
-    browser.emit('disconnected')
+  unexpected.process = () => ({ pid: 7 })
+  unexpected.close = async () => {
+    unexpected.emit('disconnected')
   }
-  await runHostMessage(
-    {
-      type: 'start',
-      entryPath: 'entry.js',
-      sessionId: 's',
-      scriptId: 'script',
-      env: {},
-      params: {},
+  const unexpectedPosted: unknown[] = []
+  await runHostMessage(start, {
+    importModule: async () => ({
+      run: async (ctx: { sdk: { browser: { launch: () => Promise<unknown> } } }) => {
+        await ctx.sdk.browser.launch()
+        unexpected.emit('disconnected')
+        await new Promise((resolve) => setImmediate(resolve))
+        return 1
+      }
+    }),
+    post: (message) => unexpectedPosted.push(message),
+    signal: new AbortController().signal,
+    createSdk: () => ({
+      browser: { launch: async () => unexpected },
       paths: { userData: 'user', scriptDir: 'dir' }
-    },
-    {
-      importModule: async () => ({
-        run: async (ctx: { sdk: { browser: { launch: () => Promise<unknown> } } }) => {
-          await ctx.sdk.browser.launch()
-          browser.emit('disconnected')
-          await new Promise((resolve) => setImmediate(resolve))
-          return 1
-        }
-      }),
-      post: (message) => posted.push(message),
-      signal: new AbortController().signal,
-      createSdk: () => ({
-        browser: { launch: async () => browser },
-        paths: { userData: 'user', scriptDir: 'dir' }
-      })
-    }
-  )
-  assert.deepEqual(posted[0], { type: 'browser', pid: 7 })
-  assert.deepEqual(posted[1], { type: 'error', message: '浏览器已关闭' })
-  assert.deepEqual(posted[2], { type: 'result', value: 1 })
+    })
+  })
+  assert.deepEqual(unexpectedPosted[0], { type: 'browser', pid: 7 })
+  assert.deepEqual(unexpectedPosted[1], { type: 'browser', pid: 7, closed: 'unexpected' })
+  assert.deepEqual(unexpectedPosted[2], { type: 'result', value: 1 })
+
+  const intentional = new EventEmitter() as EventEmitter & {
+    process: () => { pid: number }
+    close: () => Promise<void>
+  }
+  intentional.process = () => ({ pid: 8 })
+  intentional.close = async () => {
+    intentional.emit('disconnected')
+  }
+  const intentionalPosted: unknown[] = []
+  await runHostMessage(start, {
+    importModule: async () => ({
+      run: async (ctx: { sdk: { browser: { launch: () => Promise<{ close: () => Promise<void> }> } } }) => {
+        const browser = await ctx.sdk.browser.launch()
+        await browser.close()
+        await new Promise((resolve) => setImmediate(resolve))
+        return 1
+      }
+    }),
+    post: (message) => intentionalPosted.push(message),
+    signal: new AbortController().signal,
+    createSdk: () => ({
+      browser: { launch: async () => intentional },
+      paths: { userData: 'user', scriptDir: 'dir' }
+    })
+  })
+  assert.deepEqual(intentionalPosted[0], { type: 'browser', pid: 8 })
+  assert.deepEqual(intentionalPosted[1], { type: 'browser', pid: 8, closed: 'intentional' })
+  assert.deepEqual(intentionalPosted[2], { type: 'result', value: 1 })
 })
