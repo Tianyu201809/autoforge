@@ -6,7 +6,7 @@ import {
   type ScriptRunContext,
   type ScriptStageInput
 } from '../../shared/script-contract'
-import type { HostInbound, HostOutbound } from '../../shared/script-host-protocol'
+import type { HostInbound, HostOutbound, HostStartMessage } from '../../shared/script-host-protocol'
 
 type HostPaths = { userData: string; scriptDir: string }
 
@@ -22,8 +22,6 @@ type HostSdk = {
 }
 
 type HostPost = (message: unknown) => void
-
-type ScriptSdkFactory = typeof import('./script-sdk').createScriptSdk
 
 export async function runHostMessage(
   message: HostInbound,
@@ -139,33 +137,72 @@ function readInbound(event: { data?: unknown } | null | undefined): HostInbound 
   if (!isStringRecord(value.env) || !isStringRecord(value.params)) return null
   if (!isRecord(value.paths)) return null
   if (typeof value.paths.userData !== 'string' || typeof value.paths.scriptDir !== 'string') return null
-  return value as HostInbound
-}
-
-const HOST_SDK_CONFIG_ERROR =
-  '宿主进程无法调用 createScriptSdk：启动消息没有 AppConfig 与浏览器 headless 设置，且该函数会读取 Electron 的 userData'
-
-type LoadedScriptSdk = { factory: ScriptSdkFactory | null; error: unknown }
-
-async function loadScriptSdk(): Promise<LoadedScriptSdk> {
-  try {
-    const loaded = await import('./script-sdk')
-    return { factory: loaded.createScriptSdk, error: null }
-  } catch (error) {
-    return { factory: null, error }
+  const browserPlan = readBrowserPlan(value.browserPlan)
+  const browserLaunchError =
+    typeof value.browserLaunchError === 'string' && value.browserLaunchError
+      ? value.browserLaunchError
+      : undefined
+  return {
+    type: 'start',
+    entryPath: value.entryPath,
+    sessionId: value.sessionId,
+    scriptId: value.scriptId,
+    env: value.env,
+    params: value.params,
+    paths: {
+      userData: value.paths.userData,
+      scriptDir: value.paths.scriptDir
+    },
+    ...(browserPlan ? { browserPlan } : {}),
+    ...(browserLaunchError ? { browserLaunchError } : {})
   }
 }
 
-function createUtilitySdk(paths: HostPaths, loaded: LoadedScriptSdk): HostSdk {
+function readBrowserPlan(value: unknown): HostStartMessage['browserPlan'] | undefined {
+  if (!isRecord(value)) return undefined
+  if (value.engine !== 'chromium' && value.engine !== 'firefox') return undefined
+  if (typeof value.browsersPath !== 'string' || !value.browsersPath) return undefined
+  if (typeof value.headless !== 'boolean') return undefined
+  const plan: NonNullable<HostStartMessage['browserPlan']> = {
+    browsersPath: value.browsersPath,
+    engine: value.engine,
+    headless: value.headless
+  }
+  if (typeof value.executablePath === 'string' && value.executablePath) {
+    plan.executablePath = value.executablePath
+  }
+  if (typeof value.channel === 'string' && value.channel) {
+    plan.channel = value.channel
+  }
+  return plan
+}
+
+const EMPTY_BROWSER_PLAN_ERROR =
+  '未找到可用浏览器。请安装 Google Chrome、Microsoft Edge 或 Mozilla Firefox，或运行 npm run install:browsers 安装内置 Chromium。'
+
+function createUtilitySdk(paths: HostPaths, message: HostStartMessage): HostSdk {
   return {
     paths,
     browser: {
       launch: async () => {
-        if (loaded.error) throw loaded.error
-        if (typeof loaded.factory !== 'function') {
-          throw new Error('宿主进程未能加载 createScriptSdk')
+        if (message.browserLaunchError) {
+          throw new Error(message.browserLaunchError)
         }
-        throw new Error(HOST_SDK_CONFIG_ERROR)
+        const plan = message.browserPlan
+        if (!plan) {
+          throw new Error(EMPTY_BROWSER_PLAN_ERROR)
+        }
+        const playwright = await import('playwright-core')
+        process.env.PLAYWRIGHT_BROWSERS_PATH = plan.browsersPath
+        const options = {
+          headless: plan.headless,
+          ...(plan.executablePath ? { executablePath: plan.executablePath } : {}),
+          ...(plan.channel ? { channel: plan.channel } : {})
+        }
+        if (plan.engine === 'firefox') {
+          return playwright.firefox.launch(options)
+        }
+        return playwright.chromium.launch(options)
       }
     }
   }
@@ -176,13 +213,13 @@ async function runParentStart(
   signal: AbortSignal,
   message: HostInbound
 ): Promise<void> {
-  const loaded = await loadScriptSdk()
+  if (message.type !== 'start') return
   try {
     await runHostMessage(message, {
       importModule: importEntryModule,
       post: (outbound) => parentPort.postMessage(outbound),
       signal,
-      createSdk: (paths) => createUtilitySdk(paths, loaded)
+      createSdk: (paths) => createUtilitySdk(paths, message)
     })
   } catch (error) {
     parentPort.postMessage({ type: 'error', message: errorText(error) } satisfies HostOutbound)

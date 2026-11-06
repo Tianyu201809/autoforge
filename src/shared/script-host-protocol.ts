@@ -2,6 +2,14 @@
 
 import type { ScriptProgressInput, ScriptStageInput } from './script-progress'
 
+export type HostBrowserPlan = {
+  browsersPath: string
+  engine: 'chromium' | 'firefox'
+  headless: boolean
+  executablePath?: string
+  channel?: string
+}
+
 export type HostStartMessage = {
   type: 'start'
   entryPath: string
@@ -10,6 +18,8 @@ export type HostStartMessage = {
   env: Record<string, string>
   params: Record<string, string>
   paths: { userData: string; scriptDir: string }
+  browserPlan?: HostBrowserPlan
+  browserLaunchError?: string
 }
 
 export type HostInbound = HostStartMessage | { type: 'abort' }

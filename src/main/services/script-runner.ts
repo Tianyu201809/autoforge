@@ -1,16 +1,11 @@
 import { randomUUID } from 'crypto'
 import { existsSync } from 'fs'
+import { createRequire } from 'module'
 import { join } from 'path'
-import { pathToFileURL } from 'url'
+import { fileURLToPath } from 'url'
 import type { BrowserWindow } from 'electron'
 import type { ChildProcess } from 'child_process'
 import { IPC } from '../../shared/ipc-channels'
-import {
-  resolveScriptEntryFn,
-  SCRIPT_ENTRY_FN_ERROR,
-  type ScriptStageInput,
-  type ScriptProgressInput
-} from '../../shared/script-contract'
 import type { LogLine, RunSession, ScriptMeta, ExecutionTrigger } from '../../shared/types/script'
 import {
   applyScriptControl,
@@ -23,13 +18,16 @@ import { needsScriptDepsInstall } from './script-deps-cache'
 import { executionHistory } from './execution-history'
 import { createLog, logBus } from './log-bus'
 import { ScriptLifecycleBus } from './script-lifecycle'
-import { createScriptSdk } from './script-sdk'
+import { getAppUserDataPath } from './app-data-root'
+import { getPlaywrightBrowsersPath, resolveBrowserLaunchPlans } from './browser-path'
 import { scriptRegistry } from './script-registry'
 import { buildCategorySidebarItems } from './category-service'
 import { scriptStore } from './script-store'
 import { scriptWorkspace } from './script-workspace'
 import { formatScriptRunProgressSummary } from '../../shared/script-progress'
 import { broadcastToRenderers } from './window-broadcast'
+import { parseHostOutbound, type HostStartMessage } from '../../shared/script-host-protocol'
+import { armHostStop } from './script-host-stop'
 import { killPythonProcess, runPythonScript } from './python-script-runner'
 import { resolvePythonExecutable } from './python-resolver'
 import { MAX_CONCURRENT_SESSIONS_PER_SCRIPT } from '../../shared/instance-slots'
@@ -46,6 +44,19 @@ import {
   type ExecutableRunInput
 } from './executable-script-runner'
 
+export interface ScriptHostHandle {
+  postMessage: (message: unknown) => void
+  kill: () => void
+  onMessage: (handler: (message: unknown) => void) => void
+  onExit: (handler: () => void) => void
+}
+
+type LaunchScriptHost = (hostFile: string) => ScriptHostHandle | Promise<ScriptHostHandle>
+
+const HOST_GRACE_MS = 1000
+const EMPTY_BROWSER_PLAN_ERROR =
+  '未找到可用浏览器。请安装 Google Chrome、Microsoft Edge 或 Mozilla Firefox，或运行 npm run install:browsers 安装内置 Chromium。'
+
 interface ActiveSession {
   session: RunSession
   abortController: AbortController
@@ -54,6 +65,10 @@ interface ActiveSession {
   executableAuthorization?: ExecutableAuthorization
   runTimeoutHandle?: ReturnType<typeof setTimeout>
   browserForRun?: ScriptMeta['browser']
+  scriptHost?: ScriptHostHandle
+  browserPids?: number[]
+  hostExited?: boolean
+  hostStopCancel?: { cancel: () => void }
 }
 
 export type StartOptions = {
@@ -86,19 +101,46 @@ interface ExecutableRunnerDependencies {
   kill?: typeof killExecutableProcess
 }
 
+async function defaultLaunchHost(hostFile: string): Promise<ScriptHostHandle> {
+  const { utilityProcess } = await import('electron')
+  if (!utilityProcess || typeof utilityProcess.fork !== 'function') {
+    throw new Error('当前环境无法启动脚本宿主进程')
+  }
+  const child = utilityProcess.fork(hostFile)
+  return {
+    postMessage: (message) => {
+      child.postMessage(message)
+    },
+    kill: () => {
+      child.kill()
+    },
+    onMessage: (handler) => {
+      child.on('message', handler)
+    },
+    onExit: (handler) => {
+      child.on('exit', () => {
+        handler()
+      })
+    }
+  }
+}
+
 export class ScriptRunnerService {
   private sessions = new Map<string, ActiveSession>()
   private getWindow: () => BrowserWindow | null
   private lifecycle: ScriptLifecycleBus
   private executable?: ExecutableRunnerDependencies
+  private launchHost: LaunchScriptHost
 
   constructor(
     getWindow: () => BrowserWindow | null,
-    executable?: ExecutableRunnerDependencies
+    executable?: ExecutableRunnerDependencies,
+    launchHost?: LaunchScriptHost
   ) {
     this.getWindow = getWindow
     this.lifecycle = new ScriptLifecycleBus(getWindow)
     this.executable = executable
+    this.launchHost = launchHost ?? defaultLaunchHost
   }
 
   listSessions(): RunSession[] {
@@ -276,30 +318,49 @@ export class ScriptRunnerService {
     }
   }
 
-  stop(sessionId: string): RunSession | null {
+  stop(sessionId: string, reason: 'user' | 'timeout' = 'user'): RunSession | null {
     const active = this.sessions.get(sessionId)
     if (!active) return null
     if (active.session.status !== 'running') return active.session
 
     this.setPhase(active.session, 'stopping', '正在停止…')
-    active.abortController.abort()
-    if (active.executableChild) {
-      ;(this.executable?.kill ?? killExecutableProcess)(active.executableChild)
+    if (active.scriptHost) {
+      this.armScriptHostStop(active)
     } else {
-      killPythonProcess(active.childProcess)
+      active.abortController.abort()
+      if (active.executableChild) {
+        ;(this.executable?.kill ?? killExecutableProcess)(active.executableChild)
+      } else {
+        killPythonProcess(active.childProcess)
+      }
     }
     active.childProcess = undefined
     active.executableChild = undefined
     this.clearRunTimeout(sessionId)
 
-    active.session.status = 'stopped'
-    active.session.phase = 'stopped'
+    const timedOut = reason === 'timeout'
+    active.session.status = timedOut ? 'error' : 'stopped'
+    active.session.phase = timedOut ? 'failed' : 'stopped'
     active.session.finishedAt = new Date().toISOString()
-    executionHistory.recordFinish({
-      sessionId: active.session.id,
-      status: 'stopped',
-      finishedAt: active.session.finishedAt
-    })
+    if (timedOut) {
+      active.session.exitCode = active.session.exitCode ?? 1
+      const errorMessage = '运行超时，已自动停止'
+      active.session.result = { error: errorMessage }
+      executionHistory.recordFinish({
+        sessionId: active.session.id,
+        status: 'error',
+        finishedAt: active.session.finishedAt,
+        exitCode: active.session.exitCode,
+        errorMessage,
+        result: active.session.result
+      })
+    } else {
+      executionHistory.recordFinish({
+        sessionId: active.session.id,
+        status: 'stopped',
+        finishedAt: active.session.finishedAt
+      })
+    }
     this.broadcastSession(active.session)
     return active.session
   }
@@ -406,12 +467,6 @@ export class ScriptRunnerService {
     const log = (level: LogLine['level'], message: string): void => {
       this.pushLog(session.id, level, message)
     }
-    const stage = (input: ScriptStageInput): void => {
-      this.handleScriptControl(session, { kind: 'stage', ...input })
-    }
-    const progress = (input: ScriptProgressInput): void => {
-      this.handleScriptControl(session, { kind: 'progress', ...input })
-    }
 
     try {
       this.setPhase(session, 'validating', '校验脚本包…')
@@ -421,47 +476,51 @@ export class ScriptRunnerService {
       }
 
       await this.ensureScriptDeps(session, script, log)
+      if (abortController.signal.aborted || this.sessions.get(session.id)?.session.status !== 'running') {
+        return
+      }
 
-      this.setPhase(session, 'starting', '加载脚本模块…')
+      this.setPhase(session, 'starting', '启动脚本宿主…')
       this.addScriptModulePaths(script.workspacePath)
 
-      const mod = await import(pathToFileURL(entryPath).href)
-      const runFn = resolveScriptEntryFn(mod as Record<string, unknown>)
-
-      if (!runFn) {
-        throw new Error(SCRIPT_ENTRY_FN_ERROR)
+      const hostFile = fileURLToPath(new URL('./script-host.js', import.meta.url))
+      const host = await this.launchHost(hostFile)
+      const active = this.sessions.get(session.id)
+      if (!active || active.session.status !== 'running' || abortController.signal.aborted) {
+        try {
+          host.kill()
+        } catch {
+          /* 会话已经结束 */
+        }
+        return
       }
+
+      active.scriptHost = host
+      active.hostExited = false
+      active.browserPids = []
+      host.onMessage((message) => {
+        this.handleHostMessage(session.id, message)
+      })
+      host.onExit(() => {
+        this.handleHostExit(session.id)
+      })
 
       this.setPhase(session, 'running', '脚本运行中…')
       this.armRunTimeout(session.id)
-      const config = scriptStore.getConfig()
-      const ctx = {
+      const browserForRun = active.browserForRun ?? script.browser
+      host.postMessage({
+        type: 'start',
+        entryPath,
         sessionId: session.id,
         scriptId: script.id,
         env,
         params,
-        signal: abortController.signal,
-        log,
-        stage,
-        progress,
-        sdk: createScriptSdk(
-          config,
-          script.workspacePath,
-          log,
-          this.sessions.get(session.id)?.browserForRun ?? script.browser,
-          abortController.signal,
-          () => this.stop(session.id)
-        )
-      }
-
-      const result = await runFn(ctx)
-
-      if (abortController.signal.aborted) {
-        this.stop(session.id)
-        return
-      }
-
-      this.completeSession(session.id, result)
+        paths: {
+          userData: getAppUserDataPath(),
+          scriptDir: script.workspacePath
+        },
+        ...this.resolveHostBrowserFields(browserForRun)
+      } satisfies HostStartMessage)
     } catch (error) {
       if (abortController.signal.aborted) {
         this.stop(session.id)
@@ -585,8 +644,8 @@ export class ScriptRunnerService {
     const existing = process.env.NODE_PATH ?? ''
     const merged = [...paths, ...existing.split(process.platform === 'win32' ? ';' : ':').filter(Boolean)]
     process.env.NODE_PATH = merged.join(process.platform === 'win32' ? ';' : ':')
-     
-    require('module').Module._initPaths()
+
+    createRequire(import.meta.url)('module').Module._initPaths()
   }
 
   private setPhase(session: RunSession, phase: RunSession['phase'], message?: string): void {
@@ -646,6 +705,7 @@ export class ScriptRunnerService {
     })
     this.lifecycle.emit(sessionId, active.session.scriptId, 'completed')
     this.broadcastSession(active.session)
+    this.releaseScriptHost(active)
   }
 
   private failSession(sessionId: string, message: string): void {
@@ -668,6 +728,7 @@ export class ScriptRunnerService {
     })
     this.lifecycle.emit(sessionId, active.session.scriptId, 'failed', message)
     this.broadcastSession(active.session)
+    this.releaseScriptHost(active)
   }
 
   private updateRecentRun(scriptId: string): void {
@@ -694,7 +755,7 @@ export class ScriptRunnerService {
       const current = this.sessions.get(sessionId)
       if (!current || current.session.status !== 'running') return
       this.pushLog(sessionId, 'ERROR', `运行超时（${seconds} 秒），已自动停止`)
-      this.stop(sessionId)
+      this.stop(sessionId, 'timeout')
     }, seconds * 1000)
   }
 
@@ -703,6 +764,127 @@ export class ScriptRunnerService {
     if (!active?.runTimeoutHandle) return
     clearTimeout(active.runTimeoutHandle)
     active.runTimeoutHandle = undefined
+  }
+
+  private resolveHostBrowserFields(browserForRun?: ScriptMeta['browser']): Pick<
+    HostStartMessage,
+    'browserPlan' | 'browserLaunchError'
+  > {
+    const config = scriptStore.getConfig()
+    const plans = resolveBrowserLaunchPlans(config, browserForRun)
+    if (plans.length === 0) {
+      const customPath = config.browser?.executablePath?.trim()
+      return {
+        browserLaunchError: customPath
+          ? `指定的浏览器路径不存在：${customPath}`
+          : EMPTY_BROWSER_PLAN_ERROR
+      }
+    }
+    const plan = plans[0]
+    return {
+      browserPlan: {
+        browsersPath: getPlaywrightBrowsersPath(),
+        engine: plan.engine,
+        headless: plan.headless,
+        ...(plan.executablePath ? { executablePath: plan.executablePath } : {}),
+        ...(plan.channel ? { channel: plan.channel } : {})
+      }
+    }
+  }
+
+  private armScriptHostStop(active: ActiveSession): void {
+    const host = active.scriptHost
+    if (!host) return
+    active.hostStopCancel?.cancel()
+    active.hostStopCancel = armHostStop({
+      postAbort: () => {
+        try {
+          host.postMessage({ type: 'abort' })
+        } catch {
+          /* 宿主已经退出 */
+        }
+        active.abortController.abort()
+      },
+      kill: () => {
+        try {
+          host.kill()
+        } catch {
+          /* 宿主已经退出 */
+        }
+        this.killBrowserPids(active.browserPids)
+      },
+      hasExited: () => active.hostExited === true,
+      schedule: (fn, ms) => {
+        const timer = setTimeout(fn, ms)
+        return {
+          cancel: () => {
+            clearTimeout(timer)
+          }
+        }
+      },
+      graceMs: HOST_GRACE_MS
+    })
+  }
+
+  private handleHostMessage(sessionId: string, message: unknown): void {
+    const parsed = parseHostOutbound(message)
+    if (!parsed) return
+    const active = this.sessions.get(sessionId)
+    if (!active) return
+    switch (parsed.type) {
+      case 'log':
+        this.pushLog(sessionId, parsed.level, parsed.message)
+        break
+      case 'stage':
+        this.handleScriptControl(active.session, { kind: 'stage', ...parsed.stage })
+        break
+      case 'progress':
+        this.handleScriptControl(active.session, { kind: 'progress', ...parsed.progress })
+        break
+      case 'browser':
+        active.browserPids = [...(active.browserPids ?? []), parsed.pid]
+        break
+      case 'result':
+        this.completeSession(sessionId, parsed.value)
+        break
+      case 'error':
+        this.pushLog(sessionId, 'ERROR', parsed.message)
+        this.failSession(sessionId, parsed.message)
+        break
+      default:
+        break
+    }
+  }
+
+  private handleHostExit(sessionId: string): void {
+    const active = this.sessions.get(sessionId)
+    if (!active) return
+    active.hostExited = true
+    this.killBrowserPids(active.browserPids)
+    if (active.session.status !== 'running') return
+    const message = '脚本宿主进程已退出'
+    this.pushLog(sessionId, 'ERROR', message)
+    this.failSession(sessionId, message)
+  }
+
+  private releaseScriptHost(active: ActiveSession): void {
+    if (!active.scriptHost || active.hostExited) return
+    try {
+      active.scriptHost.kill()
+    } catch {
+      /* 宿主已经退出 */
+    }
+  }
+
+  private killBrowserPids(pids: number[] | undefined): void {
+    if (!pids?.length) return
+    for (const pid of pids) {
+      try {
+        process.kill(pid)
+      } catch {
+        /* 浏览器进程已经不在 */
+      }
+    }
   }
 }
 
