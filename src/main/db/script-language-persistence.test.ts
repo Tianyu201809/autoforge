@@ -4,6 +4,7 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, test } from 'node:test'
 import { resolveScriptLanguage, scriptLanguageBadge } from '../../shared/script-language'
+import { defaultEnvCipher } from '../services/script-store'
 import { closeDatabase, getDb, initDatabase } from './database'
 import { createRepositories } from './repositories'
 
@@ -28,7 +29,7 @@ test('database persists executable language for extensionless entries', async ()
   const root = mkdtempSync(join(tmpdir(), 'autoforge-language-'))
   roots.push(root)
   await initDatabase(root)
-  const repos = createRepositories(getDb())
+  const repos = createRepositories(getDb(), defaultEnvCipher())
 
   repos.scripts.insert({
     id: 'native-1',

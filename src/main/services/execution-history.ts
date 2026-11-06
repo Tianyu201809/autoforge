@@ -8,6 +8,7 @@ import type {
 } from '../../shared/types/script'
 import { getDb } from '../db/database'
 import { createRepositories, type Repositories } from '../db/repositories'
+import { defaultEnvCipher } from './script-store'
 
 function localDateKey(iso: string): string {
   const d = new Date(iso)
@@ -22,7 +23,7 @@ export class ExecutionHistoryService {
 
   private ensureInitialized(): Repositories {
     if (this.repos) return this.repos
-    this.repos = createRepositories(getDb())
+    this.repos = createRepositories(getDb(), defaultEnvCipher())
     this.reconcileInterruptedRuns()
     this.pruneOldRecords()
     return this.repos

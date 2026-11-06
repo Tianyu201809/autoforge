@@ -10,6 +10,7 @@ import {
   MIGRATION_006
 } from './migrations/006-script-language-executable-trust'
 import { migrateFromJsonIfNeeded } from './migrate-from-json'
+import { createRepositories } from './repositories'
 import { openSqliteDatabase, type SqliteDatabase } from './sqlite-adapter'
 
 export const DB_FILENAME = 'autoforge.db'
@@ -43,8 +44,11 @@ async function openAndMigrate(userData: string): Promise<SqliteDatabase> {
   const dbPath = join(userData, DB_FILENAME)
   const database = await openSqliteDatabase(dbPath)
 
+  const { defaultEnvCipher } = await import('../services/script-store')
+  const cipher = defaultEnvCipher()
   runMigrations(database)
-  migrateFromJsonIfNeeded(database, userData)
+  migrateFromJsonIfNeeded(database, userData, cipher)
+  createRepositories(database, cipher).environments.migratePlaintext()
   database.flush()
 
   return database

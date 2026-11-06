@@ -200,22 +200,27 @@ export function extractPreferenceFromMeta(meta: Partial<ScriptMeta>): ScriptPref
   return pref
 }
 
-export function rowToEnvironment(row: EnvironmentRow): EnvironmentProfile {
+export function rowToEnvironment(
+  row: EnvironmentRow,
+  variables: Record<string, string>,
+  variablesReadable: boolean
+): EnvironmentProfile {
   return {
     id: row.id,
     name: row.name,
     description: row.description ?? undefined,
-    variables: fromJson(row.variables, {}),
+    variables,
+    variablesReadable,
     isDefault: intToBool(row.is_default)
   }
 }
 
-export function environmentToRow(env: EnvironmentProfile): EnvironmentRow {
+export function environmentToRow(env: EnvironmentProfile, variablesText: string): EnvironmentRow {
   return {
     id: env.id,
     name: env.name,
     description: env.description ?? null,
-    variables: JSON.stringify(env.variables ?? {}),
+    variables: variablesText,
     is_default: boolToInt(env.isDefault)
   }
 }

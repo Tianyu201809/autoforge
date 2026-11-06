@@ -45,6 +45,8 @@ export interface EnvironmentProfile {
   description?: string
   /** key → value，覆盖脚本 env schema 中的同名变量 */
   variables: Record<string, string>
+  /** 解密失败或值不是字符串映射时为 false；不入库 */
+  variablesReadable?: boolean
   isDefault?: boolean
 }
 

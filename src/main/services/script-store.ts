@@ -1,4 +1,5 @@
 import { randomUUID } from 'crypto'
+import { createRequire } from 'node:module'
 import { defaultSchemaValue } from '../../shared/schema-values'
 import { validateSchemaValues } from '../../shared/schema-validation'
 import type {
@@ -17,17 +18,70 @@ import {
 } from './category-service'
 import { wouldCreateCycle } from '../../shared/category-tree'
 import { assertSlotsWritable, normalizeInstanceSlots } from '../../shared/instance-slots'
+import type { EnvCipher } from '../db/environment-secrets'
 import { getDb } from '../db/database'
 import { createRepositories, type Repositories } from '../db/repositories'
 
 export type { ScriptPreference } from '../../shared/types/script'
+
+const require = createRequire(import.meta.url)
+
+type SafeStorageLike = {
+  isEncryptionAvailable: () => boolean
+  encryptString: (value: string) => Buffer
+  decryptString: (value: Buffer) => string
+}
+
+function loadSafeStorage(): SafeStorageLike | null {
+  try {
+    const electron = require('electron') as { safeStorage?: Partial<SafeStorageLike> } | string
+    if (!electron || typeof electron === 'string') return null
+    const safeStorage = electron.safeStorage
+    if (
+      typeof safeStorage?.isEncryptionAvailable !== 'function' ||
+      typeof safeStorage.encryptString !== 'function' ||
+      typeof safeStorage.decryptString !== 'function'
+    ) {
+      return null
+    }
+    return safeStorage as SafeStorageLike
+  } catch {
+    return null
+  }
+}
+
+export function defaultEnvCipher(): EnvCipher {
+  const safeStorage = loadSafeStorage()
+  if (!safeStorage) {
+    return {
+      isAvailable: () => false,
+      encrypt: () => {
+        throw new Error('Encryption is unavailable')
+      },
+      decrypt: () => {
+        throw new Error('Encryption is unavailable')
+      }
+    }
+  }
+  return {
+    isAvailable: () => {
+      try {
+        return safeStorage.isEncryptionAvailable()
+      } catch {
+        return false
+      }
+    },
+    encrypt: (value) => safeStorage.encryptString(value),
+    decrypt: (value) => safeStorage.decryptString(value)
+  }
+}
 
 export class ScriptStore {
   private repos: Repositories | null = null
 
   private ensureInitialized(): Repositories {
     if (this.repos) return this.repos
-    this.repos = createRepositories(getDb())
+    this.repos = createRepositories(getDb(), defaultEnvCipher())
     return this.repos
   }
 

@@ -5,6 +5,7 @@ import { UTF8 } from '../../shared/encoding'
 import type { AppConfig, EnvironmentProfile, ExecutionRecord, ScriptMeta } from '../../shared/types/script'
 import type { CategoryOverride, StoredCategory } from '../../services/category-service'
 import type { ScriptPreference } from '../../shared/types/script'
+import type { EnvCipher } from './environment-secrets'
 import { isDatabaseEmpty } from './database'
 import { CategoryRepository } from './repositories/category-repository'
 import { ConfigRepository } from './repositories/config-repository'
@@ -56,7 +57,7 @@ function backupFile(path: string): void {
 }
 
 /** 若 DB 为空且存在旧 JSON，则事务内导入并备份 JSON 文件 */
-export function migrateFromJsonIfNeeded(db: SqliteDatabase, userData: string): void {
+export function migrateFromJsonIfNeeded(db: SqliteDatabase, userData: string, cipher: EnvCipher): void {
   if (!isDatabaseEmpty(db)) return
 
   const dataPath = resolveDataPath(userData)
@@ -70,7 +71,7 @@ export function migrateFromJsonIfNeeded(db: SqliteDatabase, userData: string): v
   const history = hasHistory ? loadJsonFile<PersistedHistory>(historyPath) : null
 
   const scriptRepo = new ScriptRepository(db)
-  const envRepo = new EnvironmentRepository(db)
+  const envRepo = new EnvironmentRepository(db, cipher)
   const categoryRepo = new CategoryRepository(db)
   const configRepo = new ConfigRepository(db)
   const historyRepo = new ExecutionRepository(db)

@@ -1,4 +1,5 @@
 import type { SqliteDatabase } from '../database'
+import type { EnvCipher } from '../environment-secrets'
 import { CategoryRepository } from './category-repository'
 import { ConfigRepository } from './config-repository'
 import { EnvironmentRepository } from './environment-repository'
@@ -15,10 +16,10 @@ export interface Repositories {
   executableTrust: ExecutableTrustRepository
 }
 
-export function createRepositories(db: SqliteDatabase): Repositories {
+export function createRepositories(db: SqliteDatabase, cipher: EnvCipher): Repositories {
   return {
     scripts: new ScriptRepository(db),
-    environments: new EnvironmentRepository(db),
+    environments: new EnvironmentRepository(db, cipher),
     categories: new CategoryRepository(db),
     config: new ConfigRepository(db),
     execution: new ExecutionRepository(db),
