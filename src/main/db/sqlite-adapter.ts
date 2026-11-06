@@ -1,7 +1,8 @@
 import initSqlJs, { type Database as SqlJsDatabase, type Statement as SqlJsStatement } from 'sql.js'
-import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'fs'
+import { existsSync, mkdirSync, readFileSync } from 'fs'
 import { dirname } from 'path'
 import { createRequire } from 'module'
+import { createDirtyScheduler, removeStaleTemp, replaceFileAtomically } from './sqlite-persist'
 
 export interface RunResult {
   changes: number
@@ -18,6 +19,7 @@ export interface SqliteDatabase {
   exec(sql: string): void
   pragma(source: string, value?: string | number | boolean): unknown
   transaction<F extends (...args: never[]) => unknown>(fn: F): F
+  flush(): void
   close(): void
 }
 
@@ -49,12 +51,26 @@ class SqlJsAdapter implements SqliteDatabase {
   private inTransaction = false
   private dirty = false
   private nextSavepoint = 0
+  private readonly scheduler: { markDirty: () => void; flushNow: () => void }
 
   constructor(
     private sql: initSqlJs.SqlJsStatic,
     private db: SqlJsDatabase,
     private dbPath: string
-  ) {}
+  ) {
+    this.scheduler = createDirtyScheduler({
+      now: () => Date.now(),
+      schedule: (fn, ms) => {
+        const timer = setTimeout(fn, ms)
+        return { cancel: () => clearTimeout(timer) }
+      },
+      flush: () => {
+        if (!this.dirty) return
+        this.persist()
+        this.dirty = false
+      }
+    })
+  }
 
   prepare(sql: string): SqliteStatement {
     const db = this.db
@@ -125,10 +141,10 @@ class SqlJsAdapter implements SqliteDatabase {
     const wrapped = ((...args: Parameters<F>) => {
       const outer = !adapter.inTransaction
       let savepoint: string | null = null
+      let committed = false
 
       if (outer) {
         adapter.inTransaction = true
-        adapter.dirty = false
         adapter.db.exec('BEGIN IMMEDIATE')
       } else {
         savepoint = `sp_${++adapter.nextSavepoint}`
@@ -139,14 +155,15 @@ class SqlJsAdapter implements SqliteDatabase {
         const result = fn(...args)
         if (outer) {
           adapter.db.exec('COMMIT')
-          if (adapter.dirty) adapter.persist()
+          committed = true
+          adapter.flush()
         } else if (savepoint) {
           adapter.db.exec(`RELEASE SAVEPOINT ${savepoint}`)
         }
         return result
       } catch (err) {
         if (outer) {
-          adapter.db.exec('ROLLBACK')
+          if (!committed) adapter.db.exec('ROLLBACK')
         } else if (savepoint) {
           adapter.db.exec(`ROLLBACK TO SAVEPOINT ${savepoint}`)
           adapter.db.exec(`RELEASE SAVEPOINT ${savepoint}`)
@@ -161,22 +178,23 @@ class SqlJsAdapter implements SqliteDatabase {
     return wrapped
   }
 
+  flush(): void {
+    this.scheduler.flushNow()
+  }
+
   close(): void {
-    this.persist()
+    this.flush()
     this.db.close()
   }
 
   private markDirty(): void {
-    if (this.inTransaction) {
-      this.dirty = true
-      return
-    }
-    this.persist()
+    this.dirty = true
+    if (this.inTransaction) return
+    this.scheduler.markDirty()
   }
 
   private persist(): void {
-    const data = this.db.export()
-    writeFileSync(this.dbPath, Buffer.from(data))
+    replaceFileAtomically(this.dbPath, this.db.export())
   }
 }
 
@@ -186,6 +204,8 @@ export async function openSqliteDatabase(dbPath: string): Promise<SqliteDatabase
   if (!existsSync(dir)) {
     mkdirSync(dir, { recursive: true })
   }
+
+  removeStaleTemp(dbPath)
 
   const wasmPath = resolveWasmPath()
   const SQL = await initSqlJs({ locateFile: () => wasmPath })

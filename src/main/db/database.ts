@@ -45,6 +45,7 @@ async function openAndMigrate(userData: string): Promise<SqliteDatabase> {
 
   runMigrations(database)
   migrateFromJsonIfNeeded(database, userData)
+  database.flush()
 
   return database
 }
