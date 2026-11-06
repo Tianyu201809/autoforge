@@ -105,6 +105,10 @@ async function downloadZip(
       throw new HubInstallError('download_failed', `下载失败: ${message}`)
     }
 
+    if (response.status === 401) {
+      throw new HubInstallError('invalid_request', '安装链接无效或已过期')
+    }
+
     if (!response.ok) {
       throw new HubInstallError(
         'download_failed',

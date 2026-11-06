@@ -172,6 +172,7 @@ if (!mcpStdioMode) app.whenReady().then(async () => {
   createWindow()
 
   startHubBridgeServer({
+    getHubUrl: () => scriptStore.getConfig().hub?.url ?? '',
     onInstalled: (payload) => {
       showMainWindow()
       broadcastToRenderers(IPC.EVENT_HUB_SCRIPT_INSTALLED, payload)

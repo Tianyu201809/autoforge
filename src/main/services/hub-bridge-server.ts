@@ -1,6 +1,7 @@
 import http from 'http'
 import { URL } from 'url'
 import pkg from '../../../package.json'
+import { buildHubDownloadUrl, originAllowed, parseBridgeInstallBody } from './hub-install-contract'
 import { HubInstallError, installScriptFromHubZip } from './hub-script-installer'
 
 export const HUB_BRIDGE_HOST = '127.0.0.1'
@@ -12,19 +13,61 @@ let server: http.Server | null = null
 let installing = false
 let onInstalled: ((payload: { scriptId: string; name: string; status: 'installed' | 'updated' }) => void) | null = null
 let onAuthorizationCallback: ((code: string, state: string) => Promise<void>) | null = null
+let getHubUrl: (() => string) | null = null
 
 export function setHubAuthorizationCallback(callback: ((code: string, state: string) => Promise<void>) | null): void {
   onAuthorizationCallback = callback
 }
 
-function setCors(res: http.ServerResponse): void {
-  res.setHeader('Access-Control-Allow-Origin', '*')
-  res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS')
-  res.setHeader('Access-Control-Allow-Headers', 'Content-Type')
+export function bridgeCorsHeaders(origin: string | undefined, hubUrl: string): Record<string, string> {
+  if (!origin || !originAllowed(origin, hubUrl)) return {}
+  return {
+    'Access-Control-Allow-Origin': origin,
+    'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
+    'Access-Control-Allow-Headers': 'Content-Type'
+  }
 }
 
-function sendJson(res: http.ServerResponse, status: number, body: unknown): void {
-  setCors(res)
+export function installRejection(
+  origin: string | undefined,
+  hubUrl: string,
+  body: unknown
+): { status: number; error: string; message: string } | null {
+  if (!originAllowed(origin, hubUrl)) {
+    return { status: 400, error: 'invalid_request', message: '安装请求无效' }
+  }
+  try {
+    parseBridgeInstallBody(body)
+  } catch (err) {
+    const message = err instanceof HubInstallError ? err.message : '安装请求无效'
+    return { status: 400, error: 'invalid_request', message }
+  }
+  return null
+}
+
+function requestOrigin(req: http.IncomingMessage): string | undefined {
+  return typeof req.headers.origin === 'string' ? req.headers.origin : undefined
+}
+
+function currentHubUrl(): string {
+  return getHubUrl?.() ?? ''
+}
+
+function setCors(res: http.ServerResponse, origin: string | undefined, hubUrl: string): void {
+  const headers = bridgeCorsHeaders(origin, hubUrl)
+  for (const [name, value] of Object.entries(headers)) {
+    res.setHeader(name, value)
+  }
+}
+
+function sendJson(
+  res: http.ServerResponse,
+  status: number,
+  body: unknown,
+  origin: string | undefined,
+  hubUrl: string
+): void {
+  setCors(res, origin, hubUrl)
   const payload = JSON.stringify(body)
   res.writeHead(status, { 'Content-Type': 'application/json; charset=utf-8' })
   res.end(payload)
@@ -72,12 +115,14 @@ function readBody(req: http.IncomingMessage): Promise<string> {
 }
 
 async function handleInstall(req: http.IncomingMessage, res: http.ServerResponse): Promise<void> {
+  const origin = requestOrigin(req)
+  const hubUrl = currentHubUrl()
   if (installing) {
     sendJson(res, 409, {
       ok: false,
       error: 'busy',
       message: '正在安装，请稍候'
-    })
+    }, origin, hubUrl)
     return
   }
 
@@ -91,20 +136,21 @@ async function handleInstall(req: http.IncomingMessage, res: http.ServerResponse
       throw new HubInstallError('invalid_request', '请求体不是合法 JSON')
     }
 
-    if (body === null || typeof body !== 'object' || Array.isArray(body)) {
-      throw new HubInstallError('invalid_request', '请求体必须是 JSON 对象')
+    const rejection = installRejection(origin, hubUrl, body)
+    if (rejection) {
+      sendJson(res, rejection.status, {
+        ok: false,
+        error: rejection.error,
+        message: rejection.message
+      }, origin, hubUrl)
+      return
     }
 
-    const input = body as {
-      zipUrl?: unknown
-      scriptName?: unknown
-      hubScriptId?: unknown
-    }
-
+    const parsed = parseBridgeInstallBody(body)
+    const zipUrl = buildHubDownloadUrl(hubUrl, parsed.hubScriptId, parsed.installToken)
     const result = await installScriptFromHubZip({
-      zipUrl: input.zipUrl as string,
-      scriptName: typeof input.scriptName === 'string' ? input.scriptName : undefined,
-      hubScriptId: typeof input.hubScriptId === 'string' ? input.hubScriptId : undefined
+      zipUrl,
+      hubScriptId: parsed.hubScriptId
     })
 
     if (result.status !== 'duplicate_cancelled') {
@@ -115,14 +161,14 @@ async function handleInstall(req: http.IncomingMessage, res: http.ServerResponse
       status: result.status,
       scriptId: result.scriptId,
       name: result.name
-    })
+    }, origin, hubUrl)
   } catch (err) {
     if (err instanceof HubInstallError) {
       sendJson(res, statusForError(err.code), {
         ok: false,
         error: err.code,
         message: err.message
-      })
+      }, origin, hubUrl)
       return
     }
 
@@ -131,14 +177,16 @@ async function handleInstall(req: http.IncomingMessage, res: http.ServerResponse
       ok: false,
       error: 'import_failed',
       message
-    })
+    }, origin, hubUrl)
   } finally {
     installing = false
   }
 }
 
 function handleRequest(req: http.IncomingMessage, res: http.ServerResponse): void {
-  setCors(res)
+  const origin = requestOrigin(req)
+  const hubUrl = currentHubUrl()
+  setCors(res, origin, hubUrl)
 
   if (req.method === 'OPTIONS') {
     res.writeHead(204)
@@ -151,7 +199,7 @@ function handleRequest(req: http.IncomingMessage, res: http.ServerResponse): voi
   try {
     pathname = new URL(req.url ?? '/', `http://${host}`).pathname
   } catch {
-    sendJson(res, 404, { ok: false, error: 'invalid_request', message: '无效路径' })
+    sendJson(res, 404, { ok: false, error: 'invalid_request', message: '无效路径' }, origin, hubUrl)
     return
   }
 
@@ -160,7 +208,7 @@ function handleRequest(req: http.IncomingMessage, res: http.ServerResponse): voi
       ok: true,
       app: 'autoforge',
       version: pkg.version
-    })
+    }, origin, hubUrl)
     return
   }
 
@@ -188,16 +236,18 @@ function handleRequest(req: http.IncomingMessage, res: http.ServerResponse): voi
     return
   }
 
-  sendJson(res, 404, { ok: false, error: 'invalid_request', message: '未找到接口' })
+  sendJson(res, 404, { ok: false, error: 'invalid_request', message: '未找到接口' }, origin, hubUrl)
 }
 
 export function startHubBridgeServer(options: {
+  getHubUrl: () => string
   onInstalled: (payload: { scriptId: string; name: string; status: 'installed' | 'updated' }) => void
 }): void {
   if (server) {
     return
   }
 
+  getHubUrl = options.getHubUrl
   onInstalled = options.onInstalled
   server = http.createServer((req, res) => {
     handleRequest(req, res)
@@ -210,6 +260,7 @@ export function startHubBridgeServer(options: {
       )
       server = null
       onInstalled = null
+      getHubUrl = null
       return
     }
     console.error('[hub-bridge] Server error:', err)
@@ -228,5 +279,6 @@ export function stopHubBridgeServer(): void {
   const current = server
   server = null
   onInstalled = null
+  getHubUrl = null
   current.close()
 }
