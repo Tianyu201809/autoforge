@@ -149,6 +149,7 @@ test('javascript sessions start, finish, and stop through the host process', asy
   host.emit({ type: 'result', value: 1 })
   await waitFor(() => runner.getSession(started.id)?.status === 'success')
   assert.equal(runner.getSession(started.id)?.result, 1)
+  assert.equal(host.killed, true)
 
   const stopped = await runner.start(script.id)
   await waitFor(() => hosts.length === 2 && hosts[1].messages.length > 0)
@@ -187,6 +188,61 @@ test('javascript sessions start, finish, and stop through the host process', asy
   hosts[2].exit()
   await waitFor(() => runner.getSession(exited.id)?.status === 'error')
 
+  const keptBrowserPid = 525252
+  const restoreKill = process.kill.bind(process)
+  const killedPids: number[] = []
+  process.kill = ((pid: number, signal?: NodeJS.Signals | number) => {
+    if (pid === keptBrowserPid) {
+      killedPids.push(pid)
+      return true
+    }
+    return restoreKill(pid, signal)
+  }) as typeof process.kill
+  try {
+    const kept = await runner.start(script.id)
+    await waitFor(() => hosts.length === 4 && hosts[3].messages.length > 0)
+    const keepHost = hosts[3]
+    keepHost.emit({ type: 'browser', pid: keptBrowserPid })
+    keepHost.emit({ type: 'result', value: 1 })
+    await waitFor(() => runner.getSession(kept.id)?.status === 'success')
+    assert.equal(keepHost.killed, false)
+    assert.deepEqual(killedPids, [])
+    keepHost.exit()
+    assert.equal(runner.getSession(kept.id)?.status, 'success')
+    assert.deepEqual(killedPids, [])
+
+    const closedAfterSuccess = await runner.start(script.id)
+    await waitFor(() => hosts.length === 5 && hosts[4].messages.length > 0)
+    const finishedHost = hosts[4]
+    finishedHost.emit({ type: 'browser', pid: keptBrowserPid })
+    finishedHost.emit({ type: 'result', value: 2 })
+    await waitFor(() => runner.getSession(closedAfterSuccess.id)?.status === 'success')
+    assert.equal(finishedHost.killed, false)
+    finishedHost.emit({ type: 'error', message: '浏览器已关闭' })
+    assert.equal(finishedHost.killed, true)
+    assert.deepEqual(killedPids, [])
+    assert.equal(runner.getSession(closedAfterSuccess.id)?.status, 'success')
+
+    const failedWithBrowser = await runner.start(script.id)
+    await waitFor(() => hosts.length === 6 && hosts[5].messages.length > 0)
+    const failedHost = hosts[5]
+    failedHost.emit({ type: 'browser', pid: keptBrowserPid })
+    failedHost.emit({ type: 'error', message: '脚本出错' })
+    await waitFor(() => runner.getSession(failedWithBrowser.id)?.status === 'error')
+    assert.equal(failedHost.killed, false)
+    assert.deepEqual(killedPids, [])
+
+    const disconnected = await runner.start(script.id)
+    await waitFor(() => hosts.length === 7 && hosts[6].messages.length > 0)
+    const disconnectHost = hosts[6]
+    disconnectHost.emit({ type: 'error', message: '浏览器已关闭' })
+    await waitFor(() => runner.getSession(disconnected.id)?.status === 'stopped')
+    assert.notDeepEqual(runner.getSession(disconnected.id)?.result, { error: '浏览器已关闭' })
+    assert.equal(runner.getSession(disconnected.id)?.status, 'stopped')
+  } finally {
+    process.kill = restoreKill
+  }
+
   scriptStore.setConfig({ script: { runTimeoutSeconds: 1 } })
   const logs: string[] = []
   const onLog = (line: { message: string }): void => {
@@ -195,8 +251,8 @@ test('javascript sessions start, finish, and stop through the host process', asy
   logBus.on('log', onLog)
   try {
     const timed = await runner.start(script.id)
-    await waitFor(() => hosts.length === 4 && hosts[3].messages.length > 0)
-    const timeoutHost = hosts[3]
+    await waitFor(() => hosts.length === 8 && hosts[7].messages.length > 0)
+    const timeoutHost = hosts[7]
     await waitFor(() => runner.getSession(timed.id)?.status === 'error', 5000)
     assert.equal(logs.includes('运行超时（1 秒），已自动停止'), true)
     assert.equal(timeoutHost.killed, false)
@@ -206,4 +262,48 @@ test('javascript sessions start, finish, and stop through the host process', asy
   } finally {
     logBus.off('log', onLog)
   }
+})
+
+test('unexpected browser disconnect posts 浏览器已关闭', async () => {
+  const { EventEmitter } = await import('node:events')
+  const { runHostMessage } = await import('./script-host')
+  const posted: unknown[] = []
+  const browser = new EventEmitter() as EventEmitter & {
+    process: () => { pid: number }
+    close: () => Promise<void>
+  }
+  browser.process = () => ({ pid: 7 })
+  browser.close = async () => {
+    browser.emit('disconnected')
+  }
+  await runHostMessage(
+    {
+      type: 'start',
+      entryPath: 'entry.js',
+      sessionId: 's',
+      scriptId: 'script',
+      env: {},
+      params: {},
+      paths: { userData: 'user', scriptDir: 'dir' }
+    },
+    {
+      importModule: async () => ({
+        run: async (ctx: { sdk: { browser: { launch: () => Promise<unknown> } } }) => {
+          await ctx.sdk.browser.launch()
+          browser.emit('disconnected')
+          await new Promise((resolve) => setImmediate(resolve))
+          return 1
+        }
+      }),
+      post: (message) => posted.push(message),
+      signal: new AbortController().signal,
+      createSdk: () => ({
+        browser: { launch: async () => browser },
+        paths: { userData: 'user', scriptDir: 'dir' }
+      })
+    }
+  )
+  assert.deepEqual(posted[0], { type: 'browser', pid: 7 })
+  assert.deepEqual(posted[1], { type: 'error', message: '浏览器已关闭' })
+  assert.deepEqual(posted[2], { type: 'result', value: 1 })
 })

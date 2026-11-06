@@ -7,12 +7,15 @@ import {
   type ScriptStageInput
 } from '../../shared/script-contract'
 import type { HostInbound, HostOutbound, HostStartMessage } from '../../shared/script-host-protocol'
+import { attachBrowserDisconnectHandler, type BrowserDisconnectEmitter } from './browser-lifecycle'
 
 type HostPaths = { userData: string; scriptDir: string }
 
-type HostBrowser = {
+type HostBrowser = BrowserDisconnectEmitter & {
   process: () => { pid?: number } | null | undefined
 }
+
+const BROWSER_CLOSED_MESSAGE = '浏览器已关闭'
 
 type HostSdk = {
   browser: {
@@ -75,6 +78,10 @@ function watchBrowserPid(sdk: HostSdk, post: HostPost): HostSdk {
         const browser = await sdk.browser.launch()
         const pid = readPositivePid(browser)
         if (pid !== undefined) post({ type: 'browser', pid } satisfies HostOutbound)
+        attachBrowserDisconnectHandler(browser, (kind) => {
+          if (kind !== 'unexpected') return
+          post({ type: 'error', message: BROWSER_CLOSED_MESSAGE } satisfies HostOutbound)
+        })
         return browser
       }
     }
