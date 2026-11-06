@@ -1037,10 +1037,10 @@ async function removeGlobalPythonDep(name: string): Promise<void> {
                 <div v-if="editingEnv" class="rounded-lg border sb-border sb-bg-surface p-4 space-y-3">
                   <div>
                     <label class="text-[12px] sb-text-muted">名称</label>
-                    <input v-model="editingEnv.name" class="mt-1 w-full h-9 px-3 rounded-lg sb-input border text-[13px] outline-none" />
+                    <input v-model="editingEnv.name" class="mt-1 w-full h-9 px-3 rounded-lg sb-input border text-[13px] outline-none" :disabled="!environmentReadable(editingEnv)" />
                   </div>
                   <label class="flex items-center gap-2 text-[12px] sb-text-muted">
-                    <input v-model="editingEnv.isDefault" type="checkbox" class="rounded" />
+                    <input v-model="editingEnv.isDefault" type="checkbox" class="rounded" :disabled="!environmentReadable(editingEnv)" />
                     设为默认环境
                   </label>
 
