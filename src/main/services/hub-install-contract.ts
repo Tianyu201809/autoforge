@@ -1,4 +1,4 @@
-import { HubInstallError } from './hub-script-installer'
+import { HubInstallError } from './hub-install-error'
 
 export function hubOrigin(hubUrl: string): string {
   const url = new URL(hubUrl.trim())

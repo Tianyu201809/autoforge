@@ -12,22 +12,10 @@ import type { HubInstallProgress } from '../../shared/hub-types'
 import { scriptRegistry } from './script-registry'
 import { scriptWorkspace } from './script-workspace'
 import { MAX_EXTRACTED_BYTES, MAX_ZIP_BYTES } from './safe-zip-package'
+import { HubInstallError } from './hub-install-error'
+import { assertPackageHash, sha256FileHex } from './hub-package-hash'
 
-export type HubInstallErrorCode =
-  | 'invalid_request'
-  | 'download_failed'
-  | 'invalid_package'
-  | 'import_failed'
-
-export class HubInstallError extends Error {
-  constructor(
-    public code: HubInstallErrorCode,
-    message: string
-  ) {
-    super(message)
-    this.name = 'HubInstallError'
-  }
-}
+export { HubInstallError, type HubInstallErrorCode } from './hub-install-error'
 
 export const DOWNLOAD_STALL_TIMEOUT_MS = 60_000
 const MAX_ZIP_ENTRIES = 2_000
@@ -105,7 +93,7 @@ async function downloadZip(
   url: string,
   destPath: string,
   reportProgress: (progress: Omit<HubInstallProgress, 'hubScriptId'>) => void
-): Promise<void> {
+): Promise<string | null> {
   const downloadTimeout = createDownloadTimeout()
   let response: Response
   try {
@@ -172,6 +160,7 @@ async function downloadZip(
     if (downloadedBytes === 0) {
       throw new HubInstallError('invalid_package', 'ZIP 文件为空')
     }
+    return response.headers.get('x-autoforge-sha256')
   } catch (err) {
     if (err instanceof HubInstallError) throw err
     const message = err instanceof Error ? err.message : String(err)
@@ -216,6 +205,7 @@ export async function installScriptFromHubZip(input: {
   zipUrl: string
   scriptName?: string
   hubScriptId?: string
+  expectedSha256?: string
   onProgress?: HubInstallProgressCallback
 }): Promise<{ scriptId: string; name: string; status: 'installed' | 'updated' | 'duplicate_cancelled' }> {
   const url = assertHttpUrl(input.zipUrl)
@@ -239,7 +229,8 @@ export async function installScriptFromHubZip(input: {
     const extractedDir = join(tempDir, 'extracted')
 
     reportProgress({ phase: 'preparing', message: '正在准备下载' })
-    await downloadZip(url, zipPath, reportProgress)
+    const headerSha = await downloadZip(url, zipPath, reportProgress)
+    assertPackageHash(sha256FileHex(zipPath), headerSha, input.expectedSha256)
     reportProgress({ phase: 'extracting', message: '正在解压脚本包' })
     extractZip(zipPath, extractedDir)
     reportProgress({ phase: 'extracting', message: '脚本包解压完成', percent: 100 })

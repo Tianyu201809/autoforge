@@ -1,6 +1,6 @@
 import { createHash } from 'crypto'
 import { readFileSync } from 'fs'
-import { HubInstallError } from './hub-script-installer'
+import { HubInstallError } from './hub-install-error'
 
 export function sha256FileHex(filePath: string): string {
   return createHash('sha256').update(readFileSync(filePath)).digest('hex')

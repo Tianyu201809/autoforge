@@ -20,7 +20,7 @@ export function createHubClient(options: {
   getHubUrl(): string
   credentials: HubCredentialStore
   request(url: string, init?: RequestInit): Promise<ResponseLike>
-  install(input: { zipUrl: string; scriptName: string; hubScriptId: string; onProgress?: (progress: HubInstallProgress) => void }): Promise<InstallResult>
+  install(input: { zipUrl: string; scriptName: string; hubScriptId: string; expectedSha256: string; onProgress?: (progress: HubInstallProgress) => void }): Promise<InstallResult>
 }) {
   function baseUrl(): string {
     try {
@@ -90,8 +90,19 @@ export function createHubClient(options: {
     async installPlugin(id: string, onProgress?: (progress: HubInstallProgress) => void): Promise<InstallResult> {
       const body = await request(`/api/scripts/${encodeURIComponent(id)}/install-token`, { method: 'POST' }) as Record<string, unknown>
       if (typeof body.zipUrl !== 'string' || typeof body.scriptName !== 'string' || typeof body.hubScriptId !== 'string') throw new HubClientError('invalid_response', 'AutoforgeHub 安装响应无效')
-      try { return await options.install({ zipUrl: body.zipUrl, scriptName: body.scriptName, hubScriptId: body.hubScriptId, onProgress }) }
-      catch (error) { throw new HubClientError('install_failed', error instanceof Error ? error.message : '脚本安装失败') }
+      const sha256 = typeof body.sha256 === 'string' ? body.sha256.trim().toLowerCase() : ''
+      if (!/^[0-9a-f]{64}$/.test(sha256)) {
+        throw new HubClientError('invalid_response', 'AutoforgeHub 安装响应无效')
+      }
+      try {
+        return await options.install({
+          zipUrl: body.zipUrl,
+          scriptName: body.scriptName,
+          hubScriptId: body.hubScriptId,
+          expectedSha256: sha256,
+          onProgress
+        })
+      } catch (error) { throw new HubClientError('install_failed', error instanceof Error ? error.message : '脚本安装失败') }
     }
   }
 }
