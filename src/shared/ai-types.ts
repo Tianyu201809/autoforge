@@ -15,6 +15,7 @@ export interface LlmProfile {
 
 export interface LlmProfileView extends LlmProfile {
   hasApiKey: boolean
+  hasCredentials: boolean
 }
 
 export interface LlmProfileListResult {

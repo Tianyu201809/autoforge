@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed, onUnmounted, ref, toRaw, watch } from 'vue'
-import { AppWindow, Boxes, Check, CheckCircle2, ChevronDown, Code2, Copy, Globe2, Plus, ScrollText, Settings, ShieldCheck, Terminal, Trash2, X, XCircle } from 'lucide-vue-next'
+import { AppWindow, Boxes, Check, CheckCircle2, ChevronDown, Code2, Copy, Globe2, Plus, ScrollText, Settings, ShieldCheck, Terminal, Trash2, X, XCircle, Bot } from 'lucide-vue-next'
 import type { Component } from 'vue'
 import type { AppConfig, BrowserStatusInfo, EnvironmentProfile, GlobalDependency, PythonStatusInfo } from '../../../shared/types/script'
 import { formatCodexMcpAddCommand, formatCodexMcpToml, formatGenericMcpJson } from '../../../shared/mcp-client-config'
@@ -9,15 +9,16 @@ import { DEFAULT_GLOBAL_SHORTCUT } from '../../../shared/accelerator'
 import SkinPicker from './SkinPicker.vue'
 import ShortcutRecorder from './ShortcutRecorder.vue'
 import AppFeatureModal from './AppFeatureModal.vue'
+import ModelProfilesView from './ModelProfilesView.vue'
 import { askConfirm } from '../composables/useConfirmDialog'
 import { environmentEncryptionNotice, environmentReadable } from '../lib/environment-encryption-status'
 import { useToast } from '../composables/useToast'
 
 const { pushToast } = useToast()
 
-const props = defineProps<{ open: boolean }>()
+const props = defineProps<{ open: boolean; inline?: boolean }>()
 
-type SettingsSectionId = 'overview' | 'mcp' | 'window' | 'runtime' | 'tools' | 'logs'
+type SettingsSectionId = 'overview' | 'models' | 'mcp' | 'window' | 'runtime' | 'tools' | 'logs'
 type SaveState = 'idle' | 'saving' | 'saved' | 'error'
 type McpConfigTarget = 'codex' | 'generic'
 
@@ -29,6 +30,7 @@ interface SettingsSection {
 }
 
 const SETTINGS_SECTIONS: SettingsSection[] = [
+  { id: 'models', label: '模型', description: 'AI 提供商', icon: Bot },
   { id: 'mcp', label: 'MCP', description: '智能体接入', icon: Code2 },
   { id: 'overview', label: '概览', description: '产品与 Hub', icon: Boxes },
   { id: 'window', label: '窗口与外观', description: '显示与皮肤', icon: AppWindow },
@@ -634,11 +636,12 @@ async function removeGlobalPythonDep(name: string): Promise<void> {
 <template>
   <AppFeatureModal
     :open="open"
+    :inline="inline"
     max-width="5xl"
     aria-labelledby="settings-modal-title"
     @close="handleClose"
   >
-    <div class="settings-modal-shell flex flex-col min-h-0 overflow-hidden">
+    <div class="settings-modal-shell flex flex-col min-h-0 overflow-hidden" :class="inline && 'settings-modal-shell--inline'">
       <div class="relative flex items-center justify-between gap-4 px-6 py-4 border-b sb-border-subtle flex-shrink-0 settings-modal-header overflow-hidden">
         <div
           class="absolute inset-x-0 top-0 h-px pointer-events-none"
@@ -948,6 +951,10 @@ async function removeGlobalPythonDep(name: string): Promise<void> {
                   <p>Codex 的 stdio 模式会为每个 Codex 会话启动一个轻量 adapter，这是正常行为，但不应打开新的 Autoforge 窗口。若窗口反复出现，请删除旧配置并使用上方 Codex TOML 或 CLI 命令重新接入。</p>
                 </div>
               </section>
+            </template>
+
+            <template v-else-if="activeSection === 'models'">
+              <ModelProfilesView :active="activeSection === 'models'" />
             </template>
 
             <template v-else-if="activeSection === 'window'">
@@ -1302,6 +1309,11 @@ async function removeGlobalPythonDep(name: string): Promise<void> {
 .settings-modal-shell {
   height: min(92vh, 880px);
   min-height: min(92vh, 880px);
+}
+
+.settings-modal-shell--inline {
+  height: 100%;
+  min-height: 0;
 }
 
 .settings-modal-header {

@@ -25,7 +25,7 @@ import { resolveScriptIcon } from '../lib/script-icon-map'
 import { hubPluginCatalogCache as catalogCache, type CatalogFilterState, type CatalogSnapshot } from '../lib/hub-plugin-catalog-cache'
 import appIcon from '@build/icon.png?url'
 
-const props = defineProps<{ open: boolean }>()
+const props = defineProps<{ open: boolean; inline?: boolean }>()
 const emit = defineEmits<{ close: [] }>()
 const { pushToast } = useToast()
 
@@ -401,7 +401,7 @@ onUnmounted(() => {
 </script>
 
 <template>
-  <div v-if="open" class="hub-shell">
+  <div v-if="open" class="hub-shell" :class="inline && 'hub-shell-inline'">
     <header class="hub-topbar">
       <button class="hub-back-button" aria-label="返回 Autoforge" title="返回" @click="emit('close')">
         <ArrowLeft :size="17" />
@@ -659,6 +659,15 @@ onUnmounted(() => {
   min-width: 0;
   background: var(--sb-bg-panel);
   color: var(--sb-text-primary);
+}
+
+.hub-shell-inline {
+  position: relative;
+  inset: auto;
+  z-index: auto;
+  width: 100%;
+  height: 100%;
+  min-height: 0;
 }
 
 .hub-topbar {

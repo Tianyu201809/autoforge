@@ -107,6 +107,7 @@ export interface AutoforgeApi {
     pickProjectFolder: () => Promise<string | null>
     listProjects: () => Promise<AiProjectSummary[]>
     getProject: (id: string) => Promise<AiProject | null>
+    listProjectTurns: (id: string) => Promise<AiProjectTurn[]>
     createProject: (input: Omit<AiProjectCreateInput, 'id'>) => Promise<AiProject>
     removeProject: (id: string) => Promise<boolean>
     startTurn: (projectId: string, message: string) => Promise<AiProjectTurn>

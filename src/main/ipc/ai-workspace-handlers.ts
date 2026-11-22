@@ -10,6 +10,7 @@ type IpcHandler = (event: IpcEvent, ...args: unknown[]) => unknown
 export interface AiWorkspaceIpcService {
   listProjects(): AiProjectSummary[]
   getProject(id: string): AiProject | null
+  listTurns(projectId: string): AiProjectTurn[]
   createProject(input: Omit<AiProjectCreateInput, 'id'>): Promise<AiProject>
   removeProject(id: string): boolean
   startTurn(projectId: string, message: string, onEvent?: (event: AiAgentEvent) => void): Promise<AiProjectTurn>
@@ -30,6 +31,7 @@ export function registerAiWorkspaceIpcHandlers(
   register(IPC.AI_PROJECT_PICK_FOLDER, () => pickFolder())
   register(IPC.AI_PROJECTS_LIST, () => service.listProjects())
   register(IPC.AI_PROJECT_GET, (_event, id) => service.getProject(requireId(id)))
+  register(IPC.AI_PROJECT_TURNS_LIST, (_event, id) => service.listTurns(requireId(id)))
   register(IPC.AI_PROJECT_CREATE, (_event, input) => {
     if (!input || typeof input !== 'object' || Array.isArray(input)) throw new Error('项目输入无效')
     const value = input as Record<string, unknown>

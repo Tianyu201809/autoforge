@@ -117,6 +117,7 @@ export function toLlmProfileView(profile: LlmProfile, credentials?: ModelCredent
   return {
     ...profile,
     extraHeaderNames,
-    hasApiKey: Boolean(credentials?.apiKey?.trim())
+    hasApiKey: Boolean(credentials?.apiKey?.trim()),
+    hasCredentials: Boolean(credentials?.apiKey?.trim() || Object.keys(credentials?.extraHeaders ?? {}).length > 0)
   }
 }

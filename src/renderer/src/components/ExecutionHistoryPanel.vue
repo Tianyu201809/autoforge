@@ -17,7 +17,7 @@ import AppFeatureModal from './AppFeatureModal.vue'
 import RunResultModal from './RunResultModal.vue'
 import { askConfirm } from '../composables/useConfirmDialog'
 
-const props = defineProps<{ open: boolean }>()
+const props = defineProps<{ open: boolean; inline?: boolean }>()
 const emit = defineEmits<{ close: [] }>()
 
 const DAYS_STORAGE_KEY = 'executionHistoryDays'
@@ -303,6 +303,7 @@ function closeResultModal(): void {
 <template>
   <AppFeatureModal
     :open="open"
+    :inline="inline"
     max-width="4xl"
     aria-labelledby="execution-history-modal-title"
     @close="emit('close')"

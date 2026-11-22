@@ -6,7 +6,7 @@ import { useToast } from '../composables/useToast'
 import { createStoreZip } from '../lib/store-zip'
 import AppFeatureModal from './AppFeatureModal.vue'
 
-const props = defineProps<{ open: boolean }>()
+const props = defineProps<{ open: boolean; inline?: boolean }>()
 const emit = defineEmits<{ close: []; imported: [] }>()
 const { pushToast } = useToast()
 
@@ -259,6 +259,7 @@ const guideHtml = computed(() => renderMarkdown(markdown.value))
 <template>
   <AppFeatureModal
     :open="open"
+    :inline="inline"
     max-width="5xl"
     aria-labelledby="dev-guide-modal-title"
     @close="emit('close')"

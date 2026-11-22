@@ -63,8 +63,19 @@ test('profile view reports credentials without exposing their values', async () 
   })
 
   assert.equal(view.hasApiKey, true)
+  assert.equal(view.hasCredentials, true)
   assert.deepEqual(view.extraHeaderNames, ['X-Tenant'])
   assert.equal('apiKey' in view, false)
   assert.equal('extraHeaders' in view, false)
   assert.equal(JSON.stringify(view).includes('sentinel'), false)
+})
+
+test('reports header-only credentials as configured without exposing values', async () => {
+  const { normalizeLlmProfile, toLlmProfileView } = await contract()
+  const profile = normalizeLlmProfile(profileInput, '2026-11-22T00:00:00.000Z')
+  const view = toLlmProfileView(profile, { extraHeaders: { 'X-Tenant': 'sentinel-header-value' } })
+
+  assert.equal(view.hasApiKey, false)
+  assert.equal(view.hasCredentials, true)
+  assert.equal(JSON.stringify(view).includes('sentinel-header-value'), false)
 })

@@ -17,6 +17,7 @@ function harness() {
   const service = {
     listProjects: () => [],
     getProject: () => project,
+    listTurns: () => [{ id: 'turn-1', projectId: project.id, role: 'user' as const, content: 'saved prompt', status: 'complete' as const, createdAt: '2026-11-22T00:00:00.000Z' }],
     createProject: async () => project,
     removeProject: () => true,
     startTurn: async (_id: string, _message: string, onEvent: (event: AiAgentEvent) => void) => {
@@ -61,4 +62,10 @@ test('routes cancellation to the requested project turn', () => {
 test('returns null when the folder picker is cancelled', async () => {
   const { invoke } = harness()
   assert.equal(await invoke(IPC.AI_PROJECT_PICK_FOLDER), null)
+})
+
+test('exposes persisted project turns for restoring a conversation', async () => {
+  const { invoke } = harness()
+  const turns = await invoke(IPC.AI_PROJECT_TURNS_LIST, 'project-1') as Array<{ content: string }>
+  assert.equal(turns[0]?.content, 'saved prompt')
 })

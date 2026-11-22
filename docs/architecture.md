@@ -1,6 +1,6 @@
 # Autoforge 架构说明
 
-> 当前应用版本：**1.42.0** · 详见 [v1.42.0 版本说明](./v1.42.0.md)
+> 当前应用版本：**2.0.0** · 详见 [v2.0.0 版本说明](./v2.0.0.md)
 
 ## 设计原则
 
@@ -83,6 +83,18 @@ userData/                     # autoforge-development 或 autoforge-production
 | `mcp/control-client` | MCP adapter 到主进程的 descriptor 发现、握手和断线重连 |
 | `mcp/tool-definitions` / `resource-definitions` | Agent 工具、只读 Resources、结果封装和错误转换 |
 | `run-event-store` / `mcp-audit` | session 快照、增量日志、终态等待和脱敏审计 |
+| `model-profile-service` / `model-credential-store` | 模型配置、provider 选择、连接测试与 safeStorage 凭据 |
+| `ai/*-provider` | OpenAI、Anthropic、Gemini、OpenAI-compatible 流式协议适配 |
+| `ai-workspace-repository` | AI 项目元数据与对话轮次的 SQLite 持久化 |
+| `project-workspace` / `project-checks` | 所选目录内受限文本文件读写、包校验与固定语法检查 |
+| `agent-service` / `agent-tools` | 有界 Agent 工具循环、取消、冲突处理、自动导入与更新 |
+| `WorkspaceShell` / `AiProjectWorkspace` | 项目优先主导航、对话工作区、文件变更与检查器 |
+
+## AI 项目 Agent 数据流
+
+工作区选择本机空文件夹 → preload IPC → 主进程校验目录并将项目与模型关联写入 SQLite → Agent Service 调用 ModelProfileService 和 Provider Adapter → Agent 使用受限工具列出、读取、写入、检查和导入 → 哈希冲突检查及文件变更 → 固定包校验与 JavaScript / Python 语法检查 → ScriptRegistry 导入或更新并返回脚本关联结果。
+
+Agent 工具不能执行 shell 或生成的脚本。API 密钥和额外请求头值存放在主进程凭据存储中。移除项目只移除 Autoforge 元数据和会话。
 
 ## Hub 一键安装数据流
 
@@ -269,6 +281,8 @@ Autoforge 渲染进程
 
 | 文档 | 内容 |
 |------|------|
+| [v2.0.0 版本说明](./v2.0.0.md) | AI Agent、多模型与统一工作台 |
+| [AI 项目工作区技术文档](./features/ai-agent-workspace.md) | provider、受限文件操作、Agent 与导入链路 |
 | [v1.42.0 版本说明](./v1.42.0.md) | 当前版本（安装校验、JS 宿主进程、SQLite 原子落盘与环境变量加密） |
 | [v1.36.0 版本说明](./v1.36.0.md) | 分类筛选规则优化 |
 | [v1.35.0 版本说明](./v1.35.0.md) | 插件中心并发安装、分栏缓存与界面主题优化 |

@@ -7,6 +7,7 @@ const props = withDefaults(
     maxWidth?: 'md' | 'lg' | 'xl' | '2xl' | '3xl' | '4xl' | '5xl'
     zIndex?: number
     ariaLabelledby?: string
+    inline?: boolean
   }>(),
   {
     maxWidth: '4xl',
@@ -54,21 +55,21 @@ onUnmounted(() => {
 </script>
 
 <template>
-  <Teleport to="body">
+  <Teleport to="body" :disabled="inline">
     <Transition name="app-feature-modal">
       <div
         v-if="open"
-        class="fixed inset-0 flex items-center justify-center p-4 sm:p-6"
-        :style="{ zIndex }"
+        :class="inline ? 'app-feature-modal-inline' : 'fixed inset-0 flex items-center justify-center p-4 sm:p-6'"
+        :style="inline ? undefined : { zIndex }"
         @click.self="emit('close')"
       >
-        <div class="absolute inset-0 bg-stone-950/45 backdrop-blur-[4px]" aria-hidden="true" />
+        <div v-if="!inline" class="absolute inset-0 bg-stone-950/45 backdrop-blur-[4px]" aria-hidden="true" />
 
         <div
           class="app-feature-modal-panel relative w-full rounded-xl border sb-border sb-bg-panel shadow-[0_28px_80px_rgba(28,25,23,0.22)] flex flex-col max-h-[min(92vh,880px)] overflow-hidden"
-          :class="maxWidthClass"
+          :class="inline ? 'app-feature-modal-panel--inline' : maxWidthClass"
           role="dialog"
-          aria-modal="true"
+          :aria-modal="inline ? undefined : 'true'"
           :aria-labelledby="ariaLabelledby"
           @click.stop
         >
@@ -80,6 +81,24 @@ onUnmounted(() => {
 </template>
 
 <style scoped>
+.app-feature-modal-inline {
+  display: flex;
+  flex: 1 1 auto;
+  min-width: 0;
+  min-height: 0;
+  overflow: hidden;
+}
+
+.app-feature-modal-panel--inline {
+  width: 100%;
+  max-width: none;
+  max-height: none;
+  height: 100%;
+  border: 0;
+  border-radius: 0;
+  box-shadow: none;
+}
+
 .app-feature-modal-enter-active,
 .app-feature-modal-leave-active {
   transition: opacity 0.24s ease;

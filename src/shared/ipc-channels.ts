@@ -100,6 +100,7 @@ export const IPC = {
   AI_PROJECT_PICK_FOLDER: 'ai:project:pick-folder',
   AI_PROJECTS_LIST: 'ai:projects:list',
   AI_PROJECT_GET: 'ai:project:get',
+  AI_PROJECT_TURNS_LIST: 'ai:project:turns:list',
   AI_PROJECT_CREATE: 'ai:project:create',
   AI_PROJECT_REMOVE: 'ai:project:remove',
   AI_PROJECT_START_TURN: 'ai:project:start-turn',

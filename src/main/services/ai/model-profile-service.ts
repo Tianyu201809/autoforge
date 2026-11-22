@@ -95,7 +95,11 @@ export function createModelProfileService(options: ModelProfileServiceOptions) {
   function setCredentials(profileId: string, credentials: ModelCredentials): LlmProfileView {
     const profile = load().profiles.find((item) => item.id === profileId)
     if (!profile) throw new LlmProviderError('模型配置不存在', 'config', false)
-    options.credentials.set(profileId, credentials)
+    const existing = options.credentials.get(profileId)
+    options.credentials.set(profileId, {
+      apiKey: credentials.apiKey ?? existing?.apiKey,
+      extraHeaders: { ...existing?.extraHeaders, ...credentials.extraHeaders }
+    })
     return toLlmProfileView(profile, options.credentials.get(profileId) ?? undefined)
   }
 

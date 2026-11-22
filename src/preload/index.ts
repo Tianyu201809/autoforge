@@ -114,6 +114,7 @@ const autoforge = {
     pickProjectFolder: (): Promise<string | null> => ipcRenderer.invoke(IPC.AI_PROJECT_PICK_FOLDER),
     listProjects: (): Promise<AiProjectSummary[]> => ipcRenderer.invoke(IPC.AI_PROJECTS_LIST),
     getProject: (id: string): Promise<AiProject | null> => ipcRenderer.invoke(IPC.AI_PROJECT_GET, id),
+    listProjectTurns: (id: string): Promise<AiProjectTurn[]> => ipcRenderer.invoke(IPC.AI_PROJECT_TURNS_LIST, id),
     createProject: (input: Omit<AiProjectCreateInput, 'id'>): Promise<AiProject> =>
       ipcRenderer.invoke(IPC.AI_PROJECT_CREATE, input),
     removeProject: (id: string): Promise<boolean> => ipcRenderer.invoke(IPC.AI_PROJECT_REMOVE, id),

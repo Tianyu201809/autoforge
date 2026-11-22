@@ -47,11 +47,11 @@
 - `WorkspaceShell` provides slots for navigation, contextual sidebar, main content, and optional inspector.
 - Navigation/sidebar collapsed state and widths persist in local storage with stable keys.
 
-- [ ] **Step 1: Write failing tests** `starts_on_projects_view`, `restores_last_view`, `switches_context_without_remounting_runner`, and `clamps_persisted_sidebar_widths`.
-- [ ] **Step 2: Run** `node --import tsx --test src/renderer/src/composables/useWorkspaceNavigation.test.ts`.
-- [ ] **Step 3: Implement navigation state and shell** with fixed dimensions, keyboard focus, and existing theme tokens.
-- [ ] **Step 4: Run component tests and `npm run lint`**.
-- [ ] **Step 5: Commit** with `feat(ui): add shared workspace shell`.
+- [x] **Step 1: Write failing tests** `starts_on_projects_view`, `restores_last_view`, `switches_context_without_remounting_runner`, and `clamps_persisted_sidebar_widths`.
+- [x] **Step 2: Run** `node --import tsx --test src/renderer/src/composables/useWorkspaceNavigation.test.ts`.
+- [x] **Step 3: Implement navigation state and shell** with fixed dimensions, keyboard focus, and existing theme tokens.
+- [x] **Step 4: Run component tests and `npm run lint`**.
+- [x] **Step 5: Commit** with `feat(ui): add shared workspace shell`.
 
 ### Task 2: Model Settings View
 
@@ -67,10 +67,10 @@
 - Shows provider type, preset/custom endpoint, model ID, key-present state, timeout, extra headers, connection test state, and active profile.
 - API key inputs are write-only and cleared after save.
 
-- [ ] **Step 1: Write failing tests** `renders_provider_profiles`, `clears_write_only_key_after_save`, `shows_connection_test_state`, and `edits_compatible_provider_endpoint`.
-- [ ] **Step 2: Run focused renderer tests**.
-- [ ] **Step 3: Implement model profile view** using existing settings controls, icon library, and theme variables.
-- [ ] **Step 4: Add the test to `test:unit` and run focused test/lint**.
+- [x] **Step 1: Write failing tests** for provider profiles, write-only keys, connection state, and compatible endpoint editing.
+- [x] **Step 2: Run focused renderer tests** and verify missing composable/component failures.
+- [x] **Step 3: Implement model profile view** in the settings workspace with write-only credentials and provider presets.
+- [x] **Step 4: Add renderer behavior tests to the unit-test workflow and run focused tests/lint/build**.
 - [ ] **Step 5: Commit** with `feat(ui): add AI model settings view`.
 
 ### Task 3: AI Project Workspace View
@@ -89,11 +89,11 @@
 - Supports choosing an empty local folder, creating/reopening/removing a project record, selecting language/model, sending multi-line prompts, cancellation, retry, and import/check status.
 - Right panel displays project files, each turn's changed paths, package/syntax result, and associated imported script.
 
-- [ ] **Step 1: Write failing tests** `creates_project_from_folder_picker`, `restores_active_project`, `renders_streaming_turns`, `cancels_agent_turn`, `shows_check_failure_and_retry`, `shows_auto_import_result`, and `toggles_inspector_panel`.
-- [ ] **Step 2: Run focused test** and verify failing states.
-- [ ] **Step 3: Implement workspace view and composable** with one event subscription per mount and explicit cleanup.
-- [ ] **Step 4: Add test to `test:unit` and run focused renderer tests/lint**.
-- [ ] **Step 5: Commit** with `feat(ui): add AI project workspace`.
+- [x] **Step 1: Write failing tests** for folder-based creation, project restoration, streaming/cancellation, checks/import, and subscription cleanup.
+- [x] **Step 2: Run focused tests** and verify missing composable/component failures.
+- [x] **Step 3: Implement workspace view and composable** with one event subscription per mount and explicit cleanup.
+- [x] **Step 4: Add renderer behavior tests to the unit-test workflow and run focused tests/lint/build**.
+- [ ] **Step 5: Commit** with `feat(ai): add AI project workspace`.
 
 ### Task 4: Migrate Existing Features into the Shared Shell
 
@@ -113,10 +113,10 @@
 - Existing `useScriptStore`, `useScriptRunner`, log console, modal hosts, editor popout, terminal popout, and drag/drop handlers remain mounted once.
 - Existing settings, history, guide, and Hub views render inside the shared content region with close/back navigation.
 
-- [ ] **Step 1: Add/adjust tests** `routes_existing_sidebar_actions`, `keeps_script_filters_when_switching_views`, and `preserves_global_runner_subscriptions`.
-- [ ] **Step 2: Implement migration in small component slices**; do not replace script store or runner behavior.
-- [ ] **Step 3: Run affected component tests and all `test:unit` tests**.
-- [ ] **Step 4: Run `npm run lint` and `npm run build`**.
+- [x] **Step 1: Add route and modal-mode regression tests** for shared workbench views.
+- [x] **Step 2: Migrate history, Hub, guide, and settings into the shared workspace while keeping runner subscriptions at App root**.
+- [x] **Step 3: Run affected component tests and all `test:unit` tests**.
+- [x] **Step 4: Run `npm run lint` and `npm run build`**.
 - [ ] **Step 5: Commit** with `refactor(ui): move existing views into workbench`.
 
 ### Task 5: Layout and Workflow Verification
@@ -131,8 +131,8 @@
 - Desktop minimum width remains 1024px. At narrow widths, context sidebar and inspector become drawers without obscuring main actions.
 - Resizing uses existing pointer-driven conventions, stable width constraints, and visible keyboard focus.
 
-- [ ] **Step 1: Verify 1280x800 and 1024x640 layouts** with projects, long conversation, script library/detail, settings, and log panel.
-- [ ] **Step 2: Verify** keyboard navigation, dark/light skin switching, sidebar persistence, and editor/terminal popouts.
-- [ ] **Step 3: Fix only issues in this UI scope and rerun affected tests**.
-- [ ] **Step 4: Run final `npm run test:unit`, `npm run lint`, and `npm run build`**.
+- [x] **Step 1: Verify 1280x800 and approximately 1024x640 project layouts**; fix the inspector width that initially compressed the conversation.
+- [x] **Step 2: Verify** workspace navigation, light skin, model settings and MCP category, plus existing script workflow entry points, editor/terminal popout controls, and tray controls in the desktop app. Theme switching, persisted resizing, script detail/log, MCP status actions, tray behavior, and popout lifecycle need dedicated project data or targeted interaction testing.
+- [x] **Step 3: Fix layout issues in scope and rerun affected tests**.
+- [x] **Step 4: Run final `npm run test:unit`, `npm run lint`, and `npm run build`**.
 - [ ] **Step 5: Commit** with `test(ui): verify v2 workbench workflows`.

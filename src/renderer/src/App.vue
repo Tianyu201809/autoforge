@@ -22,6 +22,11 @@ import PromptDialogHost from './components/PromptDialogHost.vue'
 import ScratchpadPanel from './components/ScratchpadPanel.vue'
 import ExecutableEntryPickerModal from './components/ExecutableEntryPickerModal.vue'
 import HubPluginCenterPanel from './components/HubPluginCenterPanel.vue'
+import WorkspaceShell from './components/WorkspaceShell.vue'
+import WorkspaceNavigation from './components/WorkspaceNavigation.vue'
+import WorkspaceContextSidebar from './components/WorkspaceContextSidebar.vue'
+import AiProjectWorkspace from './components/AiProjectWorkspace.vue'
+import { useWorkspaceNavigation, type WorkspaceView } from './composables/useWorkspaceNavigation'
 import { askConfirm } from './composables/useConfirmDialog'
 import { useScratchpad } from './composables/useScratchpad'
 import { useToast } from './composables/useToast'
@@ -45,9 +50,6 @@ const {
   hasActiveListFilter,
   sortBy,
   sortOrder,
-  showSettings,
-  showDevGuide,
-  showExecutionHistory,
   showCategoryManager,
   executablePickerOpen,
   executableCandidates,
@@ -116,7 +118,59 @@ const logConsoleActiveSessionId = ref<string | undefined>()
 const trackedSessionIds = ref<string[]>([])
 const terminalDetached = ref(false)
 const dropImporting = ref(false)
-const showHubPluginCenter = ref(false)
+const workspaceNavigation = useWorkspaceNavigation()
+const previousWorkspaceView = ref<WorkspaceView>('projects')
+const workspaceTitles: Record<WorkspaceView, string> = {
+  projects: '项目',
+  scripts: '脚本',
+  history: '运行历史',
+  hub: 'Autoforge Hub',
+  guide: '开发指南',
+  settings: '设置'
+}
+const workspaceBreadcrumb = computed(() => workspaceNavigation.state.view === 'scripts'
+  ? breadcrumb.value
+  : workspaceTitles[workspaceNavigation.state.view])
+
+function navigateWorkspace(view: WorkspaceView): void {
+  const currentView = workspaceNavigation.state.view
+  const modalViews: WorkspaceView[] = ['history', 'hub', 'guide', 'settings']
+  if (modalViews.includes(view)) {
+    if (!modalViews.includes(currentView)) previousWorkspaceView.value = currentView
+    workspaceNavigation.navigate(view)
+    if (view === 'settings') openSettings()
+    if (view === 'guide') openDevGuide()
+    if (view === 'history') openExecutionHistory()
+    return
+  }
+  closeSettings()
+  closeDevGuide()
+  closeExecutionHistory()
+  workspaceNavigation.navigate(view)
+}
+
+function closeWorkspaceSettings(): void {
+  closeSettings()
+  if (workspaceNavigation.state.view === 'settings') workspaceNavigation.navigate(previousWorkspaceView.value)
+}
+
+function closeWorkspaceGuide(): void {
+  closeDevGuide()
+  if (workspaceNavigation.state.view === 'guide') workspaceNavigation.navigate(previousWorkspaceView.value)
+}
+
+function closeWorkspaceHistory(): void {
+  closeExecutionHistory()
+  if (workspaceNavigation.state.view === 'history') workspaceNavigation.navigate(previousWorkspaceView.value)
+}
+
+function closeWorkspaceHub(): void {
+  if (workspaceNavigation.state.view === 'hub') workspaceNavigation.navigate(previousWorkspaceView.value)
+}
+
+function resizeWorkspace(widths: Parameters<typeof workspaceNavigation.setWidths>[0]): void {
+  workspaceNavigation.setWidths(widths)
+}
 
 const selectedScript = computed(
   () => filteredScripts.value.find((s) => s.id === selectedScriptId.value) ?? null
@@ -239,7 +293,9 @@ function closeRunResultModal(): void {
 }
 
 function selectScript(script: ScriptItem, tab: 'detail' | 'params' | 'edit' | 'log' | 'config' = 'detail'): void {
+  workspaceNavigation.navigate('scripts')
   selectedScriptId.value = script.id
+  workspaceNavigation.setActiveScript(script.id)
   navigateDetailTab(tab)
   detailVisible.value = true
 }
@@ -261,6 +317,7 @@ function viewScriptLog(script: ScriptItem): void {
 }
 
 async function handleStart(scriptId: string): Promise<void> {
+  workspaceNavigation.navigate('scripts')
   const script = filteredScripts.value.find((s) => s.id === scriptId)
   if (script?.language !== 'executable') {
     const confirmed = await askConfirm({
@@ -284,6 +341,7 @@ async function handleStart(scriptId: string): Promise<void> {
 }
 
 async function handleDroppedImport(sourcePath: string): Promise<void> {
+  workspaceNavigation.navigate('scripts')
   const categoryKey = activeCategoryKey.value
   dropImporting.value = true
   try {
@@ -376,6 +434,7 @@ async function handleOpenDir(script: ScriptItem): Promise<void> {
 
 function onExampleImported(): void {
   closeDevGuide()
+  workspaceNavigation.navigate('scripts')
   void refresh()
 }
 
@@ -402,6 +461,9 @@ const { dismiss: dismissScratchpad } = useScratchpad()
 
 onMounted(() => {
   stopFocusTracking = startInsertFocusTracking()
+  if (workspaceNavigation.state.view === 'settings') openSettings()
+  if (workspaceNavigation.state.view === 'guide') openDevGuide()
+  if (workspaceNavigation.state.view === 'history') openExecutionHistory()
   offWindowMode = window.api.onModeChange((mode) => {
     if (!mode.visible) dismissScratchpad()
   })
@@ -418,6 +480,7 @@ onMounted(() => {
   })
 
   unsubHubInstalled = window.autoforge.onHubScriptInstalled(async ({ scriptId, name, status }) => {
+    workspaceNavigation.navigate('scripts')
     await refresh()
     const script = scripts.value.find((s) => s.id === scriptId)
     if (script) {
@@ -450,125 +513,168 @@ onUnmounted(() => {
 
 <template>
   <div v-file-path-drop class="flex flex-col h-full">
-    <TitleBar :breadcrumb="breadcrumb" />
-    <div class="flex flex-1 min-h-0">
-      <Sidebar
-        :nav-items="navItems"
-        :categories="categories"
-        :active-category-key="listFilter.categoryKey"
-        v-model:search-query="searchQuery"
-        @navigate="setNavFilter"
-        @category="setCategoryFilter"
-        @manage-categories="openCategoryManager"
-        @import="importScript"
-        @settings="openSettings"
-        @dev-guide="openDevGuide"
-        @execution-history="openExecutionHistory"
-        @categories-changed="refresh()"
-        @plugin-center="showHubPluginCenter = true"
+    <TitleBar :breadcrumb="workspaceBreadcrumb" />
+    <WorkspaceShell
+      class="flex-1 min-h-0"
+      :layout="workspaceNavigation.state"
+      @resize="resizeWorkspace"
+      @close-inspector="workspaceNavigation.toggleInspector()"
+    >
+      <template #navigation>
+        <WorkspaceNavigation
+          :view="workspaceNavigation.state.view"
+          :collapsed="workspaceNavigation.state.navCollapsed"
+          @navigate="navigateWorkspace"
+          @toggle-collapsed="workspaceNavigation.toggleNav()"
+          @toggle-context="workspaceNavigation.toggleContext()"
+        />
+      </template>
+      <template v-if="workspaceNavigation.state.view === 'scripts'" #context>
+        <WorkspaceContextSidebar
+          :collapsed="workspaceNavigation.state.contextCollapsed"
+          :width="workspaceNavigation.state.contextWidth"
+          @toggle="workspaceNavigation.toggleContext()"
+        >
+          <template #title>{{ workspaceTitles[workspaceNavigation.state.view] }}</template>
+          <Sidebar
+            v-if="workspaceNavigation.state.view === 'scripts'"
+            :nav-items="navItems"
+            :categories="categories"
+            :active-category-key="listFilter.categoryKey"
+            v-model:search-query="searchQuery"
+            @navigate="(filter) => { workspaceNavigation.navigate('scripts'); setNavFilter(filter) }"
+            @category="setCategoryFilter"
+            @manage-categories="openCategoryManager"
+            @import="importScript"
+            @settings="navigateWorkspace('settings')"
+            @dev-guide="navigateWorkspace('guide')"
+            @execution-history="navigateWorkspace('history')"
+            @categories-changed="refresh()"
+            @plugin-center="navigateWorkspace('hub')"
+          />
+        </WorkspaceContextSidebar>
+      </template>
+
+      <AiProjectWorkspace
+        v-if="workspaceNavigation.state.view === 'projects'"
+        :inspector-open="workspaceNavigation.state.inspectorOpen"
+        :active-project-id="workspaceNavigation.state.activeProjectId"
+        @toggle-inspector="workspaceNavigation.toggleInspector()"
+        @active-project-change="workspaceNavigation.setActiveProject"
       />
-      <CategoryManagerModal
-        :open="showCategoryManager"
-        :categories="categoryDefinitions"
-        @close="closeCategoryManager"
-        @refresh="refresh()"
+      <div v-else-if="workspaceNavigation.state.view === 'scripts'" class="flex flex-1 min-h-0 min-w-0 overflow-x-auto">
+        <div class="flex flex-1 flex-col min-w-0 min-h-0 overflow-hidden">
+          <MainContent
+            :scripts="pagedScripts"
+            :total-scripts="filteredScripts.length"
+            :list-page="listPage"
+            :list-total-pages="listTotalPages"
+            :title="breadcrumb"
+            :selected-id="selectedScriptId ?? undefined"
+            :list-filter="listFilter"
+            :has-active-list-filter="hasActiveListFilter"
+            :category-definitions="categoryDefinitions"
+            :sort-by="sortBy"
+            :sort-order="sortOrder"
+            :drop-importing="dropImporting"
+            @select="selectScript($event)"
+            @import="importScript"
+            @import-path="handleDroppedImport"
+            @start="(id) => void handleStart(id)"
+            @stop="(id) => runner.stop(id).then(() => refresh())"
+            @restart="(id) => runner.restart(id).then(() => refresh())"
+            @batch-run="openBatchRun"
+            @toggle-star="(id) => toggleStar(id)"
+            @edit="selectScript($event, 'edit')"
+            @archive="(id) => toggleArchive(id)"
+            @delete="handleDelete"
+            @open-dir="handleOpenDir"
+            @view-log="viewScriptLog"
+            @config="selectScript($event, 'config')"
+            @category-changed="refresh()"
+            @update:list-filter="setListFilter"
+            @reset-list-filter="resetListFilter"
+            @update:sort-by="setSortBy"
+            @update:sort-order="setSortOrder"
+            @update:list-page="setListPage"
+          />
+          <LogConsole
+            v-if="!terminalDetached"
+            v-model:display-mode="logConsoleMode"
+            v-model:active-session-id="logConsoleActiveSessionId"
+            :sessions="logConsoleSessions"
+            @clear="handleClearLogs"
+            @delete="handleDeleteLogs"
+            @delete-many="handleDeleteManyLogs"
+            @close="handleCloseTerminal"
+            @close-all="handleCloseAllTerminals"
+            @stop="(id) => runner.stop(id).then(() => refresh())"
+            @popout="handlePopoutTerminal"
+          />
+          <div v-else class="flex-shrink-0 border-t sb-border-subtle sb-bg-panel flex items-center justify-between px-3 h-9">
+            <span class="text-[12px] sb-text-muted">执行日志已在独立窗口中运行</span>
+            <button type="button" class="text-[12px] sb-text-primary" @click="handleDockTerminal">收回主窗口</button>
+          </div>
+        </div>
+        <DetailPanel
+          v-if="detailVisible && selectedScript"
+          :script="selectedScript"
+          :runner="runner"
+          :initial-tab="detailInitialTab"
+          :tab-request="detailTabRequest"
+          :environment-revision="environmentRevision"
+          :category-definitions="categoryDefinitions"
+          @close="detailVisible = false"
+          @refresh="refresh()"
+          @delete="handleDelete(selectedScript.id)"
+          @keep-script="selectedScriptId = $event"
+          @view-log="openLogConsoleNormal()"
+          @navigate-tab="navigateDetailTab"
+          @open-batch="openBatchRun(selectedScript.id)"
+        />
+      </div>
+      <ExecutionHistoryPanel
+        v-else-if="workspaceNavigation.state.view === 'history'"
+        :open="true"
+        :inline="true"
+        @close="closeWorkspaceHistory"
       />
-      <BatchRunPanel
-        :open="showBatchRun"
-        :script="batchScript"
-        :runner="runner"
-        @close="closeBatchRun"
-        @refresh="refresh()"
-        @started="onBatchStarted"
+      <HubPluginCenterPanel
+        v-else-if="workspaceNavigation.state.view === 'hub'"
+        :open="true"
+        :inline="true"
+        @close="closeWorkspaceHub"
       />
-      <DevGuidePanel :open="showDevGuide" @close="closeDevGuide" @imported="onExampleImported" />
-      <ExecutionHistoryPanel :open="showExecutionHistory" @close="closeExecutionHistory" />
+      <DevGuidePanel
+        v-else-if="workspaceNavigation.state.view === 'guide'"
+        :open="true"
+        :inline="true"
+        @close="closeWorkspaceGuide"
+        @imported="onExampleImported"
+      />
       <SettingsPanel
-        :open="showSettings"
-        @close="closeSettings"
+        v-else-if="workspaceNavigation.state.view === 'settings'"
+        :open="true"
+        :inline="true"
+        @close="closeWorkspaceSettings"
         @environments-changed="markEnvironmentsChanged"
       />
-      <div class="flex flex-1 min-h-0 min-w-0 overflow-x-auto">
-          <div class="flex flex-1 flex-col min-w-0 min-h-0 overflow-hidden">
-            <MainContent
-              :scripts="pagedScripts"
-              :total-scripts="filteredScripts.length"
-              :list-page="listPage"
-              :list-total-pages="listTotalPages"
-              :title="breadcrumb"
-              :selected-id="selectedScriptId ?? undefined"
-              :list-filter="listFilter"
-              :has-active-list-filter="hasActiveListFilter"
-              :category-definitions="categoryDefinitions"
-              :sort-by="sortBy"
-              :sort-order="sortOrder"
-              :drop-importing="dropImporting"
-              @select="selectScript($event)"
-              @import="importScript"
-              @import-path="handleDroppedImport"
-              @start="(id) => void handleStart(id)"
-              @stop="(id) => runner.stop(id).then(() => refresh())"
-              @restart="(id) => runner.restart(id).then(() => refresh())"
-              @batch-run="openBatchRun"
-              @toggle-star="(id) => toggleStar(id)"
-              @edit="selectScript($event, 'edit')"
-              @archive="(id) => toggleArchive(id)"
-              @delete="handleDelete"
-              @open-dir="handleOpenDir"
-              @view-log="viewScriptLog"
-              @config="selectScript($event, 'config')"
-              @category-changed="refresh()"
-              @update:list-filter="setListFilter"
-              @reset-list-filter="resetListFilter"
-              @update:sort-by="setSortBy"
-              @update:sort-order="setSortOrder"
-              @update:list-page="setListPage"
-            />
-            <LogConsole
-              v-if="!terminalDetached"
-              v-model:display-mode="logConsoleMode"
-              v-model:active-session-id="logConsoleActiveSessionId"
-              :sessions="logConsoleSessions"
-              @clear="handleClearLogs"
-              @delete="handleDeleteLogs"
-              @delete-many="handleDeleteManyLogs"
-              @close="handleCloseTerminal"
-              @close-all="handleCloseAllTerminals"
-              @stop="(id) => runner.stop(id).then(() => refresh())"
-              @popout="handlePopoutTerminal"
-            />
-            <div
-              v-else
-              class="flex-shrink-0 border-t sb-border-subtle sb-bg-panel flex items-center justify-between px-3 h-9"
-            >
-              <span class="text-[12px] sb-text-muted">执行日志已在独立窗口中运行</span>
-              <button
-                type="button"
-                class="text-[12px] sb-text-primary hover:text-[var(--sb-accent-solid)] transition-colors"
-                @click="handleDockTerminal"
-              >
-                收回主窗口
-              </button>
-            </div>
-          </div>
-          <DetailPanel
-            v-if="detailVisible && selectedScript"
-            :script="selectedScript"
-            :runner="runner"
-            :initial-tab="detailInitialTab"
-            :tab-request="detailTabRequest"
-            :environment-revision="environmentRevision"
-            :category-definitions="categoryDefinitions"
-            @close="detailVisible = false"
-            @refresh="refresh()"
-            @delete="handleDelete(selectedScript.id)"
-            @keep-script="selectedScriptId = $event"
-            @view-log="openLogConsoleNormal()"
-            @navigate-tab="navigateDetailTab"
-            @open-batch="openBatchRun(selectedScript.id)"
-          />
-        </div>
-      </div>
+    </WorkspaceShell>
+
+    <CategoryManagerModal
+      :open="showCategoryManager"
+      :categories="categoryDefinitions"
+      @close="closeCategoryManager"
+      @refresh="refresh()"
+    />
+    <BatchRunPanel
+      :open="showBatchRun"
+      :script="batchScript"
+      :runner="runner"
+      @close="closeBatchRun"
+      @refresh="refresh()"
+      @started="onBatchStarted"
+    />
     <StatusBar :running-count="stats.running" />
     <RunResultModal
       :open="runResultModalOpen"
@@ -586,6 +692,23 @@ onUnmounted(() => {
     <ConfirmDialogHost />
     <PromptDialogHost />
     <ScratchpadPanel />
-    <HubPluginCenterPanel :open="showHubPluginCenter" @close="showHubPluginCenter = false" />
   </div>
 </template>
+
+<style scoped>
+.workspace-view-placeholder {
+  display: grid;
+  flex: 1;
+  min-width: 0;
+  min-height: 0;
+  place-items: center;
+  background: var(--sb-bg-base);
+}
+
+.workspace-view-placeholder h1 {
+  color: var(--sb-text-primary);
+  font-size: 22px;
+  font-weight: 600;
+}
+
+</style>

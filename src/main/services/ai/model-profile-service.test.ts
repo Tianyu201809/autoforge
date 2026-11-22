@@ -53,6 +53,19 @@ test('keeps profile metadata and secret credentials in separate stores', () => {
   assert.equal(service.listProfiles().profiles[0].hasApiKey, true)
 })
 
+test('preserves write-only header credentials when only the API key is updated', () => {
+  const { service, storedCredentials } = setup()
+  service.upsertProfile({ profile: { ...profile('first'), createdAt: undefined, updatedAt: undefined } })
+  service.setCredentials('first', { apiKey: 'old-key', extraHeaders: { 'X-Team': 'private-value' } })
+
+  service.setCredentials('first', { apiKey: 'new-key', extraHeaders: {} })
+
+  assert.deepEqual(storedCredentials.get('first'), {
+    apiKey: 'new-key',
+    extraHeaders: { 'X-Team': 'private-value' }
+  })
+})
+
 test('selects another profile when the active profile is deleted', () => {
   const { service } = setup()
   service.upsertProfile({ profile: { ...profile('first'), createdAt: undefined, updatedAt: undefined } })
