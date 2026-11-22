@@ -23,6 +23,13 @@ export interface LlmProfileListResult {
   credentialPersistent: boolean
 }
 
+export interface LlmProviderPreset {
+  id: string
+  label: string
+  baseUrl: string
+  defaultModel: string
+}
+
 export interface LlmMessage {
   role: 'system' | 'user' | 'assistant' | 'tool'
   content: string
