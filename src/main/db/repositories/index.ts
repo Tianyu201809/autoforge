@@ -6,6 +6,7 @@ import { EnvironmentRepository } from './environment-repository'
 import { ExecutionRepository } from './execution-repository'
 import { ExecutableTrustRepository } from './executable-trust-repository'
 import { ScriptRepository } from './script-repository'
+import { AiWorkspaceRepository } from './ai-workspace-repository'
 
 export interface Repositories {
   scripts: ScriptRepository
@@ -14,6 +15,7 @@ export interface Repositories {
   config: ConfigRepository
   execution: ExecutionRepository
   executableTrust: ExecutableTrustRepository
+  aiWorkspace: AiWorkspaceRepository
 }
 
 export function createRepositories(db: SqliteDatabase, cipher: EnvCipher): Repositories {
@@ -23,6 +25,7 @@ export function createRepositories(db: SqliteDatabase, cipher: EnvCipher): Repos
     categories: new CategoryRepository(db),
     config: new ConfigRepository(db),
     execution: new ExecutionRepository(db),
-    executableTrust: new ExecutableTrustRepository(db)
+    executableTrust: new ExecutableTrustRepository(db),
+    aiWorkspace: new AiWorkspaceRepository(db)
   }
 }

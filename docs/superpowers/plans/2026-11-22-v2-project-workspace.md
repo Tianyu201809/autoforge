@@ -53,11 +53,11 @@
 - Repository methods: `listProjects()`, `getProject(id)`, `createProject(input)`, `updateProject(id, patch)`, `removeProject(id)`, `listTurns(projectId)`, `appendTurn(projectId, turn)`, `updateTurn(projectId, turnId, patch)`.
 - The project row stores canonical root path, language, profile ID, imported script ID, status, timestamps. Turn rows store role/content/status, tool summaries, checks, and import result.
 
-- [ ] **Step 1: Write failing repository tests** `persists_project_metadata`, `rejects_duplicate_canonical_root`, `orders_turns_by_creation`, `validates_state_transitions`, and `removes_project_rows_without_deleting_root`.
-- [ ] **Step 2: Run** `node --import tsx --test src/main/db/repositories/ai-workspace-repository.test.ts`.
-- [ ] **Step 3: Implement migration 7 and repository** following existing config/script repository patterns.
-- [ ] **Step 4: Run repository tests and database migration tests**.
-- [ ] **Step 5: Commit** with `feat(ai): persist local project sessions`.
+- [x] **Step 1: Write failing repository tests** `persists_project_metadata`, `rejects_duplicate_canonical_root`, `orders_turns_by_creation`, `validates_state_transitions`, and `removes_project_rows_without_deleting_root`.
+- [x] **Step 2: Run** `node --import tsx --test src/main/db/repositories/ai-workspace-repository.test.ts`.
+- [x] **Step 3: Implement migration 7 and repository** following existing config/script repository patterns.
+- [x] **Step 4: Run repository tests and database migration tests**.
+- [x] **Step 5: Commit** with `feat(ai): persist local project sessions`.
 
 ### Task 2: Project Root and File Operations
 

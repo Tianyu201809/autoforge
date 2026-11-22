@@ -9,6 +9,7 @@ import {
   EXECUTABLE_TRUST_SCHEMA,
   MIGRATION_006
 } from './migrations/006-script-language-executable-trust'
+import { MIGRATION_007 } from './migrations/007-ai-workspace'
 import { migrateFromJsonIfNeeded } from './migrate-from-json'
 import { createRepositories } from './repositories'
 import { openSqliteDatabase, type SqliteDatabase } from './sqlite-adapter'
@@ -115,6 +116,11 @@ function runMigrations(database: SqliteDatabase): void {
   ensureScriptLanguageSchema(database)
   if (currentVersion < 6) {
     database.prepare('INSERT INTO schema_migrations (version) VALUES (?)').run(6)
+  }
+
+  if (currentVersion < 7) {
+    database.exec(MIGRATION_007)
+    database.prepare('INSERT INTO schema_migrations (version) VALUES (?)').run(7)
   }
 }
 
