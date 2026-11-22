@@ -79,6 +79,8 @@
 ### Task 3: OpenAI and Compatible Endpoints
 
 **Files:**
+- Create: `src/main/services/ai/sse-reader.ts`
+- Test: `src/main/services/ai/sse-reader.test.ts`
 - Create: `src/main/services/ai/openai-provider.ts`
 - Create: `src/main/services/ai/openai-compatible-provider.ts`
 - Create: `src/main/services/ai/provider-presets.ts`
@@ -87,10 +89,12 @@
 
 **Interfaces:**
 - Consumes `LlmProviderAdapter`, `LlmRequest`, and `LlmStreamEvent` from Task 1.
-- Produces adapters accepting an injected `request(url, init): Promise<Response>`.
-- Compatible presets identify provider label and editable base URL. Model IDs remain user-editable strings.
+- Produces `readSseData(response, { signal, idleTimeoutMs }): AsyncIterable<string>` for Tasks 4-5. It handles split CRLF/LF frames, ignores comments, races reads with abort and idle timeout, and cancels the reader on exit.
+- Produces `createOpenAiProvider({ request })` and `createOpenAiCompatibleProvider({ request })`, both returning `LlmProviderAdapter`.
+- Produces `normalizeOpenAiEndpoint(baseUrl): string` and `OPENAI_COMPATIBLE_PRESETS: LlmProviderPreset[]`, where each preset has `id`, `label`, `baseUrl`, and editable `defaultModel`.
+- The injected request signature is `(url: string, init: RequestInit) => Promise<Response>`.
 
-- [ ] **Step 1: Write failing tests** `streams_openai_text_and_usage`, `assembles_fragmented_tool_calls`, `normalizes_compatible_endpoint_url`, `applies_preset_and_extra_headers`, `redacts_http_errors`, and `aborts_fragmented_stream`.
+- [ ] **Step 1: Write failing tests** `reads_split_sse_frames`, `ignores_sse_comments`, `cancels_sse_reader_on_abort`, `streams_openai_text_and_usage`, `assembles_fragmented_tool_calls`, `normalizes_compatible_endpoint_url`, `applies_preset_and_extra_headers`, `redacts_http_errors`, and `aborts_fragmented_stream`.
 - [ ] **Step 2: Run focused tests** for both adapter files.
 - [ ] **Step 3: Implement** OpenAI Chat Completions and compatible endpoint streaming with normalized events and redacted errors.
 - [ ] **Step 4: Run focused tests** and verify key sentinel strings never appear in captured output.
@@ -108,11 +112,11 @@
 - Consumes the shared adapter contract from Task 1.
 - Produces adapters for Anthropic Messages SSE and Gemini `generateContent` streaming/function-call events.
 
-- [ ] **Step 1: Write failing tests** `sends_anthropic_auth_headers`, `maps_anthropic_tool_use`, `maps_gemini_function_call`, `streams_provider_text`, `handles_fragmented_sse_frames`, and `cancels_provider_reader`.
-- [ ] **Step 2: Run focused tests** for both provider adapters.
-- [ ] **Step 3: Implement** protocol-specific request/response conversion without provider logic in the renderer.
-- [ ] **Step 4: Run adapter tests and the full AI provider test set**.
-- [ ] **Step 5: Commit** with `feat(ai): add Anthropic and Gemini adapters`.
+- [x] **Step 1: Write failing tests** Anthropic authentication/text/usage, tool JSON delta assembly, and error redaction; Gemini stream endpoint/authentication, text, function calls, usage, and finish reason.
+- [x] **Step 2: Run focused tests** for both provider adapters.
+- [x] **Step 3: Implement** protocol-specific request/response conversion without provider logic in the renderer.
+- [x] **Step 4: Run adapter tests and the full AI provider test set**.
+- [x] **Step 5: Commit** with `feat(ai): add Anthropic and Gemini adapters`.
 
 ### Task 5: Provider Service, Profile IPC, and Connection Tests
 
