@@ -95,11 +95,11 @@
 - `ProjectCheckResult = { status: 'passed' | 'failed' | 'blocked'; code: string; message: string; diagnostics: string[] }`.
 - Check failures return bounded, secret-redacted diagnostics and stable check codes.
 
-- [ ] **Step 1: Write failing tests** `validates_manifest_and_entry`, `blocks_javascript_syntax_error`, `blocks_python_syntax_error`, `blocks_when_python_missing`, `times_out_checker`, and `checks_paths_with_spaces_and_unicode`.
-- [ ] **Step 2: Run** `node --import tsx --test src/main/services/ai/project-checks.test.ts`.
-- [ ] **Step 3: Implement** checks with fixed executable/argument arrays and no shell interpolation.
-- [ ] **Step 4: Run check tests and verify generated source is never invoked**.
-- [ ] **Step 5: Commit** with `feat(ai): validate generated script packages`.
+- [x] **Step 1: Write failing tests** `validates_manifest_and_entry`, `blocks_javascript_syntax_error`, `blocks_python_syntax_error`, `blocks_when_python_missing`, `times_out_checker`, and `checks_paths_with_spaces_and_unicode`.
+- [x] **Step 2: Run** `node --import tsx --test src/main/services/ai/project-checks.test.ts`.
+- [x] **Step 3: Implement** checks with fixed executable/argument arrays and no shell interpolation.
+- [x] **Step 4: Run check tests and verify generated source is never invoked**.
+- [x] **Step 5: Commit** with `feat(ai): validate generated script packages`.
 
 ### Task 4: Local Script Import and Update
 
