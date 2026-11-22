@@ -1,5 +1,6 @@
 import { execFile } from 'node:child_process'
-import { statSync } from 'node:fs'
+import { lstatSync, readdirSync, statSync } from 'node:fs'
+import { join, relative } from 'node:path'
 import { resolveSafeExistingWorkspaceFile, scriptWorkspace } from '../script-workspace'
 import type { ScriptManifest } from '../../../shared/script-contract'
 
@@ -71,6 +72,22 @@ function checkResult(
   return { status, code, message, diagnostics }
 }
 
+function findUnsafePackagePath(projectPath: string): { path: string; code: 'project_symlink' | 'project_special_file' } | null {
+  const pending = [projectPath]
+  while (pending.length > 0) {
+    const directory = pending.pop()!
+    for (const entry of readdirSync(directory, { withFileTypes: true })) {
+      const path = join(directory, entry.name)
+      const stat = lstatSync(path)
+      const relativePath = relative(projectPath, path).replace(/\\/g, '/')
+      if (stat.isSymbolicLink()) return { path: relativePath, code: 'project_symlink' }
+      if (stat.isDirectory()) pending.push(path)
+      else if (!stat.isFile()) return { path: relativePath, code: 'project_special_file' }
+    }
+  }
+  return null
+}
+
 async function resolvePythonCommand(
   pythonExecutable?: string
 ): Promise<{ executable: string; args: string[] } | null> {
@@ -92,6 +109,10 @@ export function createProjectChecks(options: ProjectChecksOptions = {}) {
 
   async function checkScriptPackage(projectPath: string): Promise<ProjectCheckResult> {
     try {
+      const unsafePath = findUnsafePackagePath(projectPath)
+      if (unsafePath) {
+        return checkResult('failed', unsafePath.code, '项目包不能包含符号链接或特殊文件', [unsafePath.path])
+      }
       validatePackage(projectPath)
       return checkResult('passed', 'package_valid', '脚本包校验通过')
     } catch (error) {

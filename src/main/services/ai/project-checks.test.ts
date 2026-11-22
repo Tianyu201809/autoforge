@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict'
 import { execFileSync } from 'node:child_process'
-import { existsSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs'
+import { existsSync, mkdirSync, mkdtempSync, rmSync, symlinkSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { test } from 'node:test'
@@ -39,6 +39,19 @@ test('validates a package manifest and entry in a Unicode path', async (t) => {
   const result = await checks.checkScriptPackage(root)
   assert.equal(result.status, 'passed')
   assert.equal(result.code, 'package_valid')
+})
+
+test('blocks script packages that contain symlinks', async (t) => {
+  const root = fixture(t)
+  const outsideRoot = mkdtempSync(join(tmpdir(), 'autoforge-check-outside-'))
+  t.after(() => rmSync(outsideRoot, { recursive: true, force: true }))
+  writeManifest(root, 'index.mjs', 'javascript')
+  writeFileSync(join(root, 'index.mjs'), 'export function run() {}')
+  symlinkSync(outsideRoot, join(root, 'linked-dir'), 'junction')
+
+  const result = await createProjectChecks().checkScriptPackage(root)
+  assert.equal(result.status, 'failed')
+  assert.equal(result.code, 'project_symlink')
 })
 
 test('blocks JavaScript syntax errors without executing top-level code', async (t) => {

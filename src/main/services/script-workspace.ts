@@ -123,9 +123,11 @@ export function hasManifest(scriptDir: string): boolean {
 export class ScriptWorkspace {
   private scriptsRoot = ''
 
+  constructor(private readonly getUserDataPath = getAppUserDataPath) {}
+
   ensureRoot(): string {
     if (this.scriptsRoot) return this.scriptsRoot
-    const userData = getAppUserDataPath()
+    const userData = this.getUserDataPath()
     this.scriptsRoot = join(userData, 'scripts')
     if (!existsSync(this.scriptsRoot)) {
       mkdirSync(this.scriptsRoot, { recursive: true })

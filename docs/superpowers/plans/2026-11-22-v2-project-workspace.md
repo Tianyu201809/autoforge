@@ -114,11 +114,11 @@
 - Produces `updateFromProject(scriptId, sourceDir): ScriptMeta`, which reuses `replaceFromDirectory` and persists metadata with the existing script ID.
 - Update does not set `hubScriptId`; it preserves user preference/environment data by retaining the script ID and existing preference records.
 
-- [ ] **Step 1: Write failing tests** `imports_project_after_checks`, `updates_associated_script_and_preserves_preferences`, `rejects_invalid_project_package`, and `failed_project_update_restores_previous_script`.
-- [ ] **Step 2: Run focused registry tests**.
-- [ ] **Step 3: Implement project association lookup and transactional update**.
-- [ ] **Step 4: Run import/update tests and existing script workspace tests**.
-- [ ] **Step 5: Register tests in `test:unit` and commit** with `feat(ai): link generated projects to imported scripts`.
+- [x] **Step 1: Write failing tests** `imports_project_after_checks`, `updates_associated_script_and_preserves_preferences`, `rejects_invalid_project_package`, and `failed_project_update_restores_previous_script`.
+- [x] **Step 2: Run focused registry tests**.
+- [x] **Step 3: Implement project association lookup and transactional update**.
+- [x] **Step 4: Run import/update tests and existing script workspace tests**.
+- [x] **Step 5: Register tests in `test:unit` and commit** with `feat(ai): link generated projects to imported scripts`.
 
 ### Task 5: Agent Session and Tool Loop
 
