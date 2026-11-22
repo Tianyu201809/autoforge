@@ -97,6 +97,16 @@ export const IPC = {
   AI_PROFILES_TEST: 'ai:profiles:test',
   AI_PRESETS_LIST: 'ai:presets:list',
 
+  AI_PROJECT_PICK_FOLDER: 'ai:project:pick-folder',
+  AI_PROJECTS_LIST: 'ai:projects:list',
+  AI_PROJECT_GET: 'ai:project:get',
+  AI_PROJECT_CREATE: 'ai:project:create',
+  AI_PROJECT_REMOVE: 'ai:project:remove',
+  AI_PROJECT_START_TURN: 'ai:project:start-turn',
+  AI_PROJECT_CANCEL_TURN: 'ai:project:cancel-turn',
+  AI_PROJECT_RETRY_CHECKS: 'ai:project:retry-checks',
+  EVENT_AI_AGENT: 'event:ai-agent',
+
   HUB_SESSION: 'hub:session',
   HUB_LOGIN: 'hub:login',
   HUB_BEGIN_AUTHORIZATION: 'hub:begin-authorization',

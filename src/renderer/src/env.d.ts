@@ -35,6 +35,7 @@ import type { ScriptIcon, ScriptLifecycleEvent } from '../../shared/script-contr
 import type { McpClientConfig, McpStatus } from '../../shared/mcp-types'
 import type { HubInstallProgress, HubPlugin, HubPluginListResult, HubPluginQuery, HubSession, HubTeam } from '../../shared/hub-types'
 import type { LlmProfile, LlmProfileListResult, LlmProfileView, LlmProviderPreset, LlmTestResult } from '../../shared/ai-types'
+import type { AiAgentEvent, AiProject, AiProjectCreateInput, AiProjectSummary, AiProjectTurn } from '../../shared/ai-workspace-types'
 
 export interface ScriptListResponse {
   scripts: ScriptItem[]
@@ -103,6 +104,15 @@ export interface FloatingBallApi {
 
 export interface AutoforgeApi {
   ai: {
+    pickProjectFolder: () => Promise<string | null>
+    listProjects: () => Promise<AiProjectSummary[]>
+    getProject: (id: string) => Promise<AiProject | null>
+    createProject: (input: Omit<AiProjectCreateInput, 'id'>) => Promise<AiProject>
+    removeProject: (id: string) => Promise<boolean>
+    startTurn: (projectId: string, message: string) => Promise<AiProjectTurn>
+    cancelTurn: (projectId: string) => Promise<boolean>
+    retryChecks: (projectId: string) => Promise<AiProjectTurn>
+    onAgentEvent: (callback: (event: AiAgentEvent) => void) => () => void
     listProfiles: () => Promise<LlmProfileListResult>
     listPresets: () => Promise<LlmProviderPreset[]>
     upsertProfile: (input: { profile: Omit<LlmProfile, 'createdAt' | 'updatedAt'> }) => Promise<LlmProfileView>

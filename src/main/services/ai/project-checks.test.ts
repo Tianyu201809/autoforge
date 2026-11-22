@@ -116,3 +116,21 @@ test('checks entry paths containing spaces and Unicode characters', async (t) =>
   const result = await createProjectChecks().checkScriptSyntax(root, writeManifest(root, '脚本目录/入口.mjs', 'javascript'))
   assert.equal(result.status, 'passed')
 })
+
+test('uses the configured Python command when the syntax check is run', async (t) => {
+  const root = fixture(t)
+  writeManifest(root, 'main.py', 'python')
+  writeFileSync(join(root, 'main.py'), 'print("ok")\n')
+  let invoked = ''
+  const checks = createProjectChecks({
+    resolvePython: async () => ({ executable: 'configured-python', args: ['-3'] }),
+    runCommand: async (executable, args) => {
+      invoked = `${executable} ${args.join(' ')}`
+      return { stdout: '', stderr: '' }
+    }
+  })
+
+  const result = await checks.checkScriptSyntax(root, writeManifest(root, 'main.py', 'python'))
+  assert.equal(result.status, 'passed')
+  assert.match(invoked, /^configured-python -3 -I -c /)
+})

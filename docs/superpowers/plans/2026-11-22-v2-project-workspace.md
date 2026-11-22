@@ -156,8 +156,8 @@
 - Folder picker uses Electron `dialog.showOpenDialog` with `openDirectory` and does not create or delete folders.
 - Main process instantiates one AI runtime after database initialization; renderer receives only typed DTOs.
 
-- [ ] **Step 1: Write failing IPC contract tests** `rejects_invalid_project_payload`, `routes_events_to_requesting_window`, `cancels_project_turn`, and `returns_null_when_folder_picker_cancelled`.
-- [ ] **Step 2: Implement** IPC handlers and a narrow `window.autoforge.ai` preload API with matching types.
-- [ ] **Step 3: Register tests in `test:unit` and run project, provider, and IPC focused tests**.
-- [ ] **Step 4: Run `npm run lint` and `npm run build`**.
-- [ ] **Step 5: Commit** with `feat(ai): wire project agent IPC`.
+- [x] **Step 1: Write failing IPC contract tests** `rejects_invalid_project_payload`, `routes_events_to_requesting_window`, `cancels_project_turn`, and `returns_null_when_folder_picker_cancelled`.
+- [x] **Step 2: Implement** IPC handlers and a narrow `window.autoforge.ai` preload API with matching types.
+- [x] **Step 3: Register tests in `test:unit` and run project, provider, and IPC focused tests**.
+- [x] **Step 4: Run `npm run lint` and `npm run build`**.
+- [x] **Step 5: Commit** with `feat(ai): wire project agent IPC`.

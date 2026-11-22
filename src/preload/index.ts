@@ -38,6 +38,7 @@ import type { ScriptLanguage } from '../shared/script-language'
 import type { McpClientConfig, McpStatus } from '../shared/mcp-types'
 import type { HubInstallProgress, HubPlugin, HubPluginListResult, HubPluginQuery, HubSession, HubTeam } from '../shared/hub-types'
 import type { LlmProfile, LlmProfileListResult, LlmProfileView, LlmProviderPreset, LlmTestResult } from '../shared/ai-types'
+import type { AiAgentEvent, AiProject, AiProjectCreateInput, AiProjectSummary, AiProjectTurn } from '../shared/ai-workspace-types'
 
 export interface EditorFileStatePayload {
   content: string
@@ -110,6 +111,21 @@ const api = {
 
 const autoforge = {
   ai: {
+    pickProjectFolder: (): Promise<string | null> => ipcRenderer.invoke(IPC.AI_PROJECT_PICK_FOLDER),
+    listProjects: (): Promise<AiProjectSummary[]> => ipcRenderer.invoke(IPC.AI_PROJECTS_LIST),
+    getProject: (id: string): Promise<AiProject | null> => ipcRenderer.invoke(IPC.AI_PROJECT_GET, id),
+    createProject: (input: Omit<AiProjectCreateInput, 'id'>): Promise<AiProject> =>
+      ipcRenderer.invoke(IPC.AI_PROJECT_CREATE, input),
+    removeProject: (id: string): Promise<boolean> => ipcRenderer.invoke(IPC.AI_PROJECT_REMOVE, id),
+    startTurn: (projectId: string, message: string): Promise<AiProjectTurn> =>
+      ipcRenderer.invoke(IPC.AI_PROJECT_START_TURN, projectId, message),
+    cancelTurn: (projectId: string): Promise<boolean> => ipcRenderer.invoke(IPC.AI_PROJECT_CANCEL_TURN, projectId),
+    retryChecks: (projectId: string): Promise<AiProjectTurn> => ipcRenderer.invoke(IPC.AI_PROJECT_RETRY_CHECKS, projectId),
+    onAgentEvent: (callback: (event: AiAgentEvent) => void): (() => void) => {
+      const handler = (_event: IpcRendererEvent, payload: AiAgentEvent) => callback(payload)
+      ipcRenderer.on(IPC.EVENT_AI_AGENT, handler)
+      return () => ipcRenderer.removeListener(IPC.EVENT_AI_AGENT, handler)
+    },
     listProfiles: (): Promise<LlmProfileListResult> => ipcRenderer.invoke(IPC.AI_PROFILES_LIST),
     listPresets: (): Promise<LlmProviderPreset[]> => ipcRenderer.invoke(IPC.AI_PRESETS_LIST),
     upsertProfile: (input: { profile: Omit<LlmProfile, 'createdAt' | 'updatedAt'> }): Promise<LlmProfileView> =>

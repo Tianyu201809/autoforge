@@ -33,6 +33,7 @@ export interface ProjectChecksOptions {
   timeoutMs?: number
   runCommand?: CommandRunner
   validatePackageDirectory?: (projectPath: string) => ScriptManifest
+  resolvePython?: () => Promise<{ executable: string; args?: string[] }>
 }
 
 function defaultRunCommand(executable: string, args: string[], options: CommandOptions): Promise<CommandResult> {
@@ -89,9 +90,18 @@ function findUnsafePackagePath(projectPath: string): { path: string; code: 'proj
 }
 
 async function resolvePythonCommand(
-  pythonExecutable?: string
+  pythonExecutable?: string,
+  configuredResolver?: ProjectChecksOptions['resolvePython']
 ): Promise<{ executable: string; args: string[] } | null> {
   if (pythonExecutable?.trim()) return { executable: pythonExecutable.trim(), args: [] }
+  if (configuredResolver) {
+    try {
+      const configured = await configuredResolver()
+      return { executable: configured.executable, args: configured.args ?? [] }
+    } catch {
+      return null
+    }
+  }
   try {
     const resolver = await import('../python-resolver')
     const info = await resolver.resolvePythonExecutable()
@@ -146,7 +156,7 @@ export function createProjectChecks(options: ProjectChecksOptions = {}) {
     if (language === 'javascript') {
       args = ['--check', entryPath]
     } else {
-      const python = await resolvePythonCommand(pythonExecutable)
+      const python = await resolvePythonCommand(pythonExecutable, options.resolvePython)
       if (!python) return checkResult('blocked', 'python_missing', '未检测到可用的 Python 解释器')
       args = [...python.args, '-I', '-c', PYTHON_AST_CHECK, entryPath]
       try {

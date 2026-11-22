@@ -10,7 +10,7 @@ import { findCategoryDefinition } from '../services/category-service'
 import { dependencyManager } from '../services/dependency-manager'
 import { importBundledExample, listBundledExamples, readDevGuideMarkdown, readDevGuideSkillCreateInfo } from '../services/example-bundles'
 import { getBrowserStatus } from '../services/browser-path'
-import { detectPythonStatus } from '../services/python-resolver'
+import { buildPythonCommand, detectPythonStatus, resolvePythonExecutable } from '../services/python-resolver'
 import {
   openInExternalEditor,
   resolveExternalEditorPath
@@ -33,6 +33,12 @@ import { createAnthropicProvider } from '../services/ai/anthropic-provider'
 import { createGeminiProvider } from '../services/ai/gemini-provider'
 import { OPENAI_COMPATIBLE_PRESETS } from '../services/ai/provider-presets'
 import { registerModelProfileIpcHandlers } from '../services/ai/model-profile-ipc'
+import { createAgentService } from '../services/ai/agent-service'
+import { createProjectWorkspace } from '../services/ai/project-workspace'
+import { createProjectChecks } from '../services/ai/project-checks'
+import { AiWorkspaceRepository } from '../db/repositories/ai-workspace-repository'
+import { getDb } from '../db/database'
+import { registerAiWorkspaceIpcHandlers } from './ai-workspace-handlers'
 import { createHubClient } from '../services/hub-client'
 import { installScriptFromHubZip } from '../services/hub-script-installer'
 import { setHubAuthorizationCallback } from '../services/hub-bridge-server'
@@ -108,6 +114,22 @@ export function registerIpcHandlers(
       'openai-compatible': createOpenAiCompatibleProvider({ request: (url, init) => fetch(url, init) })
     }
   })
+  const aiWorkspaceRepository = new AiWorkspaceRepository(getDb())
+  const aiProjectWorkspace = createProjectWorkspace((id) => aiWorkspaceRepository.getProject(id)?.rootPath ?? null)
+  const projectChecks = createProjectChecks({
+    resolvePython: async () => {
+      const info = await resolvePythonExecutable(scriptStore.getConfig().python)
+      const command = buildPythonCommand(info)
+      return { executable: command.executable, args: command.baseArgs }
+    }
+  })
+  const aiAgentService = createAgentService({
+    repository: aiWorkspaceRepository,
+    profiles: modelProfileService,
+    workspace: aiProjectWorkspace,
+    checks: projectChecks,
+    registry: scriptRegistry
+  })
   let pendingAuthorization: { state: string; verifier: string; expiresAt: number } | null = null
   setHubAuthorizationCallback(async (code, state) => {
     const pending = pendingAuthorization
@@ -141,6 +163,16 @@ export function registerIpcHandlers(
     (channel, handler) => ipcMain.handle(channel, (event, ...args) => handler(event, ...args)),
     modelProfileService,
     OPENAI_COMPATIBLE_PRESETS
+  )
+  registerAiWorkspaceIpcHandlers(
+    (channel, handler) => ipcMain.handle(channel, (event, ...args) => handler(event, ...args)),
+    aiAgentService,
+    async () => {
+      const window = getWindow()
+      if (!window) return null
+      const result = await dialog.showOpenDialog(window, { properties: ['openDirectory'] })
+      return result.canceled ? null : result.filePaths[0] ?? null
+    }
   )
   ipcMain.handle(IPC.HUB_LOGOUT, () => hubClient.logout())
   ipcMain.handle(IPC.HUB_LIST_TEAMS, () => hubClient.listTeams())
