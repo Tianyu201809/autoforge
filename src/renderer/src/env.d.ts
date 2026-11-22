@@ -34,6 +34,7 @@ import type {
 import type { ScriptIcon, ScriptLifecycleEvent } from '../../shared/script-contract'
 import type { McpClientConfig, McpStatus } from '../../shared/mcp-types'
 import type { HubInstallProgress, HubPlugin, HubPluginListResult, HubPluginQuery, HubSession, HubTeam } from '../../shared/hub-types'
+import type { LlmProfile, LlmProfileListResult, LlmProfileView, LlmProviderPreset, LlmTestResult } from '../../shared/ai-types'
 
 export interface ScriptListResponse {
   scripts: ScriptItem[]
@@ -101,6 +102,19 @@ export interface FloatingBallApi {
 }
 
 export interface AutoforgeApi {
+  ai: {
+    listProfiles: () => Promise<LlmProfileListResult>
+    listPresets: () => Promise<LlmProviderPreset[]>
+    upsertProfile: (input: { profile: Omit<LlmProfile, 'createdAt' | 'updatedAt'> }) => Promise<LlmProfileView>
+    deleteProfile: (id: string) => Promise<boolean>
+    setActiveProfile: (id: string) => Promise<LlmProfileListResult>
+    setCredentials: (
+      profileId: string,
+      credentials: { apiKey?: string; extraHeaders: Record<string, string> }
+    ) => Promise<LlmProfileView>
+    clearCredentials: (profileId: string) => Promise<LlmProfileView>
+    testProfile: (profileId: string) => Promise<LlmTestResult>
+  }
   onHubScriptInstalled: (
     callback: (payload: { scriptId: string; name: string; status: 'installed' | 'updated' }) => void
   ) => () => void

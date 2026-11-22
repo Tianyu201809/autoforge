@@ -88,6 +88,15 @@ export const IPC = {
 
   CONFIG_SET: 'config:set',
 
+  AI_PROFILES_LIST: 'ai:profiles:list',
+  AI_PROFILES_UPSERT: 'ai:profiles:upsert',
+  AI_PROFILES_DELETE: 'ai:profiles:delete',
+  AI_PROFILES_SET_ACTIVE: 'ai:profiles:set-active',
+  AI_PROFILES_SET_CREDENTIALS: 'ai:profiles:set-credentials',
+  AI_PROFILES_CLEAR_CREDENTIALS: 'ai:profiles:clear-credentials',
+  AI_PROFILES_TEST: 'ai:profiles:test',
+  AI_PRESETS_LIST: 'ai:presets:list',
+
   HUB_SESSION: 'hub:session',
   HUB_LOGIN: 'hub:login',
   HUB_BEGIN_AUTHORIZATION: 'hub:begin-authorization',

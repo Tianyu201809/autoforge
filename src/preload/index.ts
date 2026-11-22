@@ -37,6 +37,7 @@ import type { ScriptIcon, ScriptLifecycleEvent } from '../shared/script-contract
 import type { ScriptLanguage } from '../shared/script-language'
 import type { McpClientConfig, McpStatus } from '../shared/mcp-types'
 import type { HubInstallProgress, HubPlugin, HubPluginListResult, HubPluginQuery, HubSession, HubTeam } from '../shared/hub-types'
+import type { LlmProfile, LlmProfileListResult, LlmProfileView, LlmProviderPreset, LlmTestResult } from '../shared/ai-types'
 
 export interface EditorFileStatePayload {
   content: string
@@ -108,6 +109,21 @@ const api = {
 }
 
 const autoforge = {
+  ai: {
+    listProfiles: (): Promise<LlmProfileListResult> => ipcRenderer.invoke(IPC.AI_PROFILES_LIST),
+    listPresets: (): Promise<LlmProviderPreset[]> => ipcRenderer.invoke(IPC.AI_PRESETS_LIST),
+    upsertProfile: (input: { profile: Omit<LlmProfile, 'createdAt' | 'updatedAt'> }): Promise<LlmProfileView> =>
+      ipcRenderer.invoke(IPC.AI_PROFILES_UPSERT, input),
+    deleteProfile: (id: string): Promise<boolean> => ipcRenderer.invoke(IPC.AI_PROFILES_DELETE, id),
+    setActiveProfile: (id: string): Promise<LlmProfileListResult> => ipcRenderer.invoke(IPC.AI_PROFILES_SET_ACTIVE, id),
+    setCredentials: (
+      profileId: string,
+      credentials: { apiKey?: string; extraHeaders: Record<string, string> }
+    ): Promise<LlmProfileView> => ipcRenderer.invoke(IPC.AI_PROFILES_SET_CREDENTIALS, profileId, credentials),
+    clearCredentials: (profileId: string): Promise<LlmProfileView> =>
+      ipcRenderer.invoke(IPC.AI_PROFILES_CLEAR_CREDENTIALS, profileId),
+    testProfile: (profileId: string): Promise<LlmTestResult> => ipcRenderer.invoke(IPC.AI_PROFILES_TEST, profileId)
+  },
   onHubScriptInstalled: (
     callback: (payload: { scriptId: string; name: string; status: 'installed' | 'updated' }) => void
   ): (() => void) => {

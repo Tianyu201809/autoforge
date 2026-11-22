@@ -138,8 +138,8 @@
 - IPC profile responses use `LlmProfileView`. Secret changes use `setCredentials(profileId, credentials)` and `clearCredentials(profileId)`; values are never returned.
 - Provider registry resolves one adapter by profile provider kind.
 
-- [ ] **Step 1: Write failing tests** `profile_crud_keeps_key_and_header_values_separate`, `active_profile_falls_back_after_delete`, `connection_test_redacts_provider_errors`, and `ipc_rejects_unknown_profile_and_invalid_input`.
-- [ ] **Step 2: Run focused tests**.
-- [ ] **Step 3: Implement service and narrow IPC/preload APIs**. Connection tests use the same normalized adapter path as Agent calls.
-- [ ] **Step 4: Add all new tests to `test:unit`, then run focused tests, `npm run test:unit`, and `npm run lint`**.
-- [ ] **Step 5: Commit** with `feat(ai): manage model profiles and connection tests`.
+- [x] **Step 1: Write failing tests** `profile_crud_keeps_key_and_header_values_separate`, `active_profile_falls_back_after_delete`, `connection_test_redacts_provider_errors`, and invalid IPC profile/credential payloads.
+- [x] **Step 2: Run focused tests**.
+- [x] **Step 3: Implement service and narrow IPC/preload APIs**. Connection tests use the same normalized adapter path as Agent calls.
+- [x] **Step 4: Add all new tests to `test:unit`, then run focused tests, `npm run test:unit`, and `npm run lint`**.
+- [x] **Step 5: Commit** with `feat(ai): manage model profiles and connection tests`.

@@ -25,6 +25,14 @@ import { scriptRegistry } from '../services/script-registry'
 import { scriptStore } from '../services/script-store'
 import { scriptWorkspace } from '../services/script-workspace'
 import { createHubCredentialStore } from '../services/hub-credential-store'
+import { createModelCredentialStore } from '../services/ai/model-credential-store'
+import { createModelProfileService } from '../services/ai/model-profile-service'
+import { createOpenAiProvider } from '../services/ai/openai-provider'
+import { createOpenAiCompatibleProvider } from '../services/ai/openai-compatible-provider'
+import { createAnthropicProvider } from '../services/ai/anthropic-provider'
+import { createGeminiProvider } from '../services/ai/gemini-provider'
+import { OPENAI_COMPATIBLE_PRESETS } from '../services/ai/provider-presets'
+import { registerModelProfileIpcHandlers } from '../services/ai/model-profile-ipc'
 import { createHubClient } from '../services/hub-client'
 import { installScriptFromHubZip } from '../services/hub-script-installer'
 import { setHubAuthorizationCallback } from '../services/hub-bridge-server'
@@ -83,6 +91,23 @@ export function registerIpcHandlers(
     request: (url, init) => fetch(url, init),
     install: installScriptFromHubZip
   })
+  const modelCredentialStore = createModelCredentialStore()
+  const modelProfileService = createModelProfileService({
+    load: () => {
+      const config = scriptStore.getConfig()
+      return { profiles: config.llmProfiles ?? [], activeProfileId: config.activeLlmProfileId }
+    },
+    save: (state) => {
+      scriptStore.setConfig({ llmProfiles: state.profiles, activeLlmProfileId: state.activeProfileId })
+    },
+    credentials: modelCredentialStore,
+    providers: {
+      openai: createOpenAiProvider({ request: (url, init) => fetch(url, init) }),
+      anthropic: createAnthropicProvider({ request: (url, init) => fetch(url, init) }),
+      gemini: createGeminiProvider({ request: (url, init) => fetch(url, init) }),
+      'openai-compatible': createOpenAiCompatibleProvider({ request: (url, init) => fetch(url, init) })
+    }
+  })
   let pendingAuthorization: { state: string; verifier: string; expiresAt: number } | null = null
   setHubAuthorizationCallback(async (code, state) => {
     const pending = pendingAuthorization
@@ -112,6 +137,11 @@ export function registerIpcHandlers(
     await shell.openExternal(url.toString())
   })
   ipcMain.handle(IPC.HUB_CANCEL_AUTHORIZATION, () => { pendingAuthorization = null })
+  registerModelProfileIpcHandlers(
+    (channel, handler) => ipcMain.handle(channel, (event, ...args) => handler(event, ...args)),
+    modelProfileService,
+    OPENAI_COMPATIBLE_PRESETS
+  )
   ipcMain.handle(IPC.HUB_LOGOUT, () => hubClient.logout())
   ipcMain.handle(IPC.HUB_LIST_TEAMS, () => hubClient.listTeams())
   ipcMain.handle(IPC.HUB_LIST_PLUGINS, (_event, query: unknown) => {
