@@ -4,6 +4,8 @@
 **状态**：已实现（桌面端 v1.15.0）  
 **关联**：Hub 端规格见同目录 `2026-07-11-hub-local-install-hub-side-design.md`
 
+> **历史规格**：本文中的 `POST /install` `{ zipUrl }` 请求和宽松 CORS 仅适用于 v1.15.0。安装请求、Origin 校验和 SHA-256 契约已由 [v1.42.0 P0 实施设计](./2026-11-06-p0-bridge-runner-storage-design.md)取代。
+
 ---
 
 ## 1. 背景与目标

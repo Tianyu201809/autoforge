@@ -48,7 +48,9 @@ userData/                     # autoforge-development 或 autoforge-production
 | `script-workspace` | 脚本包的导入、存储、读写 |
 | `script-registry` | 脚本 CRUD，对接 store |
 | `script-store` | 持久化：脚本元数据、环境 Profile、应用配置（含小记、超时、Python 路径） |
+| `environment-repository` | 环境 Profile 读写、变量加解密、明文迁移与不可读记录保护 |
 | `script-runner` | 执行引擎：JS `utilityProcess` 宿主、Python 子进程分流；同脚本多实例并发（≤5）与 `startBatch` |
+| `script-host` | 在 Electron `utilityProcess` 中加载 JS 入口，向主进程传递运行事件 |
 | `python-script-runner` | spawn Python 子进程、stdout 协议解析、取消与超时 |
 | `python-resolver` | 解释器路径解析、版本检测、`autoforge_runtime` 根目录 |
 | `python-dependency-manager` | 脚本 `.venv`、pip install、requirements 生成 |
@@ -85,25 +87,28 @@ userData/                     # autoforge-development 或 autoforge-production
 ## Hub 一键安装数据流
 
 ```
-Hub 网页 POST /install { zipUrl }
-    ↓
-hub-bridge-server（仅 127.0.0.1）
-    ↓
-hub-script-installer：download → extract → resolve package root
-    ↓
-scriptRegistry.importFromPath()
-    ↓
-showMainWindow + EVENT_HUB_SCRIPT_INSTALLED → UI 选中脚本
+Hub 网页
+    └─ POST 127.0.0.1:19276/install { hubScriptId, installToken }
+        └─ hub-bridge-server 校验 Origin 和请求体
+            └─ 按设置中的 Hub 源构造下载 URL
+                └─ hub-script-installer 下载并核对 X-Autoforge-Sha256
+                    └─ 解压 → scriptRegistry.importFromPath()
+                        └─ showMainWindow + EVENT_HUB_SCRIPT_INSTALLED
+
+脚本中心
+    └─ hub-client 申请安装令牌与期望 SHA-256
+        └─ 下载并同时核对内容哈希、响应头和令牌响应
+            └─ 解压 → scriptRegistry.importFromPath()
 ```
 
-约定：须本机已运行 Autoforge；`zipUrl` 为公开 http(s)；Hub 请求必须携带稳定 `hubScriptId`。重复安装时用户可更新现有脚本或取消，更新保留本地偏好与配置。详见 [v1.15.0](./v1.15.0.md) 与最新设计规格。
+本机桥只接受来自已配置 Hub 源的浏览器请求。网页请求不再携带下载地址，Hub 一次性安装令牌有效期为 120 秒。校验失败时删除临时下载，不进入解压和导入流程。完整契约见 [v1.42.0 P0 实施设计](./superpowers/specs/2026-11-06-p0-bridge-runner-storage-design.md)。
 
 ## 执行生命周期
 
 ```
 queued → validating → installing-deps → starting → running → completed
-                                                      ↘ failed
-                                                      ↘ stopped（用户取消 / 超时）
+                                                      ↘ error（脚本错误 / 超时）
+                                                      ↘ stopped（用户主动停止）
 ```
 
 运行超时由 `AppConfig.script.runTimeoutSeconds` 控制（设置 → Python → 运行超时），`0` 表示不限制。
@@ -120,8 +125,10 @@ scriptStore.resolveEnvForScript(script, envId)
 scriptStore.validateEnvForScript()
     ↓
 scriptRunner.executeJsPackage()
-    ↓ dynamic import(entry) → resolveScriptEntryFn(run | main | default)
-run(ctx) → log / stage / progress / result → UI
+    ↓ utilityProcess.fork(script-host)
+script-host 动态导入入口 → resolveScriptEntryFn(run | main | default)
+    ↓ 宿主消息
+主进程更新会话、日志、阶段和进度 → UI
 ```
 
 ### Python
@@ -136,7 +143,7 @@ spawn(python, -m autoforge_runtime, ...)
 run(ctx) → log / stage / progress / result → UI
 ```
 
-JS 与 Python 共用 `shared/script-progress.ts` 定义的控制协议；取消时 JS 通过 `AbortSignal`，Python 通过终止子进程。
+JS 与 Python 共用 `shared/script-progress.ts` 定义的进度类型。JS 的 `AbortSignal` 在宿主进程内创建，停止时主进程发送 `abort` 并等待 1000 ms，之后仍未退出则终止宿主及已上报的浏览器进程。Python 通过终止子进程取消运行。
 
 ### 原生程序
 
@@ -279,5 +286,6 @@ Autoforge 渲染进程
 | [v1.9.0 版本说明](./v1.9.0.md) | 功能基线 |
 | [CHANGELOG](./CHANGELOG.md) | 版本变更记录 |
 | [脚本包规范](./script-spec.md) | `autoforge.json` 与 zip 分发 |
-| [Hub 安装 · 桌面端规格](./superpowers/specs/2026-07-11-hub-local-install-design.md) | 本机桥契约 |
-| [Hub 安装 · Hub 端规格](./superpowers/specs/2026-07-11-hub-local-install-hub-side-design.md) | 网站侧实现契约 |
+| [v1.42.0 P0 实施设计](./superpowers/specs/2026-11-06-p0-bridge-runner-storage-design.md) | 当前安装桥、JS 宿主、数据库落盘与环境变量加密契约 |
+| [Hub 安装 · 桌面端历史规格](./superpowers/specs/2026-07-11-hub-local-install-design.md) | v1.15 初版契约，安装请求已由 v1.42.0 规格取代 |
+| [Hub 安装 · Hub 端历史规格](./superpowers/specs/2026-07-11-hub-local-install-hub-side-design.md) | v1.15 初版契约，安装请求已由 v1.42.0 规格取代 |

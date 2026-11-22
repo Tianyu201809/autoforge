@@ -6,6 +6,8 @@
 **关联**：桌面端规格在 Autoforge 仓库  
 `docs/superpowers/specs/2026-07-11-hub-local-install-design.md`
 
+> **历史规格**：本文中的公开 `zipUrl` 交给本机桥的契约仅适用于 v1.15.0。当前安装请求、Origin 校验和 SHA-256 契约见 [v1.42.0 P0 实施设计](./2026-11-06-p0-bridge-runner-storage-design.md)。
+
 本文可独立拷贝到 Hub 仓库；实现时不必依赖桌面端源码，只需遵守下列契约。
 
 ---
