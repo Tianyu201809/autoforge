@@ -37,9 +37,9 @@ interface AiProjectTurnRow {
 
 const PROJECT_TRANSITIONS: Record<AiProjectStatus, AiProjectStatus[]> = {
   ready: ['generating'],
-  generating: ['applying', 'ready', 'error', 'interrupted'],
+  generating: ['applying', 'checking', 'ready', 'error', 'interrupted'],
   applying: ['checking', 'error', 'interrupted'],
-  checking: ['applying', 'importing', 'blocked', 'error', 'interrupted', 'ready'],
+  checking: ['applying', 'generating', 'importing', 'blocked', 'error', 'interrupted', 'ready'],
   importing: ['ready', 'blocked', 'error', 'interrupted'],
   blocked: ['generating', 'checking', 'interrupted'],
   error: ['generating', 'checking'],

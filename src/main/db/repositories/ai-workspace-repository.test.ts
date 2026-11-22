@@ -63,6 +63,24 @@ test('validates project status transitions', async (t) => {
   assert.equal(repository.updateProject('project-1', { status: 'generating' })?.status, 'generating')
 })
 
+test('resumes generation after a check phase so the agent can repair files', async (t) => {
+  const { repository, projectRoot } = await setup(t)
+  repository.createProject({ id: 'project-1', name: 'Demo', rootPath: projectRoot, language: 'javascript', profileId: 'profile-1' })
+  repository.updateProject('project-1', { status: 'generating' })
+  repository.updateProject('project-1', { status: 'applying' })
+  repository.updateProject('project-1', { status: 'checking' })
+
+  assert.equal(repository.updateProject('project-1', { status: 'generating' })?.status, 'generating')
+})
+
+test('allows a generated project to enter its validation phase', async (t) => {
+  const { repository, projectRoot } = await setup(t)
+  repository.createProject({ id: 'project-1', name: 'Demo', rootPath: projectRoot, language: 'javascript', profileId: 'profile-1' })
+  repository.updateProject('project-1', { status: 'generating' })
+
+  assert.equal(repository.updateProject('project-1', { status: 'checking' })?.status, 'checking')
+})
+
 test('removes project rows without deleting the selected folder', async (t) => {
   const { repository, projectRoot } = await setup(t)
   writeFileSync(join(projectRoot, 'keep.txt'), 'user data')

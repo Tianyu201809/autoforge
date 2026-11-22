@@ -134,11 +134,11 @@
 - `onEvent(event: AiAgentEvent): void`, where `AiAgentEvent` is a discriminated union for `assistant_delta`, `tool_started`, `tool_finished`, `file_changes`, `check_result`, `import_result`, and `turn_finished`, each carrying `projectId` and `turnId`.
 - Tool schemas are allowlisted to list/read/write/check/import. Import tools independently re-run checks before registry calls.
 
-- [ ] **Step 1: Write failing tests** `rejects_unlisted_agent_tool`, `rejects_malformed_tool_arguments`, `runs_multi_step_tool_loop`, `allows_one_turn_per_project`, `cancels_before_import_at_each_phase`, `repairs_after_check_failure`, `auto_imports_after_all_checks`, and `marks_inflight_turn_interrupted_on_restart`.
-- [ ] **Step 2: Run focused Agent tests**.
-- [ ] **Step 3: Implement** a bounded tool-call loop with persisted turns, cancellation propagation, per-project locking, and phase validation.
-- [ ] **Step 4: Run Agent tests with fake provider adapters and filesystem fixtures**.
-- [ ] **Step 5: Commit** with `feat(ai): orchestrate bounded project agent turns`.
+- [x] **Step 1: Write failing tests** `rejects_unlisted_agent_tool`, `rejects_malformed_tool_arguments`, `runs_multi_step_tool_loop`, `allows_one_turn_per_project`, `cancels_before_import_at_each_phase`, `repairs_after_check_failure`, `auto_imports_after_all_checks`, and `marks_inflight_turn_interrupted_on_restart`.
+- [x] **Step 2: Run focused Agent tests**.
+- [x] **Step 3: Implement** a bounded tool-call loop with persisted turns, cancellation propagation, per-project locking, and phase validation.
+- [x] **Step 4: Run Agent tests with fake provider adapters and filesystem fixtures**.
+- [x] **Step 5: Commit** with `feat(ai): orchestrate bounded project agent turns`.
 
 ### Task 6: IPC, Folder Picker, and Runtime Wiring
 

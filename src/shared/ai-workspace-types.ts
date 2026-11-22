@@ -84,3 +84,12 @@ export interface ProjectChangeResult {
   conflicts: string[]
   rollbackFailed: string[]
 }
+
+export type AiAgentEvent =
+  | { type: 'assistant_delta'; projectId: string; turnId: string; text: string }
+  | { type: 'tool_started'; projectId: string; turnId: string; toolName: string }
+  | { type: 'tool_finished'; projectId: string; turnId: string; toolName: string; result: string }
+  | { type: 'file_changes'; projectId: string; turnId: string; changes: ProjectChangeResult }
+  | { type: 'check_result'; projectId: string; turnId: string; check: unknown }
+  | { type: 'import_result'; projectId: string; turnId: string; ok: boolean; scriptId?: string; message: string }
+  | { type: 'turn_finished'; projectId: string; turnId: string; status: AiProjectTurnStatus }
