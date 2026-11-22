@@ -56,3 +56,31 @@ export interface AiProjectTurnInput {
   importedScriptId?: string
   createdAt: string
 }
+
+export interface ProjectRootInfo {
+  canonicalPath: string
+  writable: true
+  empty: true
+}
+
+export interface ProjectFile {
+  path: string
+  sha256: string
+  size: number
+  kind: 'text' | 'binary'
+}
+
+export interface ProjectFileContent extends ProjectFile {
+  content: string
+}
+
+export interface ProjectChange {
+  path: string
+  content: string
+}
+
+export interface ProjectChangeResult {
+  applied: string[]
+  conflicts: string[]
+  rollbackFailed: string[]
+}

@@ -75,11 +75,11 @@
 - File entries include relative path, content hash, byte size, and text/binary classification.
 - `applyProjectChanges` creates an in-memory or bounded on-disk snapshot, checks expected hashes before writes, and only rolls back files still matching the applied batch.
 
-- [ ] **Step 1: Write failing tests** `accepts_empty_writable_root`, `rejects_nonempty_and_symlink_roots`, `rejects_traversal_and_link_escape`, `rejects_binary_and_oversize_files`, `detects_external_hash_conflict`, and `rollback_does_not_overwrite_external_edit`.
-- [ ] **Step 2: Run** `node --import tsx --test src/main/services/ai/project-workspace.test.ts`.
-- [ ] **Step 3: Implement** canonical path checks, ignored directory policy, bounded text IO, file hashing, and optimistic conflict detection.
-- [ ] **Step 4: Run focused filesystem tests on the current OS**.
-- [ ] **Step 5: Commit** with `feat(ai): add bounded project file operations`.
+- [x] **Step 1: Write failing tests** `accepts_empty_writable_root`, `rejects_nonempty_and_symlink_roots`, `rejects_traversal_and_link_escape`, `rejects_binary_and_oversize_files`, `detects_external_hash_conflict`, and `rollback_does_not_overwrite_external_edit`.
+- [x] **Step 2: Run** `node --import tsx --test src/main/services/ai/project-workspace.test.ts`.
+- [x] **Step 3: Implement** canonical path checks, ignored directory policy, bounded text IO, file hashing, and optimistic conflict detection.
+- [x] **Step 4: Run focused filesystem tests on the current OS**.
+- [x] **Step 5: Commit** with `feat(ai): add bounded project file operations`.
 
 ### Task 3: Script Package and Syntax Checks
 
