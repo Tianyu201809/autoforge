@@ -1,5 +1,6 @@
 import type { EnvVarDefinition, ParamDefinition, ScriptIcon, ScriptLifecyclePhase, ScriptRunProgress } from '../script-contract'
 import type { ScriptLanguage } from '../script-language'
+import type { LlmProfile } from '../ai-types'
 
 export type ScriptStatus = 'running' | 'idle' | 'error'
 export type SessionStatus = 'running' | 'success' | 'error' | 'stopped'
@@ -166,6 +167,8 @@ export interface PythonStatusInfo {
 }
 
 export interface AppConfig {
+  llmProfiles?: LlmProfile[]
+  activeLlmProfileId?: string
   mcp?: {
     enabled?: boolean
   }
