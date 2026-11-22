@@ -1,7 +1,7 @@
 # P0：安装桥、JS 运行、数据库落盘与环境变量加密
 
 **日期**：2026-11-06  
-**状态**：设计已确认，待书面审阅  
+**状态**：设计已确认，四项 P0 均已实施并通过代码与测试复核
 **仓库**：桌面端 `autoforge`，Hub `autoforge-hub`  
 **取代**：`2026-07-11-hub-local-install-design.md` 与 Hub 侧同名规格里，`POST /install` 接受调用方 `zipUrl`、以及 CORS 使用 `*` 的约定
 

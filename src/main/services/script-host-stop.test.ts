@@ -7,7 +7,7 @@ test('kills the host after 1000ms when it is still alive', () => {
   let fire = () => undefined
   let aborted = false
   let killed = false
-  let alive = true
+  const alive = true
   armHostStop({
     postAbort: () => { aborted = true },
     kill: () => { killed = true },

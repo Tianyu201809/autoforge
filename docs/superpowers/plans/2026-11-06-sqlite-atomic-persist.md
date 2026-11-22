@@ -1,6 +1,8 @@
 # sql.js 原子落盘 Implementation Plan
 
-> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
+> **状态：已完成**（实现已合入 `feature/v1.42.0`，桌面端单测通过）
+
+> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [x]`) syntax for tracking.
 
 **Goal:** sql.js 的写盘改为短防抖，并用临时文件替换 `autoforge.db`，避免写到一半损坏原库。
 
@@ -32,7 +34,7 @@
 - Consumes: 无
 - Produces: `replaceFileAtomically(targetPath: string, bytes: Uint8Array): void`、`removeStaleTemp(targetPath: string): void`
 
-- [ ] **Step 1: Write the failing test**
+- [x] **Step 1: Write the failing test**
 
 ```ts
 import assert from 'node:assert/strict'
@@ -62,13 +64,13 @@ test('removes a leftover temp file and leaves the database', () => {
 })
 ```
 
-- [ ] **Step 2: Run test to verify it fails**
+- [x] **Step 2: Run test to verify it fails**
 
 Run: `node --import tsx --test src/main/db/sqlite-persist.test.ts`
 
 Expected: FAIL。
 
-- [ ] **Step 3: Write minimal implementation**
+- [x] **Step 3: Write minimal implementation**
 
 ```ts
 import { closeSync, fsyncSync, openSync, renameSync, rmSync, writeSync } from 'fs'
@@ -90,13 +92,13 @@ export function removeStaleTemp(targetPath: string): void {
 }
 ```
 
-- [ ] **Step 4: Run test to verify it passes**
+- [x] **Step 4: Run test to verify it passes**
 
 Run: `node --import tsx --test src/main/db/sqlite-persist.test.ts`
 
 Expected: PASS。
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add src/main/db/sqlite-persist.ts src/main/db/sqlite-persist.test.ts package.json
@@ -113,7 +115,7 @@ git commit -m "fix: 用临时文件替换 SQLite 库文件"
 - Consumes: 无
 - Produces: `createDirtyScheduler(options: { now: () => number; schedule: (fn: () => void, ms: number) => { cancel: () => void }; flush: () => void; debounceMs?: number; maxWaitMs?: number }): { markDirty: () => void; flushNow: () => void }`
 
-- [ ] **Step 1: Write the failing test**
+- [x] **Step 1: Write the failing test**
 
 ```ts
 test('waits 300ms after the last write and flushes by 1000ms', () => {
@@ -155,13 +157,13 @@ test('flushNow cancels the timer and writes immediately', () => {
 })
 ```
 
-- [ ] **Step 2: Run test to verify it fails**
+- [x] **Step 2: Run test to verify it fails**
 
 Run: `node --import tsx --test src/main/db/sqlite-persist.test.ts`
 
 Expected: FAIL，`createDirtyScheduler` 不存在。
 
-- [ ] **Step 3: Write minimal implementation**
+- [x] **Step 3: Write minimal implementation**
 
 ```ts
 export function createDirtyScheduler(options: {
@@ -200,13 +202,13 @@ export function createDirtyScheduler(options: {
 }
 ```
 
-- [ ] **Step 4: Run test to verify it passes**
+- [x] **Step 4: Run test to verify it passes**
 
 Run: `node --import tsx --test src/main/db/sqlite-persist.test.ts`
 
 Expected: PASS。
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add src/main/db/sqlite-persist.ts src/main/db/sqlite-persist.test.ts
@@ -223,7 +225,7 @@ git commit -m "fix: 合并短时间内的 SQLite 全库导出"
 - Consumes: `replaceFileAtomically`、`removeStaleTemp`、`createDirtyScheduler`
 - Produces: `SqliteDatabase.flush(): void`。`close()` 内部调用它。
 
-- [ ] **Step 1: Write the failing test**
+- [x] **Step 1: Write the failing test**
 
 在 `sqlite-persist.test.ts` 不重复测适配器的 sql.js。给 `SqliteDatabase` 增加 `flush` 后，新增 `src/main/db/sqlite-adapter.test.ts`：打开临时库，执行一条 `run`，在 300ms 内断言目标文件仍是打开时的字节或尚不存在新写入；调用 `flush()` 后文件内容变化且没有 `.tmp`。只读 `get` 之后文件 mtime 不变。
 
@@ -244,13 +246,13 @@ test('open removes a stale temp and flush writes the database', async () => {
 })
 ```
 
-- [ ] **Step 2: Run test to verify it fails**
+- [x] **Step 2: Run test to verify it fails**
 
 Run: `node --import tsx --test src/main/db/sqlite-adapter.test.ts`
 
 Expected: FAIL，`flush` 不是函数，或 `.tmp` 仍在。
 
-- [ ] **Step 3: Write minimal implementation**
+- [x] **Step 3: Write minimal implementation**
 
 `openSqliteDatabase` 在 `readFileSync` 之前调用 `removeStaleTemp(dbPath)`。`SqlJsAdapter.persist` 改为 `replaceFileAtomically(this.dbPath, this.db.export())`。`markDirty` 在事务中只设 `dirty`；事务外调用 `scheduler.markDirty()`。`transaction` 的外层 `COMMIT` 成功后调用 `this.flush()`。`close` 调用 `this.flush()` 再 `this.db.close()`。`flush` 就是 `scheduler.flushNow()`，但若当前不脏则不要 `export`。用一个 `dirty` 标志：`flushNow` 前由适配器包一层，只有 `dirty` 时才 `persist` 并清掉 `dirty`。
 
@@ -258,13 +260,13 @@ Expected: FAIL，`flush` 不是函数，或 `.tmp` 仍在。
 
 查询和 `pragma` 的读路径保持不调用 `markDirty`。
 
-- [ ] **Step 4: Run test to verify it passes**
+- [x] **Step 4: Run test to verify it passes**
 
 Run: `node --import tsx --test src/main/db/sqlite-adapter.test.ts src/main/db/sqlite-persist.test.ts`
 
 Expected: PASS。
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add src/main/db/sqlite-adapter.ts src/main/db/sqlite-adapter.test.ts src/main/db/database.ts

@@ -1,4 +1,4 @@
-import type { AppConfig, CronConfig, EnvironmentProfile, ExecutionRecord, ScriptMeta } from '../../shared/types/script'
+import type { CronConfig, EnvironmentProfile, ExecutionRecord, ScriptMeta } from '../../shared/types/script'
 import { resolveScriptLanguage } from '../../shared/script-language'
 import { normalizeInstanceSlots } from '../../shared/instance-slots'
 import type { CategoryOverride, StoredCategory } from '../services/category-service'

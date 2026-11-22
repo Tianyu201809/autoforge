@@ -1,6 +1,8 @@
 # 环境变量加密 Implementation Plan
 
-> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
+> **状态：已完成**（实现已合入 `feature/v1.42.0`，桌面端单测通过）
+
+> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [x]`) syntax for tracking.
 
 **Goal:** `environments.variables` 在系统加密可用时以 `enc:v1:` 密文入库，已有明文自动迁移，解密失败时不覆盖原值。
 
@@ -34,7 +36,7 @@
   - `sealVariables(variables: Record<string, string>, cipher: EnvCipher): string`
   - `openVariables(stored: string, cipher: EnvCipher): { variables: Record<string, string>; readable: boolean; needsMigration: boolean }`
 
-- [ ] **Step 1: Write the failing test**
+- [x] **Step 1: Write the failing test**
 
 ```ts
 import assert from 'node:assert/strict'
@@ -77,25 +79,25 @@ test('keeps plaintext when encryption is unavailable and refuses a broken cipher
 })
 ```
 
-- [ ] **Step 2: Run test to verify it fails**
+- [x] **Step 2: Run test to verify it fails**
 
 Run: `node --import tsx --test src/main/db/environment-secrets.test.ts`
 
 Expected: FAIL。
 
-- [ ] **Step 3: Write minimal implementation**
+- [x] **Step 3: Write minimal implementation**
 
 `sealVariables` 在 `isAvailable()` 为假时 `JSON.stringify(variables ?? {})`。可用时返回 ``enc:v1:${cipher.encrypt(json).toString('base64')}``。
 
 `openVariables`：以前缀 `enc:v1:` 开头则解密并 `JSON.parse`。解密或解析抛错时返回 `{ variables: {}, readable: false, needsMigration: false }`。以 `{` 开头则解析 JSON，`needsMigration` 等于 `cipher.isAvailable()`。其他文本同样视为不可读。
 
-- [ ] **Step 4: Run test to verify it passes**
+- [x] **Step 4: Run test to verify it passes**
 
 Run: `node --import tsx --test src/main/db/environment-secrets.test.ts`
 
 Expected: PASS。
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add src/main/db/environment-secrets.ts src/main/db/environment-secrets.test.ts package.json
@@ -115,7 +117,7 @@ git commit -m "feat: 封存环境变量 JSON"
 - Consumes: `sealVariables`、`openVariables`、`EnvCipher`
 - Produces: `new EnvironmentRepository(db, cipher)`。`update` 在当前行 `variablesReadable === false` 时返回 `null` 并且不执行 `UPDATE`。`migratePlaintext(): void` 把 `needsMigration` 的行写回密文。
 
-- [ ] **Step 1: Write the failing test**
+- [x] **Step 1: Write the failing test**
 
 用项目里已有的 `openSqliteDatabase` 打开临时库，建 `environments` 表，插入 `variables = '{"TOKEN":"secret"}'`。cipher 使用 Task 1 的可逆 Buffer cipher。
 
@@ -140,13 +142,13 @@ test('migrates plaintext and refuses to save an unreadable row', async () => {
 })
 ```
 
-- [ ] **Step 2: Run test to verify it fails**
+- [x] **Step 2: Run test to verify it fails**
 
 Run: `node --import tsx --test src/main/db/environment-repository.test.ts`
 
 Expected: FAIL，构造函数不接收 cipher。
 
-- [ ] **Step 3: Write minimal implementation**
+- [x] **Step 3: Write minimal implementation**
 
 `EnvironmentRepository` 增加 `cipher: EnvCipher`。`insert` / `update` 用 `sealVariables` 生成 `variables` 文本再交给现有 SQL。`rowToEnvironment` 改为接受已经得到的 `variables` 对象和 `variablesReadable`。读路径调用 `openVariables`。`migratePlaintext` 列出全部行，对 `needsMigration` 的行执行 `UPDATE environments SET variables = ? WHERE id = ?`。`update` 先 `getById`，若 `variablesReadable === false` 则返回 `null`。
 
@@ -162,13 +164,13 @@ Expected: FAIL，构造函数不接收 cipher。
 
 `initDatabase` 在迁移之后调用 `repos.environments.migratePlaintext()`，再 `database.flush()`。
 
-- [ ] **Step 4: Run test to verify it passes**
+- [x] **Step 4: Run test to verify it passes**
 
 Run: `node --import tsx --test src/main/db/environment-repository.test.ts src/main/db/environment-secrets.test.ts`
 
 Expected: PASS。
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add src/shared/types/script.ts src/main/db/repositories/environment-repository.ts src/main/db/row-mappers.ts src/main/db/environment-repository.test.ts src/main/services/script-store.ts src/main/db/database.ts
@@ -188,7 +190,7 @@ git commit -m "fix: 环境变量加密入库并拒绝覆盖损坏记录"
 - Consumes: `EnvironmentProfile.variablesReadable`、`EnvCipher.isAvailable`
 - Produces: 设置页在加密不可用时显示 `当前未能加密，变量以明文留在本机数据库`。`variablesReadable === false` 时隐藏变量列表，显示「此环境的变量无法读取」，保存按钮 `disabled`。
 
-- [ ] **Step 1: Write the failing test**
+- [x] **Step 1: Write the failing test**
 
 渲染进程已有 `node --test` 组件测试。在 `src/renderer/src/components/SettingsPanel` 的环境区太重时，不要挂整页。把提示文案抽到 `src/renderer/src/lib/environment-encryption-status.ts`：
 
@@ -204,13 +206,13 @@ export function environmentReadable(env: { variablesReadable?: boolean }): boole
 
 测试 `src/renderer/src/lib/environment-encryption-status.test.ts` 覆盖这两个函数。
 
-- [ ] **Step 2: Run test to verify it fails**
+- [x] **Step 2: Run test to verify it fails**
 
 Run: `node --import tsx --test src/renderer/src/lib/environment-encryption-status.test.ts`
 
 Expected: FAIL。
 
-- [ ] **Step 3: Write minimal implementation**
+- [x] **Step 3: Write minimal implementation**
 
 实现上面两个函数。`SettingsPanel.vue` 在环境变量 `<label>` 下：
 
@@ -225,13 +227,13 @@ Expected: FAIL。
 
 IPC 侧把 `encryptionAvailable` 放进现有环境列表响应。渲染进程把它存到 `encryptionAvailable` ref。
 
-- [ ] **Step 4: Run test to verify it passes**
+- [x] **Step 4: Run test to verify it passes**
 
 Run: `node --import tsx --test src/renderer/src/lib/environment-encryption-status.test.ts src/main/db/environment-repository.test.ts`
 
 Expected: PASS。
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add src/renderer/src/lib/environment-encryption-status.ts src/renderer/src/lib/environment-encryption-status.test.ts src/renderer/src/components/SettingsPanel.vue src/main/services/script-store.ts src/main/ipc/handlers.ts package.json

@@ -1,6 +1,6 @@
 # Autoforge 架构说明
 
-> 当前应用版本：**1.36.0** · 详见 [v1.36.0 版本说明](./v1.36.0.md)
+> 当前应用版本：**1.42.0** · 详见 [v1.42.0 版本说明](./v1.42.0.md)
 
 ## 设计原则
 
@@ -44,11 +44,11 @@ userData/                     # autoforge-development 或 autoforge-production
 | 模块 | 职责 |
 |------|------|
 | `app-data-root` | 按 `AppEnv` 配置 userData 路径；旧数据迁移、路径重写与修复 |
-| `db` | SQLite 持久化（sql.js WASM，无需 native 编译） |
+| `db` | SQLite 持久化（sql.js WASM、防抖写入、临时文件原子替换） |
 | `script-workspace` | 脚本包的导入、存储、读写 |
 | `script-registry` | 脚本 CRUD，对接 store |
 | `script-store` | 持久化：脚本元数据、环境 Profile、应用配置（含小记、超时、Python 路径） |
-| `script-runner` | 执行引擎：生命周期、JS 动态加载 / Python 子进程分流；同脚本多实例并发（≤5）与 `startBatch` |
+| `script-runner` | 执行引擎：JS `utilityProcess` 宿主、Python 子进程分流；同脚本多实例并发（≤5）与 `startBatch` |
 | `python-script-runner` | spawn Python 子进程、stdout 协议解析、取消与超时 |
 | `python-resolver` | 解释器路径解析、版本检测、`autoforge_runtime` 根目录 |
 | `python-dependency-manager` | 脚本 `.venv`、pip install、requirements 生成 |
@@ -198,18 +198,20 @@ Autoforge 渲染进程
 
 授权回调只接受本机回环请求；凭据不通过页面脚本直接持有。脚本安装完成事件由主进程广播，保证脚本中心和主页面共享最新 registry 状态。
 
-## 已交付能力（截至 v1.36.0）
+## 已交付能力（截至 v1.42.0）
 
 | 能力 | 模块 / 入口 |
 |------|-------------|
 | 无限嵌套分类树 | `category-service` / `category-tree` · v1.20+ `parent_id` |
 | 单脚本多实例批量 | `instance-slots` / `script-runner.startBatch` · v1.20+ 槽 ≤5、并发 ≤5 |
 | Hub 一键安装到本地 | `hub-bridge-server` / `hub-script-installer` · v1.15+ `127.0.0.1:19276` |
+| Hub 安装来源和包校验 | Hub 一次性令牌、Origin 校验、SHA-256 端到端核对 |
 | AutoforgeHub 入口 | `AppConfig.hub` · 设置 + 侧边栏 · v1.19+ |
 | 多平台 GitHub Releases | `.github/workflows/release.yml` · v1.14+ |
 | 开发 / 生产数据隔离 | `app-data-root` · v1.10+ 独立 userData 目录 |
-| SQLite 持久化 | `db` · v1.2+ 自 JSON 自动迁移 |
-| JavaScript 脚本 | `script-runner` · 主进程 `import()` |
+| SQLite 持久化 | `db` · v1.2+ 自 JSON 自动迁移；v1.42+ 防抖写入与原子替换 |
+| JavaScript 脚本 | `script-runner` / `script-host` · v1.42+ 独立 `utilityProcess`，支持停止和超时终止 |
+| 环境变量加密 | `environment-repository` / `safeStorage` · v1.42+ 加密保存并迁移旧明文 |
 | Python 脚本 | `python-script-runner` · 子进程 + `autoforge_runtime` |
 | 原生可执行程序 | `executable-inspector` / `executable-script-runner` / `executable-trust-store` · v1.27+ PE / Mach-O / ELF，SHA-256 运行授权 |
 | 脚本包 ZIP 导出 | `script-package-exporter` · 卡片「导出 ZIP」；v1.31+ 原生包整目录打包，上限 500 MB |
@@ -242,14 +244,13 @@ Autoforge 渲染进程
 
 | 能力 | 说明 | 优先级 |
 |------|------|--------|
-| JS 脚本沙箱 | JS 仍在主进程运行；Python 已有子进程隔离 | 高 |
-| 密钥保险库 | secret 类型变量加密存储 | 高 |
+| JS 权限沙箱 | JS 已移至 `utilityProcess`，但脚本仍可访问本机文件和网络 | 高 |
 | 脚本包版本管理 | 脚本包版本历史、回滚 | 中 |
 | 导入校验 UI | 上传前预览 manifest、依赖冲突 | 中 |
 | 并发限制 | 同一脚本 / 全局最大并发数 | 中 |
 | 脚本模板 | 应用内脚手架一键创建新脚本 | 中 |
 | 脚本中心离线浏览 | 脚本中心需要联网；无网络时不缓存已浏览过的列表与详情 | 低 |
-| Hub 安装鉴权 / 去重更新 | 签名 URL、按 `hubScriptId` 覆盖更新 | 中 |
+| Hub 脚本去重更新 | 按 `hubScriptId` 覆盖已安装脚本的更新策略 | 中 |
 
 ## 迁移说明
 
@@ -261,7 +262,8 @@ Autoforge 渲染进程
 
 | 文档 | 内容 |
 |------|------|
-| [v1.36.0 版本说明](./v1.36.0.md) | 当前版本（分类筛选规则优化） |
+| [v1.42.0 版本说明](./v1.42.0.md) | 当前版本（安装校验、JS 宿主进程、SQLite 原子落盘与环境变量加密） |
+| [v1.36.0 版本说明](./v1.36.0.md) | 分类筛选规则优化 |
 | [v1.35.0 版本说明](./v1.35.0.md) | 插件中心并发安装、分栏缓存与界面主题优化 |
 | [v1.31.0 版本说明](./v1.31.0.md) | 原生脚本导出 ZIP、500 MB 导出上限 |
 | [v1.30.0 版本说明](./v1.30.0.md) | Hub 授权、脚本中心、搜索筛选、一键安装、账户设置 |

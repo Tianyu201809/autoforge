@@ -1,6 +1,8 @@
 # Hub 安装桥 Implementation Plan
 
-> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
+> **状态：已完成**（桌面端实现与 Hub 联动均已提交，相关测试通过）
+
+> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [x]`) syntax for tracking.
 
 **Goal:** 网页和应用内安装都只从已配置的 Hub 下载脚本包，并在导入前核对 SHA-256。
 
@@ -31,7 +33,7 @@
 - Consumes: 无
 - Produces: `hubOrigin(hubUrl: string): string`、`buildHubDownloadUrl(hubUrl: string, hubScriptId: string, installToken: string): string`、`parseBridgeInstallBody(body: unknown): { hubScriptId: string; installToken: string }`、`originAllowed(originHeader: string | undefined, hubUrl: string): boolean`。解析失败抛 `HubInstallError('invalid_request', '安装请求无效')`。
 
-- [ ] **Step 1: Write the failing test**
+- [x] **Step 1: Write the failing test**
 
 ```ts
 import assert from 'node:assert/strict'
@@ -66,13 +68,13 @@ test('allows only the configured Hub origin', () => {
 })
 ```
 
-- [ ] **Step 2: Run test to verify it fails**
+- [x] **Step 2: Run test to verify it fails**
 
 Run: `node --import tsx --test src/main/services/hub-install-contract.test.ts`
 
 Expected: FAIL，找不到 `./hub-install-contract`。
 
-- [ ] **Step 3: Write minimal implementation**
+- [x] **Step 3: Write minimal implementation**
 
 ```ts
 import { HubInstallError } from './hub-script-installer'
@@ -118,13 +120,13 @@ export function originAllowed(originHeader: string | undefined, hubUrl: string):
 }
 ```
 
-- [ ] **Step 4: Run test to verify it passes**
+- [x] **Step 4: Run test to verify it passes**
 
 Run: `node --import tsx --test src/main/services/hub-install-contract.test.ts`
 
 Expected: PASS。
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add src/main/services/hub-install-contract.ts src/main/services/hub-install-contract.test.ts package.json
@@ -142,7 +144,7 @@ git commit -m "fix: 校验 Hub 安装请求和下载源"
 - Consumes: 无
 - Produces: `sha256FileHex(filePath: string): string`、`assertPackageHash(actualHex: string, headerHex: string | null, tokenHex?: string): void`。失败抛 `HubInstallError('invalid_package', '脚本包校验失败')`。
 
-- [ ] **Step 1: Write the failing test**
+- [x] **Step 1: Write the failing test**
 
 ```ts
 import assert from 'node:assert/strict'
@@ -166,13 +168,13 @@ test('hashes file bytes and rejects a mismatched header', () => {
 })
 ```
 
-- [ ] **Step 2: Run test to verify it fails**
+- [x] **Step 2: Run test to verify it fails**
 
 Run: `node --import tsx --test src/main/services/hub-package-hash.test.ts`
 
 Expected: FAIL，模块不存在。
 
-- [ ] **Step 3: Write minimal implementation**
+- [x] **Step 3: Write minimal implementation**
 
 ```ts
 import { createHash } from 'crypto'
@@ -194,13 +196,13 @@ export function assertPackageHash(actualHex: string, headerHex: string | null, t
 }
 ```
 
-- [ ] **Step 4: Run test to verify it passes**
+- [x] **Step 4: Run test to verify it passes**
 
 Run: `node --import tsx --test src/main/services/hub-package-hash.test.ts`
 
 Expected: PASS。
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add src/main/services/hub-package-hash.ts src/main/services/hub-package-hash.test.ts package.json
@@ -218,7 +220,7 @@ git commit -m "fix: 核对 Hub 脚本包的 SHA-256"
 - Consumes: `assertPackageHash`、`sha256FileHex`
 - Produces: `installScriptFromHubZip` 增加可选 `expectedSha256?: string`。应用内安装始终传入。桥只比对响应头，不传它。`downloadZip` 返回响应头里的 `x-autoforge-sha256`。`createHubClient(...).installPlugin` 把 `install-token` 响应的 `sha256` 传给 `options.install`。
 
-- [ ] **Step 1: Write the failing test**
+- [x] **Step 1: Write the failing test**
 
 把 `hub-client.test.ts` 里的 JSON 改成必须含 `sha256`，并断言安装器收到它：
 
@@ -233,13 +235,13 @@ json: async () => ({
 
 在 `install` 回调里增加 `assert.equal(input.expectedSha256, 'abc')`。再加一个测试：响应没有 64 位十六进制 `sha256` 时抛 `HubClientError`，且不调用 `install`。
 
-- [ ] **Step 2: Run test to verify it fails**
+- [x] **Step 2: Run test to verify it fails**
 
 Run: `node --import tsx --test src/main/services/hub-client.test.ts`
 
 Expected: FAIL，`expectedSha256` 为 `undefined`，或缺少字段时没有抛错。
 
-- [ ] **Step 3: Write minimal implementation**
+- [x] **Step 3: Write minimal implementation**
 
 `hub-client.ts` 的安装入参改为：
 
@@ -278,13 +280,13 @@ assertPackageHash(sha256FileHex(zipPath), headerSha, input.expectedSha256)
 
 哈希失败时现有的 `finally` 必须删除 `tempDir`。不要进入 `extractZip`。
 
-- [ ] **Step 4: Run test to verify it passes**
+- [x] **Step 4: Run test to verify it passes**
 
 Run: `node --import tsx --test src/main/services/hub-client.test.ts src/main/services/hub-package-hash.test.ts`
 
 Expected: PASS。
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add src/main/services/hub-script-installer.ts src/main/services/hub-client.ts src/main/services/hub-client.test.ts
@@ -303,7 +305,7 @@ git commit -m "fix: 导入前核对 Hub 返回的脚本包哈希"
 - Consumes: `parseBridgeInstallBody`、`originAllowed`、`buildHubDownloadUrl`、`installScriptFromHubZip`
 - Produces: `startHubBridgeServer({ onInstalled, getHubUrl })`。`handleInstall` 不再读取 `zipUrl`。
 
-- [ ] **Step 1: Write the failing test**
+- [x] **Step 1: Write the failing test**
 
 导出一个不监听端口的 `handleHubBridgeRequest(req, res, deps)`，或把现有 `handleRequest` 导出供测试调用。用 `node:http` 的 `IncomingMessage` 模拟成本高。改为导出纯决策函数已在 Task 1 覆盖。本任务测试 CORS 与错误响应：把 `setCors` 抽成
 
@@ -337,13 +339,13 @@ assert.equal(
 )
 ```
 
-- [ ] **Step 2: Run test to verify it fails**
+- [x] **Step 2: Run test to verify it fails**
 
 Run: `node --import tsx --test src/main/services/hub-bridge-server.test.ts`
 
 Expected: FAIL，函数不存在。
 
-- [ ] **Step 3: Write minimal implementation**
+- [x] **Step 3: Write minimal implementation**
 
 `setCors` 改为只设置 `bridgeCorsHeaders` 返回的头。`handleInstall`：
 
@@ -375,13 +377,13 @@ startHubBridgeServer({
 
 错误映射保持规格表：令牌失效如果来自下载 HTTP 401，转成 400 `invalid_request`、消息「安装链接无效或已过期」。在 `downloadZip` 里 `response.status === 401` 时抛这个 `HubInstallError`。
 
-- [ ] **Step 4: Run test to verify it passes**
+- [x] **Step 4: Run test to verify it passes**
 
 Run: `node --import tsx --test src/main/services/hub-bridge-server.test.ts src/main/services/hub-install-contract.test.ts src/main/services/hub-client.test.ts`
 
 Expected: PASS。
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add src/main/services/hub-bridge-server.ts src/main/services/hub-bridge-server.test.ts src/main/services/hub-script-installer.ts src/main/index.ts package.json
@@ -403,7 +405,7 @@ git commit -m "fix: 本机安装桥只接受已配置 Hub 的安装令牌"
 - Consumes: `readFile` from `server/utils/storage.ts`
 - Produces: `sha256Buffer(bytes: Buffer): string`、`sha256File(filePath: string): string`
 
-- [ ] **Step 1: Write the failing test**
+- [x] **Step 1: Write the failing test**
 
 ```js
 import assert from 'node:assert/strict'
@@ -424,13 +426,13 @@ test('hashes a buffer and a file as lowercase hex', () => {
 })
 ```
 
-- [ ] **Step 2: Run test to verify it fails**
+- [x] **Step 2: Run test to verify it fails**
 
 Run from `C:/personal/autoforge-hub`: `node --test server/utils/package-sha256.test.mjs`
 
 Expected: FAIL，模块不存在。
 
-- [ ] **Step 3: Write minimal implementation**
+- [x] **Step 3: Write minimal implementation**
 
 `package-sha256.mjs` 用 `createHash('sha256')` 返回 hex。`download.get.ts` 在 `serveScriptFile` 开头：
 
@@ -449,13 +451,13 @@ setHeader(event, 'X-Autoforge-Sha256', hash)
 
 `complete.post.ts` 的 INSERT 列增加 `file_sha256`，值为 `sha256File(merged.archivePath)`。`install-token.post.ts` 的返回对象增加 `sha256: String(row.file_sha256 || '')`。
 
-- [ ] **Step 4: Run test to verify it passes**
+- [x] **Step 4: Run test to verify it passes**
 
 Run: `node --test server/utils/package-sha256.test.mjs`
 
 Expected: PASS。
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 在 `autoforge-hub` 仓库：
 
@@ -475,7 +477,7 @@ git commit -m "fix: 安装包保存 SHA-256 并在下载时下发"
 - Consumes: `install-token` 响应里的 `hubScriptId`；从 `zipUrl` 查询串读取 `installToken`
 - Produces: `installScript({ hubScriptId, installToken })`
 
-- [ ] **Step 1: Write the failing test**
+- [x] **Step 1: Write the failing test**
 
 在 `useAutoforgeBridge.ts` 旁新增纯函数文件 `app/composables/bridge-install-body.mjs` 不适合被 Vue 测。把解析放进 `server/utils/bridge-install-body.mjs` 不合理。放在 `shared/utils/bridge-install-body.mjs`：
 
@@ -506,23 +508,23 @@ test('keeps the script id and install token, and drops the zip URL', () => {
 })
 ```
 
-- [ ] **Step 2: Run test to verify it fails**
+- [x] **Step 2: Run test to verify it fails**
 
 Run: `node --test shared/utils/bridge-install-body.test.mjs`
 
 Expected: FAIL。
 
-- [ ] **Step 3: Write minimal implementation**
+- [x] **Step 3: Write minimal implementation**
 
 实现上面的函数。`useAutoforgeBridge.ts` 的 `installScript` 参数改为 `{ hubScriptId: string; installToken: string }`。两个调用点把 `installScript({ zipUrl, scriptName, hubScriptId })` 换成 `installScript(bridgeInstallBody(mintData))`。
 
-- [ ] **Step 4: Run test to verify it passes**
+- [x] **Step 4: Run test to verify it passes**
 
 Run: `node --test shared/utils/bridge-install-body.test.mjs server/utils/package-sha256.test.mjs`
 
 Expected: PASS。
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add shared/utils/bridge-install-body.mjs shared/utils/bridge-install-body.test.mjs app/composables/useAutoforgeBridge.ts app/components/workspace/WsScriptCard.vue app/pages/workspace/marketplace/[id].vue package.json

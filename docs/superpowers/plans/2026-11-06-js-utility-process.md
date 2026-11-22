@@ -1,6 +1,8 @@
 # JS utilityProcess Implementation Plan
 
-> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
+> **状态：已完成**（实现已合入 `feature/v1.42.0`，桌面端单测通过）
+
+> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [x]`) syntax for tracking.
 
 **Goal:** 用户 JS 在独立的 utilityProcess 中运行，主进程的超时和停止能够结束卡死的脚本。
 
@@ -36,7 +38,7 @@
   - `HostOutbound = { type: 'log'; level: 'INFO' | 'WARN' | 'ERROR'; message: string } | { type: 'stage'; stage: ScriptStageInput } | { type: 'progress'; progress: ScriptProgressInput } | { type: 'browser'; pid: number } | { type: 'result'; value: unknown } | { type: 'error'; message: string }`
   - `parseHostOutbound(value: unknown): HostOutbound | null`
 
-- [ ] **Step 1: Write the failing test**
+- [x] **Step 1: Write the failing test**
 
 ```ts
 import assert from 'node:assert/strict'
@@ -55,23 +57,23 @@ test('accepts host messages and rejects unknown ones', () => {
 })
 ```
 
-- [ ] **Step 2: Run test to verify it fails**
+- [x] **Step 2: Run test to verify it fails**
 
 Run: `node --import tsx --test src/shared/script-host-protocol.test.ts`
 
 Expected: FAIL，模块不存在。
 
-- [ ] **Step 3: Write minimal implementation**
+- [x] **Step 3: Write minimal implementation**
 
 写出上面的类型，以及 `parseHostOutbound`：只接受列出的 `type`。`log.level` 只能是 `INFO`、`WARN`、`ERROR`。`browser.pid` 必须是正整数。`error.message` 和 `log.message` 必须是字符串。其他字段原样保留。无法识别时返回 `null`。
 
-- [ ] **Step 4: Run test to verify it passes**
+- [x] **Step 4: Run test to verify it passes**
 
 Run: `node --import tsx --test src/shared/script-host-protocol.test.ts`
 
 Expected: PASS。
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add src/shared/script-host-protocol.ts src/shared/script-host-protocol.test.ts package.json
@@ -89,7 +91,7 @@ git commit -m "feat: 定义 JS 宿主进程消息"
 - Consumes: 无
 - Produces: `armHostStop(input: { postAbort: () => void; kill: () => void; hasExited: () => boolean; schedule: (fn: () => void, ms: number) => { cancel: () => void }; graceMs?: number }): { cancel: () => void }`
 
-- [ ] **Step 1: Write the failing test**
+- [x] **Step 1: Write the failing test**
 
 ```ts
 import assert from 'node:assert/strict'
@@ -136,13 +138,13 @@ test('does not kill a host that exits within the grace period', () => {
 })
 ```
 
-- [ ] **Step 2: Run test to verify it fails**
+- [x] **Step 2: Run test to verify it fails**
 
 Run: `node --import tsx --test src/main/services/script-host-stop.test.ts`
 
 Expected: FAIL。
 
-- [ ] **Step 3: Write minimal implementation**
+- [x] **Step 3: Write minimal implementation**
 
 ```ts
 export function armHostStop(input: {
@@ -159,13 +161,13 @@ export function armHostStop(input: {
 }
 ```
 
-- [ ] **Step 4: Run test to verify it passes**
+- [x] **Step 4: Run test to verify it passes**
 
 Run: `node --import tsx --test src/main/services/script-host-stop.test.ts`
 
 Expected: PASS。
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add src/main/services/script-host-stop.ts src/main/services/script-host-stop.test.ts package.json
@@ -184,7 +186,7 @@ git commit -m "fix: JS 停止在宽限后杀掉宿主进程"
 - Consumes: `HostInbound`、`resolveScriptEntryFn`、`createScriptSdk`
 - Produces: `runHostMessage(message: HostInbound, deps: { importModule: (entryPath: string) => Promise<Record<string, unknown>>; post: (message: unknown) => void; signal: AbortSignal; createSdk: (paths: { userData: string; scriptDir: string }, signal: AbortSignal, post: (message: unknown) => void) => { browser: { launch: () => Promise<{ process: () => { pid: number } }> }; paths: { userData: string; scriptDir: string } } }): Promise<void>`
 
-- [ ] **Step 1: Write the failing test**
+- [x] **Step 1: Write the failing test**
 
 ```ts
 import assert from 'node:assert/strict'
@@ -243,13 +245,13 @@ test('posts an error when the entry function is missing', async () => {
 })
 ```
 
-- [ ] **Step 2: Run test to verify it fails**
+- [x] **Step 2: Run test to verify it fails**
 
 Run: `node --import tsx --test src/main/services/script-host.test.ts`
 
 Expected: FAIL。
 
-- [ ] **Step 3: Write minimal implementation**
+- [x] **Step 3: Write minimal implementation**
 
 `runHostMessage` 在 `type === 'start'` 时 `importModule(entryPath)`，用 `resolveScriptEntryFn` 找入口。没有入口就 `post({ type: 'error', message: SCRIPT_ENTRY_FN_ERROR })`。找到后构造与现在 `executeJavaScriptPackage` 相同的 `ctx`：`log` / `stage` / `progress` 改成 `post` 对应消息。`sdk` 使用传入的 `createSdk`。`run` 的返回值 `post({ type: 'result', value })`。抛错则 `post({ type: 'error', message })`。
 
@@ -266,13 +268,13 @@ build: {
 }
 ```
 
-- [ ] **Step 4: Run test to verify it passes**
+- [x] **Step 4: Run test to verify it passes**
 
 Run: `node --import tsx --test src/main/services/script-host.test.ts`
 
 Expected: PASS。
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add src/main/services/script-host.ts src/main/services/script-host.test.ts electron.vite.config.ts package.json
@@ -288,7 +290,7 @@ git commit -m "feat: 在宿主进程里执行 JS 脚本入口"
 - Consumes: `armHostStop`、`parseHostOutbound`、`utilityProcess.fork`
 - Produces: JS 会话的 `scriptHost` 字段。`stop` 对 JS 会话调用 `armHostStop`，不再只 `abortController.abort()`。
 
-- [ ] **Step 1: Write the failing test**
+- [x] **Step 1: Write the failing test**
 
 把启动器抽成可注入接口，避免单测拉起 Electron：
 
@@ -319,25 +321,25 @@ constructor(
 
 默认 `launchHost` 调用 `utilityProcess.fork(hostFile)`，并把 `child.postMessage`、`child.kill`、`child.on('message')`、`child.on('exit')` 适配成 `ScriptHostHandle`。测试传入假的 `launchHost`，`getWindow` 返回 `null`。
 
-- [ ] **Step 2: Run test to verify it fails**
+- [x] **Step 2: Run test to verify it fails**
 
 Run: `node --import tsx --test src/main/services/script-runner-host.test.ts`
 
 Expected: FAIL，JS 路径仍直接 `import()`，假宿主收不到 `start`。
 
-- [ ] **Step 3: Write minimal implementation**
+- [x] **Step 3: Write minimal implementation**
 
 删除 `executeJavaScriptPackage` 中的 `import(pathToFileURL(entryPath).href)`。改为 `launchHost(hostFile)`，保存到 `active.scriptHost`。`hostFile` 在开发时是 `out/main/script-host.js`，用 `fileURLToPath(new URL('./script-host.js', import.meta.url))`。收到消息时 `parseHostOutbound`，分别调用现有的 `pushLog`、`handleScriptControl`、记录 `browserPids`、`completeSession`、`failSession`。`onExit` 且会话仍是 `running` 时 `failSession`。
 
 `stop` 在 JS 会话上调用 `armHostStop`：`postAbort` 发送 `{ type: 'abort' }` 并 `abortController.abort()`；`kill` 调用 `scriptHost.kill()`，再对 `browserPids` 执行 `process.kill(pid)`。`armRunTimeout` 的回调仍调用 `this.stop(sessionId)`，并在杀进程前把日志写成 `运行超时（${seconds} 秒），已自动停止`。超时路径把状态写成 `error` 而不是 `stopped`：给 `stop` 增加参数 `reason: 'user' | 'timeout' = 'user'`。
 
-- [ ] **Step 4: Run test to verify it passes**
+- [x] **Step 4: Run test to verify it passes**
 
 Run: `node --import tsx --test src/main/services/script-runner-host.test.ts src/main/services/script-host.test.ts src/main/services/script-host-stop.test.ts`
 
 Expected: PASS。
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add src/main/services/script-runner.ts src/main/services/script-runner-host.test.ts
