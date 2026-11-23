@@ -30,6 +30,7 @@ interface AiProjectTurnRow {
   role: AiProjectTurn['role']
   content: string
   status: AiProjectTurnStatus
+  attachments: string | null
   changes: string | null
   checks: string | null
   imported_script_id: string | null
@@ -94,6 +95,7 @@ function turnFromRow(row: AiProjectTurnRow): AiProjectTurn {
     role: row.role,
     content: row.content,
     status: row.status,
+    attachments: parseJsonList(row.attachments) as AiProjectTurn['attachments'],
     changes: parseJsonList(row.changes),
     checks: parseJsonList(row.checks),
     importedScriptId: row.imported_script_id ?? undefined,
@@ -164,7 +166,7 @@ export class AiWorkspaceRepository {
 
   listTurns(projectId: string): AiProjectTurn[] {
     const rows = this.db.prepare(`
-      SELECT * FROM ai_project_turns WHERE project_id = ? ORDER BY created_at, id
+      SELECT * FROM ai_project_turns WHERE project_id = ? ORDER BY created_at, rowid
     `).all(projectId) as unknown as AiProjectTurnRow[]
     return rows.map(turnFromRow)
   }
@@ -172,8 +174,8 @@ export class AiWorkspaceRepository {
   appendTurn(projectId: string, turn: AiProjectTurnInput): AiProjectTurn {
     this.db.prepare(`
       INSERT INTO ai_project_turns (
-        id, project_id, role, content, status, changes, checks, imported_script_id, created_at
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+        id, project_id, role, content, status, changes, checks, imported_script_id, created_at, attachments
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `).run(
       turn.id,
       projectId,
@@ -183,7 +185,8 @@ export class AiWorkspaceRepository {
       turn.changes ? JSON.stringify(turn.changes) : null,
       turn.checks ? JSON.stringify(turn.checks) : null,
       turn.importedScriptId ?? null,
-      turn.createdAt
+      turn.createdAt,
+      turn.attachments ? JSON.stringify(turn.attachments) : null
     )
     const row = this.db.prepare('SELECT * FROM ai_project_turns WHERE id = ?').get(turn.id) as unknown as AiProjectTurnRow
     return turnFromRow(row)

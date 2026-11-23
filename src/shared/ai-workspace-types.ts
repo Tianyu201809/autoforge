@@ -30,6 +30,7 @@ export interface AiProjectTurn {
   role: AiProjectTurnRole
   content: string
   status: AiProjectTurnStatus
+  attachments?: AiProjectAttachment[]
   changes?: unknown[]
   checks?: unknown[]
   importedScriptId?: string
@@ -52,6 +53,7 @@ export interface AiProjectTurnInput {
   role: AiProjectTurnRole
   content: string
   status: AiProjectTurnStatus
+  attachments?: AiProjectAttachment[]
   changes?: unknown[]
   checks?: unknown[]
   importedScriptId?: string
@@ -102,3 +104,22 @@ export type AiAgentEvent =
   | { type: 'check_result'; projectId: string; turnId: string; check: unknown }
   | { type: 'import_result'; projectId: string; turnId: string; ok: boolean; scriptId?: string; message: string }
   | { type: 'turn_finished'; projectId: string; turnId: string; status: AiProjectTurnStatus }
+export interface AiProjectAttachment {
+  id: string
+  name: string
+  kind: 'image' | 'text'
+  mimeType: string
+  size: number
+}
+
+export interface AiAttachmentPreview {
+  metadata: AiProjectAttachment
+  error?: string
+  dataUrl?: string
+  text?: string
+}
+
+export interface AiTurnOptions {
+  attachmentIds?: string[]
+  retryUserTurnId?: string
+}

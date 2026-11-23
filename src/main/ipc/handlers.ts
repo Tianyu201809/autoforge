@@ -1,6 +1,7 @@
 import { dialog, ipcMain, shell, type BrowserWindow } from 'electron'
 import { createHash, randomBytes } from 'crypto'
 import { existsSync, statSync, writeFileSync } from 'fs'
+import { join } from 'node:path'
 import { IPC } from '../../shared/ipc-channels'
 import { appEnv } from '../../shared/app-env'
 import { MANIFEST_FILENAME } from '../../shared/script-contract'
@@ -33,6 +34,7 @@ import { createAnthropicProvider } from '../services/ai/anthropic-provider'
 import { createGeminiProvider } from '../services/ai/gemini-provider'
 import { OPENAI_COMPATIBLE_PRESETS } from '../services/ai/provider-presets'
 import { registerModelProfileIpcHandlers } from '../services/ai/model-profile-ipc'
+import { createProjectAttachmentStore } from '../services/ai/project-attachment-store'
 import { createAgentService } from '../services/ai/agent-service'
 import type { AiProjectConversationExport } from '../../shared/ai-workspace-types'
 import { createProjectWorkspace } from '../services/ai/project-workspace'
@@ -126,6 +128,7 @@ export function registerIpcHandlers(
   })
   const aiAgentService = createAgentService({
     repository: aiWorkspaceRepository,
+    attachments: createProjectAttachmentStore(join(getAppUserDataPath(), 'ai-project-attachments')),
     profiles: modelProfileService,
     workspace: aiProjectWorkspace,
     checks: projectChecks,
@@ -184,6 +187,12 @@ export function registerIpcHandlers(
       if (result.canceled || !result.filePath) return null
       writeFileSync(result.filePath, `${JSON.stringify(conversation, null, 2)}\n`, 'utf8')
       return result.filePath
+    },
+    async () => {
+      const window = getWindow()
+      const options = { title: '添加图片或文本素材', properties: ['openFile', 'multiSelections'] as Array<'openFile' | 'multiSelections'> }
+      const result = window ? await dialog.showOpenDialog(window, options) : await dialog.showOpenDialog(options)
+      return result.canceled ? null : result.filePaths
     }
   )
   ipcMain.handle(IPC.HUB_LOGOUT, () => hubClient.logout())

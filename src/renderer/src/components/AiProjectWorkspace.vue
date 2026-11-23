@@ -1,6 +1,7 @@
 <script setup lang="ts">
-import { computed, onMounted, onUnmounted, ref } from 'vue'
-import { Bot, Check, ChevronDown, CircleAlert, Download, FolderOpen, LoaderCircle, MoreHorizontal, PanelRightClose, PanelRightOpen, Pencil, Pin, PinOff, Plus, Send, Square, Trash2 } from 'lucide-vue-next'
+import { computed, nextTick, onMounted, onUnmounted, ref, watch } from 'vue'
+import { Bot, Check, ChevronDown, CircleAlert, Download, FolderOpen, LoaderCircle, MoreHorizontal, PanelRightClose, PanelRightOpen, Pencil, Pin, PinOff, Plus, Paperclip, X, RotateCcw, Send, Square, Trash2 } from 'lucide-vue-next'
+import { renderAiMarkdown } from '../lib/ai-markdown'
 import { useAiProjectWorkspace } from '../composables/useAiProjectWorkspace'
 import { askConfirm } from '../composables/useConfirmDialog'
 import { askPrompt } from '../composables/usePromptDialog'
@@ -14,7 +15,28 @@ const narrow = ref(false)
 const inspectorResizeCleanup = ref<(() => void) | null>(null)
 const { pushToast } = useToast()
 const currentProfile = computed(() => state.profiles.value.find((profile) => profile.id === state.activeProfileId.value))
-const conversation = computed(() => state.turns.value.filter((turn) => turn.role === 'user' || turn.content))
+const conversation = computed(() => state.turns.value.filter((turn) => turn.role === 'user' || turn.content).map(turn => ({ ...turn, html: turn.role === 'assistant' ? renderAiMarkdown(turn.content) : '' })))
+const streamingHtml = computed(() => renderAiMarkdown(state.streamingText.value))
+const conversationElement = ref<HTMLElement | null>(null)
+const followLatest = ref(true)
+watch(() => [state.streamingText.value, state.turns.value.length], async () => {
+  if (!followLatest.value) return
+  await nextTick()
+  const element = conversationElement.value
+  if (element) element.scrollTop = element.scrollHeight
+})
+function trackScroll(): void {
+  const element = conversationElement.value
+  if (element) followLatest.value = element.scrollHeight - element.scrollTop - element.clientHeight < 100
+}
+watch(() => state.activeProject.value?.id, () => { followLatest.value = true })
+function openMarkdownLink(event: MouseEvent): void {
+  const anchor = (event.target as Element)?.closest('a')
+  if (!anchor) return
+  event.preventDefault()
+  const href = anchor.getAttribute('href') ?? ''
+  if (/^https?:\/\//i.test(href)) void window.autoforge.system.openExternal(href)
+}
 
 function startInspectorResize(event: PointerEvent): void {
   if (event.button !== 0) return
@@ -231,7 +253,7 @@ async function confirmRemoveProject(project: (typeof state.projects.value)[numbe
 
       <main class="ai-project-main">
         <template v-if="state.activeProject.value">
-          <div class="ai-conversation" aria-live="polite">
+          <div ref="conversationElement" class="ai-conversation" aria-live="polite" @scroll="trackScroll">
             <div v-if="!conversation.length && !state.busy.value" class="ai-conversation-empty">
               <div class="ai-empty-icon"><Bot :size="20" /></div>
               <h1>{{ state.activeProject.value.name }}</h1>
@@ -241,20 +263,41 @@ async function confirmRemoveProject(project: (typeof state.projects.value)[numbe
               <div class="ai-turn-avatar"><span v-if="turn.role === 'user'">你</span><Bot v-else :size="15" /></div>
               <div class="ai-turn-content">
                 <div class="ai-turn-role">{{ turn.role === 'user' ? '你' : 'Autoforge Agent' }}</div>
-                <pre>{{ turn.content }}</pre>
+                <div v-if="turn.role === 'assistant'" class="ai-markdown" @click="openMarkdownLink" v-html="turn.html" />
+                <pre v-else>{{ turn.content }}</pre>
+                <div v-if="turn.attachments?.length" class="ai-attachments">
+                  <button v-for="attachment in turn.attachments" :key="attachment.id" type="button" class="ai-attachment" :title="attachment.name" @click="state.previewAttachment(attachment)">
+                    <img v-if="state.attachmentPreviews.value[attachment.id]?.dataUrl" :src="state.attachmentPreviews.value[attachment.id].dataUrl" :alt="attachment.name">
+                    <Paperclip v-else :size="18" />
+                    <span>{{ attachment.name }}<small>{{ state.attachmentPreviews.value[attachment.id]?.error ?? (attachment.size / 1024).toFixed(1) + ' KB' }}</small></span>
+                  </button>
+                </div>
+                <details v-for="attachment in (turn.attachments ?? []).filter(a => a.kind === 'text')" :key="attachment.id" class="ai-text-preview" @toggle="state.previewAttachment(attachment)">
+                  <summary>{{ attachment.name }}</summary><pre>{{ state.attachmentPreviews.value[attachment.id]?.text ?? '预览不可用' }}</pre>
+                </details>
+                <span v-if="turn.status === 'error' || turn.status === 'cancelled'" class="ai-turn-status">{{ turn.status === 'error' ? '任务失败' : '已停止' }}</span>
               </div>
             </article>
             <article v-if="state.busy.value" class="ai-turn ai-turn--assistant">
               <div class="ai-turn-avatar"><Bot :size="15" /></div>
               <div class="ai-turn-content">
                 <div class="ai-turn-role">Autoforge Agent</div>
-                <pre>{{ state.streamingText.value }}<span class="ai-stream-caret" /></pre>
+                <div class="ai-markdown" @click="openMarkdownLink" v-html="streamingHtml" /><span v-if="state.streamingText.value" class="ai-stream-caret" />
                 <span v-if="!state.streamingText.value" class="ai-working"><LoaderCircle class="ai-spin" :size="14" /> 正在处理项目</span>
               </div>
             </article>
           </div>
 
+          <button v-if="state.canRetry.value && !state.busy.value" type="button" class="ai-retry-button" @click="state.retryMessage()"><RotateCcw :size="13" />重试上一条消息</button>
           <form class="ai-composer" @submit.prevent="state.sendMessage()">
+            <div v-if="state.pendingAttachments.value.length" class="ai-attachments">
+              <div v-for="attachment in state.pendingAttachments.value" :key="attachment.id" class="ai-attachment">
+                <img v-if="state.attachmentPreviews.value[attachment.id]?.dataUrl" :src="state.attachmentPreviews.value[attachment.id].dataUrl" :alt="attachment.name">
+                <Paperclip v-else :size="18" />
+                <span>{{ attachment.name }}<small>{{ (attachment.size / 1024).toFixed(1) }} KB</small></span>
+                <button type="button" :disabled="state.busy.value" :aria-label="'移除 ' + attachment.name" @click="state.removeAttachment(attachment)"><X :size="13" /></button>
+              </div>
+            </div>
             <textarea
               v-model="state.prompt.value"
               :disabled="state.busy.value"
@@ -264,9 +307,9 @@ async function confirmRemoveProject(project: (typeof state.projects.value)[numbe
               @keydown.meta.enter.prevent="state.sendMessage()"
             />
             <div class="ai-composer-footer">
-              <span class="ai-model-label"><span>{{ currentProfile?.name ?? '选择模型' }}</span><ChevronDown :size="13" /></span>
+              <div class="ai-composer-tools"><button type="button" class="ai-add-attachment" aria-label="添加素材" title="添加图片或 UTF-8 文本素材（最多 8 个）" :disabled="state.busy.value || state.attaching.value" @click="state.addAttachments()"><LoaderCircle v-if="state.attaching.value" class="ai-spin" :size="16" /><Paperclip v-else :size="16" /></button><span class="ai-model-label"><span>{{ currentProfile?.name ?? '选择模型' }}</span><ChevronDown :size="13" /></span></div>
               <button v-if="state.busy.value" type="button" class="ai-send-button ai-stop-button" title="停止生成" aria-label="停止生成" @click="state.cancelTurn()"><Square :size="14" /></button>
-              <button v-else type="submit" class="ai-send-button" title="发送消息" aria-label="发送消息" :disabled="!state.prompt.value.trim()"><Send :size="15" /></button>
+              <button v-else type="submit" class="ai-send-button" title="发送消息" aria-label="发送消息" :disabled="state.attaching.value || (!state.prompt.value.trim() && !state.pendingAttachments.value.length)"><Send :size="15" /></button>
             </div>
           </form>
         </template>
@@ -427,4 +470,37 @@ async function confirmRemoveProject(project: (typeof state.projects.value)[numbe
 @keyframes ai-caret { to { visibility: hidden; } }
 @media (max-width: 760px) { .ai-project-list { width: 150px; flex-basis: 150px; } .ai-composer { width: calc(100% - 24px); margin: 0 12px 12px; } .ai-project-toolbar { padding-inline: 9px; } }
 @media (prefers-reduced-motion: reduce) { .ai-spin, .ai-stream-caret { animation-duration: 2s; } }
+
+.ai-markdown { font-size: 13px; line-height: 1.75; overflow-wrap: anywhere; }
+.ai-markdown :deep(> :first-child) { margin-top: 0; }
+.ai-markdown :deep(> :last-child) { margin-bottom: 0; }
+.ai-markdown :deep(h1) { font-size: 22px; }
+.ai-markdown :deep(h2) { font-size: 18px; }
+.ai-markdown :deep(h3) { font-size: 15px; }
+.ai-markdown :deep(h1), .ai-markdown :deep(h2), .ai-markdown :deep(h3) { margin: 20px 0 10px; line-height: 1.4; }
+.ai-markdown :deep(p), .ai-markdown :deep(ul), .ai-markdown :deep(ol) { margin: 10px 0; }
+.ai-markdown :deep(ul), .ai-markdown :deep(ol) { padding-left: 24px; }
+.ai-markdown :deep(code) { padding: 2px 5px; border-radius: 4px; background: var(--sb-bg-inset); font-family: ui-monospace, Consolas, monospace; font-size: 12px; }
+.ai-markdown :deep(pre) { margin: 12px 0; padding: 14px; overflow: auto; border: 1px solid var(--sb-border-subtle); border-radius: 7px; background: var(--sb-bg-inset); white-space: pre; }
+.ai-markdown :deep(pre code) { padding: 0; background: transparent; }
+.ai-markdown :deep(table) { display: block; max-width: 100%; overflow-x: auto; border-collapse: collapse; margin: 12px 0; }
+.ai-markdown :deep(th), .ai-markdown :deep(td) { padding: 7px 12px; border: 1px solid var(--sb-border-subtle); text-align: left; }
+.ai-markdown :deep(th) { background: var(--sb-bg-inset); }
+.ai-markdown :deep(blockquote) { margin: 12px 0; padding-left: 14px; border-left: 3px solid var(--sb-border-subtle); color: var(--sb-text-muted); }
+.ai-markdown :deep(a) { color: var(--sb-accent-solid); text-decoration: underline; }
+.ai-composer-tools { display: flex; align-items: center; gap: 10px; min-width: 0; }
+.ai-add-attachment, .ai-attachment button { display: grid; place-items: center; border: 0; border-radius: 5px; background: transparent; color: var(--sb-text-muted); cursor: pointer; }
+.ai-add-attachment { width: 28px; height: 28px; }
+.ai-add-attachment:hover { background: var(--sb-bg-hover); }
+.ai-add-attachment:disabled { opacity: .4; cursor: default; }
+.ai-attachments { display: flex; gap: 8px; flex-wrap: wrap; padding: 6px 0 12px; }
+.ai-attachment { display: flex; align-items: center; gap: 8px; max-width: 240px; min-width: 0; padding: 7px; border: 1px solid var(--sb-border-subtle); border-radius: 7px; background: var(--sb-bg-inset); color: var(--sb-text-primary); font: inherit; text-align: left; }
+.ai-attachment img { width: 44px; height: 44px; flex: 0 0 44px; object-fit: contain; border-radius: 4px; }
+.ai-attachment > span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 11px; }
+.ai-attachment small { display: block; margin-top: 3px; color: var(--sb-text-muted); font-size: 10px; }
+.ai-attachment button { align-self: flex-start; padding: 3px; }
+.ai-text-preview { padding: 6px 0; color: var(--sb-text-muted); font-size: 11px; }
+.ai-text-preview pre { max-height: 200px; overflow: auto; }
+.ai-turn-status { display: block; margin-top: 8px; color: var(--sb-text-muted); font-size: 11px; }
+.ai-retry-button { display: inline-flex; align-items: center; align-self: center; gap: 6px; margin: 8px 0; border: 0; background: transparent; color: var(--sb-text-muted); cursor: pointer; font-size: 12px; }
 </style>

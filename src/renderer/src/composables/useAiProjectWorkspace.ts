@@ -1,11 +1,11 @@
-import { onScopeDispose, reactive, ref } from 'vue'
-import type { AiAgentEvent, AiProject, AiProjectLanguage, AiProjectSummary, AiProjectTurn } from '../../../shared/ai-workspace-types'
+import { computed, onScopeDispose, reactive, ref } from 'vue'
+import type { AiAgentEvent, AiProjectAttachment, AiAttachmentPreview, AiProject, AiProjectLanguage, AiProjectSummary, AiProjectTurn } from '../../../shared/ai-workspace-types'
 import type { LlmProfileView } from '../../../shared/ai-types'
 
 type AiWorkspaceApi = Pick<Window['autoforge']['ai'],
   'pickProjectFolder' | 'listProjects' | 'getProject' | 'listProjectTurns' | 'createProject' | 'renameProject' |
   'setProjectPinned' | 'exportProjectTurns' | 'removeProject' |
-  'startTurn' | 'analyzeProject' | 'cancelTurn' | 'onAgentEvent' | 'listProfiles'>
+  'pickAttachments' | 'previewAttachment' | 'removeAttachment' | 'startTurn' | 'analyzeProject' | 'cancelTurn' | 'onAgentEvent' | 'listProfiles'>
 
 interface AiWorkspaceDraft {
   name: string
@@ -41,6 +41,62 @@ export function useAiProjectWorkspace(
   const busy = ref(false)
   const error = ref('')
   const prompt = ref('')
+  const pendingByProject = reactive<Record<string, AiProjectAttachment[]>>({})
+  const pendingAttachments = computed(() => pendingByProject[activeProject.value?.id ?? ''] ?? [])
+  const attachmentPreviews = ref<Record<string, AiAttachmentPreview>>({})
+  const attaching = ref(false)
+  let runningProjectId: string | null = null
+  let selectionVersion = 0
+  let disposed = false
+  const canRetry = computed(() => ['error', 'cancelled'].includes(turns.value.at(-1)?.status ?? '') && turns.value.some(turn => turn.role === 'user'))
+  async function previewAttachment(attachment: AiProjectAttachment): Promise<void> {
+    const projectId = activeProject.value?.id
+    if (!projectId || attachmentPreviews.value[attachment.id]) return
+    try {
+      const result = await api.previewAttachment(projectId, attachment.id)
+      if (!disposed && activeProject.value?.id === projectId) {
+        const keys = Object.keys(attachmentPreviews.value)
+        while (keys.length >= 8) delete attachmentPreviews.value[keys.shift()!]
+        attachmentPreviews.value[attachment.id] = result
+      }
+    } catch {
+      if (!disposed && activeProject.value?.id === projectId) {
+        const keys = Object.keys(attachmentPreviews.value)
+        while (keys.length >= 8) delete attachmentPreviews.value[keys.shift()!]
+        attachmentPreviews.value[attachment.id] = { metadata: attachment, error: '附件不可用，请重新添加素材' }
+      }
+    }
+  }
+  async function addAttachments(): Promise<void> {
+    const projectId = activeProject.value?.id
+    if (!projectId || attaching.value || busy.value) return
+    attaching.value = true
+    try {
+      const added = await api.pickAttachments(projectId)
+      if (!added) return
+      if (disposed || !activeProject.value || !projects.value.some(p => p.id === projectId) && activeProject.value.id !== projectId) {
+        await Promise.all(added.map(a => api.removeAttachment(projectId, a.id).catch(() => false)))
+        return
+      }
+      const pending = pendingByProject[projectId] ?? []
+      if (pending.length + added.length > 8 || [...pending, ...added].reduce((sum, a) => sum + a.size, 0) > 20 * 1024 * 1024) {
+        await Promise.all(added.map(a => api.removeAttachment(projectId, a.id)))
+        throw new Error('每条消息最多 8 个附件，总大小不超过 20 MB')
+      }
+      pendingByProject[projectId] = [...pending, ...added]
+      if (activeProject.value?.id === projectId) for (const attachment of added) void previewAttachment(attachment)
+    } catch (cause) { error.value = cause instanceof Error ? cause.message : '添加素材失败' }
+    finally { attaching.value = false }
+  }
+  async function removeAttachment(attachment: AiProjectAttachment): Promise<void> {
+    const projectId = activeProject.value?.id
+    if (!projectId || busy.value) return
+    try {
+      await api.removeAttachment(projectId, attachment.id)
+      pendingByProject[projectId] = (pendingByProject[projectId] ?? []).filter(a => a.id !== attachment.id)
+      delete attachmentPreviews.value[attachment.id]
+    } catch (cause) { error.value = cause instanceof Error ? cause.message : '移除素材失败' }
+  }
   const streamingText = ref('')
   const activeTurnId = ref<string | null>(null)
   const fileChanges = ref<string[]>([])
@@ -72,7 +128,14 @@ export function useAiProjectWorkspace(
   }
 
   const unsubscribe = api.onAgentEvent(receiveEvent)
-  onScopeDispose(unsubscribe)
+  onScopeDispose(() => {
+    disposed = true
+    unsubscribe()
+    for (const [projectId, pending] of Object.entries(pendingByProject)) {
+      if (runningProjectId === projectId) continue
+      for (const attachment of pending) void api.removeAttachment(projectId, attachment.id).catch(() => false)
+    }
+  })
 
   async function load(preferredProjectId?: string | null): Promise<void> {
     loading.value = true
@@ -93,13 +156,24 @@ export function useAiProjectWorkspace(
   }
 
   async function openProject(id: string): Promise<void> {
+    const version = ++selectionVersion
     error.value = ''
     try {
       const [project, savedTurns] = await Promise.all([api.getProject(id), api.listProjectTurns(id)])
+      if (version !== selectionVersion || disposed) return
       if (!project) throw new Error('AI 项目不存在')
       activeProject.value = project
       onActiveProjectChange(project.id)
       turns.value = savedTurns
+      prompt.value = ''
+      attachmentPreviews.value = {}
+      void (async () => {
+        const recent = [...savedTurns.flatMap(turn => turn.attachments ?? []), ...pendingAttachments.value].slice(-8)
+        for (const attachment of recent) {
+          if (disposed || activeProject.value?.id !== id) break
+          await previewAttachment(attachment)
+        }
+      })()
       activeProfileId.value = project.profileId
       streamingText.value = ''
       activeTurnId.value = null
@@ -201,6 +275,7 @@ export function useAiProjectWorkspace(
         return
       }
       error.value = ''
+      delete pendingByProject[id]
       await loadProjects()
       if (activeProject.value?.id === id) {
         activeProject.value = null
@@ -212,51 +287,59 @@ export function useAiProjectWorkspace(
     }
   }
 
-  async function sendMessage(message = prompt.value): Promise<void> {
+  async function sendMessage(message = prompt.value, retryUser?: AiProjectTurn): Promise<void> {
     const project = activeProject.value
-    if (!project || !message.trim() || busy.value) return
-    const sent = message
-    prompt.value = ''
+    const attachments = retryUser?.attachments ?? [...pendingAttachments.value]
+    if (!project || (!message.trim() && !attachments.length) || busy.value || attaching.value) return
     error.value = ''
     busy.value = true
+    runningProjectId = project.id
     streamingText.value = ''
     activeTurnId.value = null
     fileChanges.value = []
     checkResults.value = []
     importResult.value = null
-    turns.value.push({
-      id: createId(), projectId: project.id, role: 'user', content: sent, status: 'complete', createdAt: new Date().toISOString()
-    })
+    const optimisticId = createId()
+    if (!retryUser) turns.value.push({ id: optimisticId, projectId: project.id, role: 'user', content: message, attachments, status: 'complete', createdAt: new Date().toISOString() })
     try {
-      const result = await api.startTurn(project.id, sent)
-      const existing = turns.value.find((turn) => turn.id === result.id)
-      if (existing) Object.assign(existing, result)
+      const options = retryUser ? { retryUserTurnId: retryUser.id } : attachments.length ? { attachmentIds: attachments.map(a => a.id) } : undefined
+      const result = await api.startTurn(project.id, message, options)
+      if (!retryUser) pendingByProject[project.id] = []
+      if (activeProject.value?.id !== project.id || disposed) return
+      prompt.value = ''
+      const saved = await api.listProjectTurns(project.id)
+      if (activeProject.value?.id !== project.id || disposed) return
+      if (saved.length) turns.value = saved
       else turns.value.push(result)
+      if (result.status === 'error') error.value = '模型请求失败。消息和素材已保留，可重试；若模型不支持图片，请在输入框重新发送文字请求。'
       if (result.checks) checkResults.value = result.checks as CheckSummary[]
       if (result.importedScriptId) importResult.value = { ok: true, scriptId: result.importedScriptId, message: '脚本已导入 Autoforge' }
     } catch (cause) {
+      if (activeProject.value?.id !== project.id || disposed) return
       error.value = cause instanceof Error ? cause.message : 'Agent 任务失败'
-      turns.value.push({
-        id: activeTurnId.value ?? createId(), projectId: project.id, role: 'assistant',
-        content: streamingText.value || error.value, status: 'error', createdAt: new Date().toISOString()
-      })
+      turns.value = turns.value.filter(turn => turn.id !== optimisticId)
+      const saved = await api.listProjectTurns(project.id).catch(() => [])
+      if (activeProject.value?.id === project.id && saved.length) turns.value = saved
     } finally {
+      runningProjectId = null
       busy.value = false
-      if (activeTurnId.value && streamingText.value) {
-        const existing = turns.value.find((turn) => turn.id === activeTurnId.value)
-        if (existing) Object.assign(existing, { content: streamingText.value, status: 'complete' })
-        else turns.value.push({
-          id: activeTurnId.value, projectId: project.id, role: 'assistant', content: streamingText.value,
-          status: 'complete', createdAt: new Date().toISOString()
-        })
+      if (activeProject.value?.id === project.id) {
+        streamingText.value = ''
+        activeTurnId.value = null
       }
     }
   }
 
+  async function retryMessage(): Promise<void> {
+    if (!canRetry.value) return
+    const user = [...turns.value].reverse().find(turn => turn.role === 'user')
+    if (user) await sendMessage(user.content, user)
+  }
+
   async function cancelTurn(): Promise<void> {
-    if (!activeProject.value || !busy.value) return
+    if (!runningProjectId || !busy.value) return
     try {
-      await api.cancelTurn(activeProject.value.id)
+      await api.cancelTurn(runningProjectId)
     } catch (cause) {
       error.value = cause instanceof Error ? cause.message : '无法取消 Agent 任务'
     }
@@ -266,6 +349,7 @@ export function useAiProjectWorkspace(
     const projectId = activeProject.value?.id
     if (!projectId || busy.value) return
     busy.value = true
+    runningProjectId = projectId
     error.value = ''
     streamingText.value = ''
     activeTurnId.value = null
@@ -281,14 +365,11 @@ export function useAiProjectWorkspace(
     } catch (cause) {
       if (activeProject.value?.id === projectId) error.value = cause instanceof Error ? cause.message : 'AI 分析与检查失败'
     } finally {
+      runningProjectId = null
       busy.value = false
-      if (activeTurnId.value && streamingText.value) {
-        const existing = turns.value.find((turn) => turn.id === activeTurnId.value)
-        if (existing) Object.assign(existing, { content: streamingText.value, status: 'complete' })
-        else turns.value.push({
-          id: activeTurnId.value, projectId: activeProject.value?.id ?? '', role: 'assistant',
-          content: streamingText.value, status: 'complete', createdAt: new Date().toISOString()
-        })
+      if (activeProject.value?.id === projectId) {
+        streamingText.value = ''
+        activeTurnId.value = null
       }
     }
   }
@@ -297,6 +378,7 @@ export function useAiProjectWorkspace(
     projects, activeProject, turns, profiles, activeProfileId, credentialPersistent, loading, busy, error,
     prompt, streamingText, activeTurnId, fileChanges, checkResults, importResult, creating, projectDraft, pendingFolder,
     load, openProject, chooseProjectFolder, createProject, renameProject, setProjectPinned, exportProjectTurns,
+    pendingAttachments, attachmentPreviews, attaching, addAttachments, removeAttachment, previewAttachment, canRetry, retryMessage,
     removeProject, sendMessage, cancelTurn, analyzeProject
   }
 }

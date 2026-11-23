@@ -16,6 +16,9 @@ function harness() {
     pinned: false, status: 'ready', createdAt: '2026-11-22T00:00:00.000Z', updatedAt: '2026-11-22T00:00:00.000Z'
   }
   const service = {
+    stageAttachments: () => [],
+    previewAttachment: () => { throw new Error('not found') },
+    removeAttachment: () => true,
     listProjects: () => [],
     getProject: () => project,
     listTurns: () => [{ id: 'turn-1', projectId: project.id, role: 'user' as const, content: 'saved prompt', status: 'complete' as const, createdAt: '2026-11-22T00:00:00.000Z' }],
@@ -106,4 +109,11 @@ test('exports the project and its turns through the save-dialog callback', async
   assert.equal(exports.length, 1)
   assert.equal(exports[0]?.turns[0]?.content, 'saved prompt')
   assert.equal('rootPath' in exports[0]!.project, false)
+})
+test('attachment IPC rejects paths and malformed IDs and allows file-picker cancellation', async () => {
+  const { invoke } = harness()
+  assert.equal(await invoke('ai:project:attachments:pick', 'project-1'), null)
+  assert.throws(() => invoke('ai:project:attachment:preview', 'project-1', '../../secret'))
+  assert.throws(() => invoke(IPC.AI_PROJECT_START_TURN, 'project-1', 'look', { attachmentIds:['C:/secret'] }))
+  assert.throws(() => invoke(IPC.AI_PROJECT_START_TURN, 'project-1', 'look', { sourcePath:'C:/secret' }))
 })

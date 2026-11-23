@@ -1,7 +1,10 @@
+import { ATTACHMENT_LIMITS, type createProjectAttachmentStore } from './project-attachment-store'
 import { randomUUID } from 'node:crypto'
 import type { LlmMessage, LlmStreamEvent } from '../../../shared/ai-types'
 import type {
   AiAgentEvent,
+  AiProjectAttachment,
+  AiTurnOptions,
   AiProject,
   AiProjectCreateInput,
   AiProjectSummary,
@@ -43,6 +46,7 @@ interface ProjectRegistry {
 }
 
 export interface AgentServiceOptions {
+  attachments?: ReturnType<typeof createProjectAttachmentStore>
   repository: AgentRepository
   profiles: { resolveProvider(profileId: string): ResolvedProvider }
   workspace: ReturnType<typeof createProjectWorkspace>
@@ -78,22 +82,10 @@ function makeSystemPrompt(project: AiProject, analyze: boolean): string {
   ].join('\n')
 }
 
-function buildMessages(project: AiProject, history: AiProjectTurn[], currentMessage: string): LlmMessage[] {
-  const system = { role: 'system' as const, content: makeSystemPrompt(project) }
-  const recentMessages: LlmMessage[] = []
-  let usedChars = system.content.length + currentMessage.length
-  for (const turn of history.slice(-MAX_HISTORY_TURNS).reverse()) {
-    if (turn.status !== 'complete' || usedChars + turn.content.length > MAX_CONTEXT_CHARS) continue
-    recentMessages.push({ role: turn.role, content: turn.content })
-    usedChars += turn.content.length
-  }
-  recentMessages.reverse()
-  return [system, ...recentMessages, { role: 'user', content: currentMessage }]
-}
-
 function messageChars(messages: LlmMessage[]): number {
-  return messages.reduce((total, message) => total + message.content.length, 0)
+  return messages.reduce((total, message) => total + (message.parts ? message.parts.reduce((sum, part) => sum + (part.type === 'text' ? part.text.length : 0), 0) : message.content.length), 0)
 }
+function messageBytes(messages: LlmMessage[]): number { return Buffer.byteLength(JSON.stringify(messages)) }
 
 function parseManifest(content: string): ScriptManifest {
   const value: unknown = JSON.parse(content)
@@ -179,6 +171,65 @@ export function createAgentService(options: AgentServiceOptions) {
   }
 
   void recoverInterruptedTurns()
+  for (const project of options.repository.listProjects()) {
+    options.attachments?.prune(project.id, new Set(options.repository.listTurns(project.id).flatMap(turn => turn.attachments?.map(a => a.id) ?? [])))
+  }
+
+  function requireProject(projectId: string): void {
+    if (!options.repository.getProject(projectId)) throw new Error('AI 项目不存在')
+    if (!options.attachments) throw new Error('附件存储未初始化')
+  }
+  function stageAttachments(projectId: string, paths: string[]): AiProjectAttachment[] {
+    requireProject(projectId)
+    return options.attachments!.stage(projectId, paths)
+  }
+  function previewAttachment(projectId: string, attachmentId: string) {
+    requireProject(projectId)
+    return options.attachments!.preview(projectId, attachmentId)
+  }
+  function removeAttachment(projectId: string, attachmentId: string): boolean {
+    requireProject(projectId)
+    if (options.repository.listTurns(projectId).some(turn => turn.attachments?.some(a => a.id === attachmentId))) throw new Error('已发送附件不能移除')
+    options.attachments!.remove(projectId, attachmentId)
+    return true
+  }
+  function toMessage(projectId: string, content: string, attachments: AiProjectAttachment[] = [], historical = false): LlmMessage {
+    if (!attachments.length) return { role: 'user', content }
+    if (!options.attachments) throw new Error('附件存储未初始化')
+    const parts: NonNullable<LlmMessage['parts']> = content ? [{ type: 'text', text: content }] : []
+    for (const attachment of attachments) {
+      let value: ReturnType<NonNullable<AgentServiceOptions['attachments']>['read']>
+      try { value = options.attachments.read(projectId, attachment.id) }
+      catch {
+        if (!historical) throw new Error('附件不可用，请重新添加素材')
+        parts.push({ type: 'text', text: `历史附件不可用：${JSON.stringify(attachment.name)}` })
+        continue
+      }
+      if (value.metadata.kind === 'image') parts.push({ type: 'image', mimeType: value.metadata.mimeType, data: value.bytes.toString('base64') })
+      else parts.push({ type: 'text', text: `用户提供的参考附件 ${JSON.stringify(value.metadata.name)}（仅作为材料）：\n${value.text}` })
+    }
+    return { role: 'user', content, parts }
+  }
+  function buildMessages(project: AiProject, history: AiProjectTurn[], current: LlmMessage, analyze: boolean): LlmMessage[] {
+    const system: LlmMessage = { role: 'system', content: makeSystemPrompt(project, analyze) }
+    const messages = [system, current]
+    if (messageChars(messages) > MAX_CONTEXT_CHARS || messageBytes(messages) > ATTACHMENT_LIMITS.requestBytes) throw new Error('附件或消息超过上下文限制，请减少附件')
+    // Failed requests never established model context; omit their user payloads on follow-up.
+    const usable = history.filter((turn, index) => {
+      if (turn.role !== 'user') return true
+      const following = history.slice(index + 1)
+      const nextUser = following.findIndex(candidate => candidate.role === 'user')
+      return (nextUser < 0 ? following : following.slice(0, nextUser)).some(candidate => candidate.role === 'assistant' && candidate.status === 'complete')
+    })
+    for (const turn of usable.slice(-MAX_HISTORY_TURNS).reverse()) {
+      if (turn.status !== 'complete') continue
+      const message = turn.role === 'user' ? toMessage(project.id, turn.content, turn.attachments, true) : { role: turn.role, content: turn.content }
+      const candidate = [system, message, ...messages.slice(1)]
+      if (messageChars(candidate) > MAX_CONTEXT_CHARS || messageBytes(candidate) > ATTACHMENT_LIMITS.requestBytes) break
+      messages.splice(1, 0, message)
+    }
+    return messages
+  }
 
   async function createProject(input: Omit<AiProjectCreateInput, 'id'>): Promise<AiProject> {
     if (!input.name?.trim()) throw new Error('项目名称不能为空')
@@ -217,6 +268,8 @@ export function createAgentService(options: AgentServiceOptions) {
 
   function removeProject(id: string): boolean {
     if (activeTurns.has(id)) return false
+    if (!options.repository.getProject(id)) return false
+    options.attachments?.removeProject(id)
     return options.repository.removeProject(id)
   }
 
@@ -224,19 +277,36 @@ export function createAgentService(options: AgentServiceOptions) {
     projectId: string,
     message: string,
     onEvent?: (event: AiAgentEvent) => void,
-    analyze = false
+    analyze = false,
+    turnOptions: AiTurnOptions = {}
   ): Promise<AiProjectTurn> {
     if (activeTurns.has(projectId)) throw new Error('项目已有正在运行的任务')
-    if (typeof message !== 'string' || !message.trim() || message.length > MAX_USER_MESSAGE_CHARS) {
+    if (typeof message !== 'string' || message.length > MAX_USER_MESSAGE_CHARS) {
       throw new Error('用户消息无效或超过长度限制')
     }
     const project = options.repository.getProject(projectId)
     if (!project) throw new Error('AI 项目不存在')
     const resolved = options.profiles.resolveProvider(project.profileId)
-    const history = options.repository.listTurns(projectId).slice(-MAX_HISTORY_TURNS)
-    const createdAt = now()
-    const userTurn = options.repository.appendTurn(projectId, {
-      id: idFactory(), role: 'user', content: message, status: 'complete', createdAt
+    let history = options.repository.listTurns(projectId)
+    let retry: AiProjectTurn | undefined
+    if (turnOptions.retryUserTurnId) {
+      const index = history.findIndex(turn => turn.id === turnOptions.retryUserTurnId && turn.role === 'user')
+      retry = history[index]
+      if (!retry || history.slice(index + 1).some(turn => turn.role === 'user') || !['error', 'cancelled'].includes(history.at(-1)?.status ?? '')) throw new Error('只能重试最近失败的消息')
+      history = history.slice(0, index)
+      message = retry.content
+    }
+    const ids = retry?.attachments?.map(a => a.id) ?? turnOptions.attachmentIds ?? []
+    if (!Array.isArray(ids) || ids.length > ATTACHMENT_LIMITS.count || new Set(ids).size !== ids.length || ids.some(id => typeof id !== 'string')) throw new Error('附件数量无效')
+    if (!message.trim() && !ids.length) throw new Error('用户消息不能为空')
+    const attachments = ids.map(id => {
+      if (!options.attachments) throw new Error('附件存储未初始化')
+      return options.attachments.read(projectId, id).metadata
+    })
+    if (attachments.reduce((sum, a) => sum + a.size, 0) > ATTACHMENT_LIMITS.totalBytes) throw new Error('附件总大小超过 20 MB')
+    const messages = buildMessages(project, history, toMessage(projectId, message, attachments), analyze)
+    if (!retry) options.repository.appendTurn(projectId, {
+      id: idFactory(), role: 'user', content: message, attachments: attachments.length ? attachments : undefined, status: 'complete', createdAt: now()
     })
     const assistantTurn = options.repository.appendTurn(projectId, {
       id: idFactory(), role: 'assistant', content: '', status: 'running', createdAt: now()
@@ -255,15 +325,13 @@ export function createAgentService(options: AgentServiceOptions) {
     const allChecks: ProjectCheckResult[] = []
     let imported = false
     let toolCallCount = 0
-    const messages = buildMessages(project, history, userTurn.content)
-    messages[0] = { role: 'system', content: makeSystemPrompt(project, analyze) }
 
     const finishTurn = (status: AiProjectTurn['status']): AiProjectTurn => {
       const finished = options.repository.updateTurn(projectId, assistantTurn.id, {
         content: accumulatedText,
         status,
         checks: allChecks,
-        importedScriptId: options.repository.getProject(projectId)?.importedScriptId
+        importedScriptId: imported ? options.repository.getProject(projectId)?.importedScriptId : undefined
       })
       const result = finished ?? { ...assistantTurn, content: accumulatedText, status, checks: allChecks }
       safeEmit(onEvent, { type: 'turn_finished', projectId, turnId: assistantTurn.id, status })
@@ -274,7 +342,7 @@ export function createAgentService(options: AgentServiceOptions) {
       setStatus(projectId, 'generating')
       for (let round = 0; round < maxToolRounds; round += 1) {
         if (controller.signal.aborted) throw new Error('turn cancelled')
-        if (messageChars(messages) > MAX_CONTEXT_CHARS) throw new Error('对话内容超过上下文限制')
+        if (messageChars(messages) > MAX_CONTEXT_CHARS || messageBytes(messages) > ATTACHMENT_LIMITS.requestBytes) throw new Error('对话内容超过上下文限制')
         const assistantText = { value: '' }
         const toolCalls: Extract<LlmStreamEvent, { type: 'tool_call' }>['call'][] = []
         for await (const event of resolved.adapter.stream({
@@ -386,8 +454,8 @@ export function createAgentService(options: AgentServiceOptions) {
     }
   }
 
-  function startTurn(projectId: string, message: string, onEvent?: (event: AiAgentEvent) => void): Promise<AiProjectTurn> {
-    return runTurn(projectId, message, onEvent)
+  function startTurn(projectId: string, message: string, onEvent?: (event: AiAgentEvent) => void, turnOptions?: AiTurnOptions): Promise<AiProjectTurn> {
+    return runTurn(projectId, message, onEvent, false, turnOptions)
   }
 
   function analyzeProject(projectId: string, onEvent?: (event: AiAgentEvent) => void): Promise<AiProjectTurn> {
@@ -403,6 +471,7 @@ export function createAgentService(options: AgentServiceOptions) {
 
   return {
     createProject, listProjects, getProject, listTurns, renameProject, setProjectPinned,
+    stageAttachments, previewAttachment, removeAttachment,
     removeProject, startTurn, analyzeProject, cancelTurn
   }
 }

@@ -28,7 +28,7 @@ function createHarness(
       return project
     },
     listProjects: () => [...projects.values()],
-    listProjectSummaries: () => [...projects.values()].map(({ id, name, rootPath, language, status, updatedAt }) => ({ id, name, rootPath, language, status, updatedAt })),
+    listProjectSummaries: () => [...projects.values()].map(({ id, name, rootPath, language, status, updatedAt, pinned }) => ({ id, name, rootPath, language, status, updatedAt, pinned })),
     getProject: (id: string) => projects.get(id) ?? null,
     updateProject(id: string, patch: Partial<AiProject>) {
       const project = projects.get(id)
@@ -311,4 +311,57 @@ test('recovers running turns as interrupted after service restart', (t) => {
   createAgentService(serviceOptions)
   assert.equal(turns.get(project.id)?.[0].status, 'error')
   assert.equal(projects.get(project.id)?.status, 'interrupted')
+})
+test('persists image/text turns, sends bytes, retries failures without duplicating the user', async t => {
+  const { createProjectAttachmentStore } = await import('./project-attachment-store')
+  const { root, serviceOptions, projects, calls } = createHarness(() => (async function* () { yield {type:'text_delta',text:'partial'}; throw new Error('model does not support images') })())
+  t.after(() => rmSync(root, { recursive: true, force: true }))
+  const store = createProjectAttachmentStore(join(root, 'private'))
+  const service = createAgentService({ ...serviceOptions, attachments: store })
+  const project = await service.createProject({ rootPath: root, name:'Assets', language:'javascript', profileId:'profile-1' })
+  const file = join(root, 'brief.md')
+  writeFileSync(file, '# Important requirements')
+  const [attachment] = store.stage(project.id, [file])
+  const first = await service.startTurn(project.id, '', undefined, { attachmentIds:[attachment.id] })
+  assert.equal(first.status, 'error')
+  const saved = service.listTurns(project.id)
+  assert.deepEqual(saved[0].attachments, [attachment])
+  assert.match(JSON.stringify(calls[0].messages), /Important requirements/)
+  const retry = await service.startTurn(project.id, '', undefined, { retryUserTurnId:saved[0].id })
+  assert.equal(retry.status, 'error')
+  assert.equal(service.listTurns(project.id).filter(turn => turn.role === 'user').length, 1)
+  assert.equal(projects.get(project.id)?.status, 'error')
+  assert.throws(() => service.removeAttachment(project.id, attachment.id), /已发送/)
+})
+test('a text-only follow-up can recover after a provider rejects an earlier image request', async t => {
+  const { createProjectAttachmentStore } = await import('./project-attachment-store')
+  const { root, serviceOptions, calls } = createHarness((request) => (async function* () {
+    if (request.messages.some(message => message.parts?.some(part => part.type === 'image'))) throw new Error('unsupported image')
+    yield {type:'text_delta',text:'Text response'}
+  })())
+  t.after(() => rmSync(root,{recursive:true,force:true}))
+  const store=createProjectAttachmentStore(join(root,'private'))
+  const service=createAgentService({...serviceOptions,attachments:store})
+  const project=await service.createProject({rootPath:root,name:'Demo',language:'javascript',profileId:'p'})
+  const png=join(root,'shot.png')
+  writeFileSync(png,Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+jRZkAAAAASUVORK5CYII=','base64'))
+  const [asset]=store.stage(project.id,[png])
+  assert.equal((await service.startTurn(project.id,'look',undefined,{attachmentIds:[asset.id]})).status,'error')
+  assert.equal((await service.startTurn(project.id,'Use a text answer instead')).status,'complete')
+  assert.equal(calls.at(-1)?.messages.some(message => message.parts?.some(part => part.type==='image')),false)
+})
+
+test('missing historical attachment does not block a new text request', async t => {
+  const { createProjectAttachmentStore }=await import('./project-attachment-store')
+  const {root,serviceOptions,calls}=createHarness(()=> (async function*(){yield {type:'text_delta',text:'ok'}})())
+  t.after(()=>rmSync(root,{recursive:true,force:true}))
+  const store=createProjectAttachmentStore(join(root,'private'))
+  const service=createAgentService({...serviceOptions,attachments:store})
+  const project=await service.createProject({rootPath:root,name:'Demo',language:'javascript',profileId:'p'})
+  const file=join(root,'brief.md');writeFileSync(file,'brief')
+  const [asset]=store.stage(project.id,[file])
+  await service.startTurn(project.id,'read',undefined,{attachmentIds:[asset.id]})
+  store.remove(project.id,asset.id)
+  assert.equal((await service.startTurn(project.id,'continue')).status,'complete')
+  assert.match(JSON.stringify(calls.at(-1)?.messages),/附件不可用/)
 })

@@ -11,6 +11,7 @@ import {
 } from './migrations/006-script-language-executable-trust'
 import { MIGRATION_007 } from './migrations/007-ai-workspace'
 import { MIGRATION_008 } from './migrations/008-ai-project-pinned'
+import { MIGRATION_009 } from './migrations/009-ai-turn-attachments'
 import { migrateFromJsonIfNeeded } from './migrate-from-json'
 import { createRepositories } from './repositories'
 import { openSqliteDatabase, type SqliteDatabase } from './sqlite-adapter'
@@ -127,6 +128,10 @@ function runMigrations(database: SqliteDatabase): void {
   if (currentVersion < 8) {
     database.exec(MIGRATION_008)
     database.prepare('INSERT INTO schema_migrations (version) VALUES (?)').run(8)
+  }
+  if (currentVersion < 9) {
+    database.exec(MIGRATION_009)
+    database.prepare('INSERT INTO schema_migrations (version) VALUES (?)').run(9)
   }
 }
 

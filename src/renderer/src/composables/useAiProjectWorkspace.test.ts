@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
 import { effectScope } from 'vue'
-import type { AiAgentEvent, AiProject, AiProjectSummary, AiProjectTurn } from '../../../shared/ai-workspace-types'
+import type { AiAgentEvent, AiProjectCreateInput, AiProject, AiProjectSummary, AiProjectTurn } from '../../../shared/ai-workspace-types'
 import type { LlmProfileListResult, LlmProfileView } from '../../../shared/ai-types'
 import { useAiProjectWorkspace } from './useAiProjectWorkspace'
 
@@ -27,11 +27,14 @@ function createHarness() {
   let resolveAnalysis: ((turn: AiProjectTurn) => void) | null = null
   const turn: AiProjectTurn = { id: 'turn-a', projectId: project.id, role: 'assistant', content: 'Done.', status: 'complete', checks: [], createdAt: 'now' }
   const api = {
+    pickAttachments: async () => null,
+    previewAttachment: async () => { throw new Error('not found') },
+    removeAttachment: async () => true,
     pickProjectFolder: async () => folder,
     listProjects: async () => projects,
     getProject: async (id: string) => id === project.id ? project : id === secondProject.id ? secondProject : null,
     listProjectTurns: async () => [],
-    createProject: async (input: Omit<AiProject, 'id' | 'status' | 'createdAt' | 'updatedAt'>) => {
+    createProject: async (input: Omit<AiProjectCreateInput, 'id'>) => {
       calls.push({ method: 'createProject', value: input })
       projects = [{ id: project.id, name: input.name, rootPath: input.rootPath, language: input.language, status: 'ready', updatedAt: 'now', pinned: false }]
       return project
@@ -215,4 +218,45 @@ test('unsubscribes the project event listener when its scope is disposed', () =>
   assert.equal(harness.listeners.size, 1)
   scope.stop()
   assert.equal(harness.listeners.size, 0)
+})
+test('sends attachment-only messages, keeps provider errors terminal and retries the saved user', async () => {
+  const harness = createHarness()
+  const asset = { id:'asset-1', name:'screen.png', kind:'image' as const, mimeType:'image/png', size:20 }
+  const savedUser = { id:'saved-user', projectId:'project-a', role:'user' as const, content:'', attachments:[asset], status:'complete' as const, createdAt:'now' }
+  const failed = { ...harness.turn, status:'error' as const, content:'Unsupported image' }
+  const requests: unknown[] = []
+  const api = { ...harness.api,
+    pickAttachments: async () => [asset],
+    previewAttachment: async () => ({ metadata:asset, dataUrl:'data:image/png;base64,YQ==' }),
+    removeAttachment: async () => true,
+    listProjectTurns: async () => requests.length ? [savedUser, failed] : [],
+    startTurn: async (_id: string, _message: string, options: unknown) => { requests.push(options); harness.api.emit({type:'assistant_delta',projectId:'project-a',turnId:failed.id,text:'partial'}); return failed }
+  }
+  const scope = effectScope()
+  const state = scope.run(() => useAiProjectWorkspace(api))!
+  await state.openProject('project-a')
+  await state.addAttachments()
+  assert.equal(state.pendingAttachments.value.length, 1)
+  await state.sendMessage()
+  assert.deepEqual(requests[0], { attachmentIds:['asset-1'] })
+  assert.equal(state.turns.value.at(-1)?.status, 'error')
+  assert.equal(state.turns.value.at(-1)?.content, 'Unsupported image')
+  await state.retryMessage()
+  assert.deepEqual(requests[1], { retryUserTurnId:'saved-user' })
+  assert.equal(state.turns.value.filter(turn => turn.role === 'user').length, 1)
+  scope.stop()
+})
+test('bounds automatic history previews when opening a long conversation', async () => {
+  const harness=createHarness()
+  const previews: string[]=[]
+  const attachments=Array.from({length:100},(_,i)=>({id:`a-${i}`,name:`${i}.png`,kind:'image' as const,mimeType:'image/png',size:100}))
+  const api={...harness.api,listProjectTurns:async()=>[{...harness.turn,attachments}],
+    previewAttachment:async(_project:string,id:string)=>{previews.push(id);return {metadata:attachments.find(a=>a.id===id)!,dataUrl:'data:image/png;base64,YQ=='}},
+    pickAttachments:async()=>null,removeAttachment:async()=>true}
+  const scope=effectScope();const state=scope.run(()=>useAiProjectWorkspace(api))!
+  await state.openProject('project-a')
+  await new Promise(resolve=>setTimeout(resolve,0))
+  assert.ok(previews.length<=8)
+  assert.ok(Object.keys(state.attachmentPreviews.value).length<=8)
+  scope.stop()
 })

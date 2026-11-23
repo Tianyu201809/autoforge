@@ -1,4 +1,4 @@
-import type { AiAgentEvent, AiProject, AiProjectConversationExport, AiProjectCreateInput, AiProjectSummary, AiProjectTurn } from '../../shared/ai-workspace-types'
+import type { AiAgentEvent, AiProjectAttachment, AiAttachmentPreview, AiTurnOptions, AiProject, AiProjectConversationExport, AiProjectCreateInput, AiProjectSummary, AiProjectTurn } from '../../shared/ai-workspace-types'
 import { IPC } from '../../shared/ipc-channels'
 import { createProjectConversationExport } from '../services/ai/project-conversation-export'
 
@@ -16,7 +16,10 @@ export interface AiWorkspaceIpcService {
   renameProject(id: string, name: string): AiProject | null
   setProjectPinned(id: string, pinned: boolean): AiProject | null
   removeProject(id: string): boolean
-  startTurn(projectId: string, message: string, onEvent?: (event: AiAgentEvent) => void): Promise<AiProjectTurn>
+  stageAttachments(projectId: string, paths: string[]): AiProjectAttachment[]
+  previewAttachment(projectId: string, attachmentId: string): AiAttachmentPreview
+  removeAttachment(projectId: string, attachmentId: string): boolean
+  startTurn(projectId: string, message: string, onEvent?: (event: AiAgentEvent) => void, options?: AiTurnOptions): Promise<AiProjectTurn>
   analyzeProject(projectId: string, onEvent?: (event: AiAgentEvent) => void): Promise<AiProjectTurn>
   cancelTurn(projectId: string): boolean
 }
@@ -32,7 +35,8 @@ export function registerAiWorkspaceIpcHandlers(
   register: (channel: string, handler: IpcHandler) => void,
   service: AiWorkspaceIpcService,
   pickFolder: () => Promise<string | null>,
-  saveConversation: SaveProjectConversation
+  saveConversation: SaveProjectConversation,
+  pickAttachments: () => Promise<string[] | null> = async () => null
 ): void {
   register(IPC.AI_PROJECT_PICK_FOLDER, () => pickFolder())
   register(IPC.AI_PROJECTS_LIST, () => service.listProjects())
@@ -73,14 +77,38 @@ export function registerAiWorkspaceIpcHandlers(
     if (!project) throw new Error('AI 项目不存在')
     return saveConversation(createProjectConversationExport(project, service.listTurns(projectId)))
   })
-  register(IPC.AI_PROJECT_START_TURN, (event, id, message) => {
+  register(IPC.AI_PROJECT_ATTACHMENTS_PICK, async (_event, id) => {
     const projectId = requireId(id)
-    if (typeof message !== 'string' || !message.trim()) throw new Error('Agent 消息无效')
-    return service.startTurn(projectId, message, (agentEvent) => event.sender.send(IPC.EVENT_AI_AGENT, agentEvent))
+    if (!service.getProject(projectId)) throw new Error('AI 项目不存在')
+    const paths = await pickAttachments()
+    return paths ? service.stageAttachments(projectId, paths) : null
+  })
+  register(IPC.AI_PROJECT_ATTACHMENT_PREVIEW, (_event, id, attachmentId) => service.previewAttachment(requireId(id), requireAttachmentId(attachmentId)))
+  register(IPC.AI_PROJECT_ATTACHMENT_REMOVE, (_event, id, attachmentId) => service.removeAttachment(requireId(id), requireAttachmentId(attachmentId)))
+  register(IPC.AI_PROJECT_START_TURN, (event, id, message, rawOptions) => {
+    const projectId = requireId(id)
+    const options = requireTurnOptions(rawOptions)
+    if (typeof message !== 'string' || message.length > 16000 || (!message.trim() && !options.attachmentIds?.length && !options.retryUserTurnId)) throw new Error('Agent 消息无效')
+    return service.startTurn(projectId, message, (agentEvent) => event.sender.send(IPC.EVENT_AI_AGENT, agentEvent), options)
   })
   register(IPC.AI_PROJECT_ANALYZE, (event, id) => {
     const projectId = requireId(id)
     return service.analyzeProject(projectId, (agentEvent) => event.sender.send(IPC.EVENT_AI_AGENT, agentEvent))
   })
   register(IPC.AI_PROJECT_CANCEL_TURN, (_event, id) => service.cancelTurn(requireId(id)))
+}
+
+function requireAttachmentId(value: unknown): string {
+  if (typeof value !== 'string' || !/^[a-zA-Z0-9_-]{1,100}$/.test(value)) throw new Error('附件 ID 无效')
+  return value
+}
+function requireTurnOptions(value: unknown): AiTurnOptions {
+  if (value === undefined) return {}
+  if (!value || typeof value !== 'object' || Array.isArray(value)) throw new Error('消息参数无效')
+  const options = value as Record<string, unknown>
+  if (Object.keys(options).some(key => !['attachmentIds', 'retryUserTurnId'].includes(key))) throw new Error('消息参数无效')
+  if (options.attachmentIds !== undefined && (!Array.isArray(options.attachmentIds) || options.attachmentIds.length > 8)) throw new Error('附件数量无效')
+  const attachmentIds = (options.attachmentIds as unknown[] | undefined)?.map(requireAttachmentId)
+  const retryUserTurnId = options.retryUserTurnId === undefined ? undefined : requireAttachmentId(options.retryUserTurnId)
+  return { attachmentIds, retryUserTurnId }
 }

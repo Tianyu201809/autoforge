@@ -28,7 +28,9 @@ function toOpenAiMessage(message: LlmMessage): Record<string, unknown> {
       }))
     }
   }
-  return { role: message.role, content: message.content }
+  return { role: message.role, content: message.parts?.map(part => part.type === 'text'
+    ? { type: 'text', text: part.text }
+    : { type: 'image_url', image_url: { url: `data:${part.mimeType};base64,${part.data}` } }) ?? message.content }
 }
 
 export function normalizeOpenAiEndpoint(baseUrl: string): string {

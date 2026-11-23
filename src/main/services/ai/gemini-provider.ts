@@ -63,7 +63,9 @@ function convertMessages(messages: LlmMessage[]): { systemInstruction?: Record<s
     }
 
     const parts: Array<Record<string, unknown>> = []
-    if (message.content) parts.push({ text: message.content })
+    if (message.parts) {
+      for (const part of message.parts) parts.push(part.type === 'text' ? { text: part.text } : { inlineData: { mimeType: part.mimeType, data: part.data } })
+    } else if (message.content) parts.push({ text: message.content })
     for (const call of message.toolCalls ?? []) {
       let args: unknown
       try {

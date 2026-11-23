@@ -31,9 +31,12 @@ export interface LlmProviderPreset {
   defaultModel: string
 }
 
+export type LlmContentPart = { type: 'text'; text: string } | { type: 'image'; mimeType: string; data: string }
+
 export interface LlmMessage {
   role: 'system' | 'user' | 'assistant' | 'tool'
   content: string
+  parts?: LlmContentPart[]
   toolCallId?: string
   toolCalls?: LlmToolCall[]
 }

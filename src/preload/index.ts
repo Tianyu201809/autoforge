@@ -38,7 +38,7 @@ import type { ScriptLanguage } from '../shared/script-language'
 import type { McpClientConfig, McpStatus } from '../shared/mcp-types'
 import type { HubInstallProgress, HubPlugin, HubPluginListResult, HubPluginQuery, HubSession, HubTeam } from '../shared/hub-types'
 import type { LlmProfile, LlmProfileListResult, LlmProfileView, LlmProviderPreset, LlmTestResult } from '../shared/ai-types'
-import type { AiAgentEvent, AiProject, AiProjectCreateInput, AiProjectSummary, AiProjectTurn } from '../shared/ai-workspace-types'
+import type { AiAgentEvent, AiProjectAttachment, AiAttachmentPreview, AiTurnOptions, AiProject, AiProjectCreateInput, AiProjectSummary, AiProjectTurn } from '../shared/ai-workspace-types'
 
 export interface EditorFileStatePayload {
   content: string
@@ -123,8 +123,11 @@ const autoforge = {
       ipcRenderer.invoke(IPC.AI_PROJECT_SET_PINNED, id, pinned),
     removeProject: (id: string): Promise<boolean> => ipcRenderer.invoke(IPC.AI_PROJECT_REMOVE, id),
     exportProjectTurns: (id: string): Promise<string | null> => ipcRenderer.invoke(IPC.AI_PROJECT_EXPORT_TURNS, id),
-    startTurn: (projectId: string, message: string): Promise<AiProjectTurn> =>
-      ipcRenderer.invoke(IPC.AI_PROJECT_START_TURN, projectId, message),
+    pickAttachments: (projectId: string): Promise<AiProjectAttachment[] | null> => ipcRenderer.invoke(IPC.AI_PROJECT_ATTACHMENTS_PICK, projectId),
+    previewAttachment: (projectId: string, attachmentId: string): Promise<AiAttachmentPreview> => ipcRenderer.invoke(IPC.AI_PROJECT_ATTACHMENT_PREVIEW, projectId, attachmentId),
+    removeAttachment: (projectId: string, attachmentId: string): Promise<boolean> => ipcRenderer.invoke(IPC.AI_PROJECT_ATTACHMENT_REMOVE, projectId, attachmentId),
+    startTurn: (projectId: string, message: string, options?: AiTurnOptions): Promise<AiProjectTurn> =>
+      ipcRenderer.invoke(IPC.AI_PROJECT_START_TURN, projectId, message, options),
     analyzeProject: (projectId: string): Promise<AiProjectTurn> => ipcRenderer.invoke(IPC.AI_PROJECT_ANALYZE, projectId),
     cancelTurn: (projectId: string): Promise<boolean> => ipcRenderer.invoke(IPC.AI_PROJECT_CANCEL_TURN, projectId),
     onAgentEvent: (callback: (event: AiAgentEvent) => void): (() => void) => {

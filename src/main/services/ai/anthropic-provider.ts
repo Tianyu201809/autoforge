@@ -33,7 +33,9 @@ function normalizeMessages(messages: LlmMessage[]): { system?: string; messages:
       }
       return { role: 'assistant', content }
     }
-    return { role: message.role, content: message.content }
+    return { role: message.role, content: message.parts?.map(part => part.type === 'text'
+      ? { type: 'text', text: part.text }
+      : { type: 'image', source: { type: 'base64', media_type: part.mimeType, data: part.data } }) ?? message.content }
   })
   return { system: system || undefined, messages: converted }
 }

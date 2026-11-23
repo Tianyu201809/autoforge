@@ -6,6 +6,7 @@ import { test } from 'node:test'
 import { MIGRATION_001 } from '../migrations/001-initial'
 import { MIGRATION_007 } from '../migrations/007-ai-workspace'
 import { MIGRATION_008 } from '../migrations/008-ai-project-pinned'
+import { MIGRATION_009 } from '../migrations/009-ai-turn-attachments'
 import { openSqliteDatabase } from '../sqlite-adapter'
 import { AiWorkspaceRepository } from './ai-workspace-repository'
 
@@ -18,6 +19,7 @@ async function setup(t: { after(callback: () => void): void }) {
   db.exec(MIGRATION_001)
   db.exec(MIGRATION_007)
   db.exec(MIGRATION_008)
+  db.exec(MIGRATION_009)
   const repository = new AiWorkspaceRepository(db)
   t.after(() => {
     db.close()
@@ -106,4 +108,20 @@ test('removes project rows without deleting the selected folder', async (t) => {
   assert.equal(repository.getProject('project-1'), null)
   assert.deepEqual(repository.listTurns('project-1'), [])
   assert.equal(readFileSync(join(projectRoot, 'keep.txt'), 'utf8'), 'user data')
+})
+test('persists attachment metadata while old turns remain readable', async t => {
+  const { repository, projectRoot } = await setup(t)
+  repository.createProject({ id: 'with-assets', name: 'Assets', rootPath: projectRoot, language: 'javascript', profileId: 'profile-1' })
+  const attachments = [{ id: 'asset-1', name: 'notes.md', kind: 'text' as const, mimeType: 'text/plain', size: 10 }]
+  repository.appendTurn('with-assets', { id: 'attached', role: 'user', content: '', attachments, status: 'complete', createdAt: 'now' })
+  assert.deepEqual(repository.listTurns('with-assets')[0].attachments, attachments)
+  repository.removeProject('with-assets')
+  assert.deepEqual(repository.listTurns('with-assets'), [])
+})
+test('preserves insertion order for user and assistant turns sharing a timestamp', async t => {
+  const { repository, projectRoot } = await setup(t)
+  repository.createProject({ id:'ordered', name:'Order', rootPath:projectRoot, language:'javascript', profileId:'p' })
+  repository.appendTurn('ordered', {id:'z-user',role:'user',content:'look',status:'complete',createdAt:'same'})
+  repository.appendTurn('ordered', {id:'a-assistant',role:'assistant',content:'failed',status:'error',createdAt:'same'})
+  assert.deepEqual(repository.listTurns('ordered').map(turn => turn.id), ['z-user','a-assistant'])
 })
