@@ -105,6 +105,42 @@ function writeTool(changes: Array<{ path: string; content: string }>, expectedHa
   ]
 }
 
+for (const language of ['javascript', 'python'] as const) {
+  test(`${language} creation and follow-up requests receive default Autoforge development requirements`, async (t) => {
+    const { root, service, calls } = createHarness(async function* () {
+      yield { type: 'complete', finishReason: 'stop' }
+    })
+    t.after(() => rmSync(root, { recursive: true, force: true }))
+    const project = await service.createProject({ rootPath: root, name: 'Demo', language, profileId: 'profile-1' })
+    await service.startTurn(project.id, '创建一个整理文件的项目')
+    await service.startTurn(project.id, '再加一个输入参数')
+
+    assert.equal(calls.length, 2)
+    for (const request of calls) {
+      const prompt = request.messages.find(message => message.role === 'system')?.content ?? ''
+      assert.match(prompt, /autoforge\.json/)
+      assert.match(prompt, /"autoforge":\s*"1\.0"/)
+      assert.match(prompt, new RegExp(`"language":\\s*"${language}"`))
+      assert.match(prompt, /README\.md/)
+      assert.match(prompt, /ctx\.env/)
+      assert.match(prompt, /ctx\.params/)
+      assert.match(prompt, /string values/)
+      assert.match(prompt, /dependencies/)
+      assert.match(prompt, /npm run build/)
+      assert.match(prompt, /Do not build, check, or import/)
+      if (language === 'javascript') {
+        assert.match(prompt, /export async function run\(ctx\)/)
+        assert.match(prompt, /ctx\.sdk\.paths\.scriptDir/)
+        assert.doesNotMatch(prompt, /async def run/)
+      } else {
+        assert.match(prompt, /async def run\(ctx\)/)
+        assert.match(prompt, /ctx\.sdk\.paths\.script_dir/)
+        assert.doesNotMatch(prompt, /export async function/)
+      }
+    }
+  })
+}
+
 test('normal chat writes files without checking or importing them', async (t) => {
   const manifest = JSON.stringify({ autoforge: '1.0', name: 'Demo', entry: 'index.mjs', language: 'javascript' }, null, 2)
   const checkCalls: string[] = []

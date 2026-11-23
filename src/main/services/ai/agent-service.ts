@@ -19,6 +19,7 @@ import type { ProjectCheckResult } from './project-checks'
 import { validateProjectRoot, createProjectWorkspace } from './project-workspace'
 import { createProjectChecks } from './project-checks'
 import { createProjectBuilder } from './project-builder'
+import { makeAutoforgeDevelopmentPrompt } from './autoforge-development-prompt'
 
 const MAX_TOOL_ROUNDS = 8
 const MAX_TOOL_CALLS = 24
@@ -78,7 +79,8 @@ function makeSystemPrompt(project: AiProject): string {
     'Only use the provided safe project file tools. Never request shell, arbitrary network, or script execution.',
     'Use relative paths, read files before changing them, and send the exact SHA-256 values returned by file reads when writing.',
     'Create or modify files requested by the user. Do not build, check, or import scripts; the user starts the separate build and import workflow when ready.',
-    'Do not place credentials, API keys, or environment values in generated files.'
+    'Do not place credentials, API keys, or environment values in generated files.',
+    makeAutoforgeDevelopmentPrompt(project.language)
   ].join('\n')
 }
 
