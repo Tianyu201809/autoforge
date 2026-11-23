@@ -3,6 +3,7 @@ import { execFileSync } from 'node:child_process'
 import { existsSync, mkdirSync, mkdtempSync, rmSync, symlinkSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
+import { createRequire } from 'node:module'
 import { test } from 'node:test'
 import type { ScriptManifest } from '../../../shared/script-contract'
 import { createProjectChecks } from './project-checks'
@@ -115,6 +116,51 @@ test('checks entry paths containing spaces and Unicode characters', async (t) =>
 
   const result = await createProjectChecks().checkScriptSyntax(root, writeManifest(root, '脚本目录/入口.mjs', 'javascript'))
   assert.equal(result.status, 'passed')
+})
+
+test('starts the JavaScript checker in Node mode when the executable is Electron', async (t) => {
+  const root = fixture(t)
+  const manifest = writeManifest(root, 'index.mjs', 'javascript')
+  writeFileSync(join(root, 'index.mjs'), 'export function run() {}')
+  const checks = createProjectChecks({
+    runCommand: async (executable, args, options) => {
+      assert.equal(executable, process.execPath)
+      assert.equal(args[0], '--check')
+      assert.equal(options.env?.ELECTRON_RUN_AS_NODE, '1')
+      return { stdout: '', stderr: '' }
+    }
+  })
+  assert.equal((await checks.checkScriptSyntax(root, manifest)).status, 'passed')
+})
+
+test('checks JavaScript using the real Electron executable without executing the entry', (t) => {
+  const root = fixture(t)
+  const manifest = writeManifest(root, 'index.mjs', 'javascript')
+  const sentinel = join(root, 'executed.txt')
+  writeFileSync(join(root, 'index.mjs'), `import fs from 'node:fs'; fs.writeFileSync(${JSON.stringify(sentinel)}, 'ran'); export function run() {}`)
+  writeFileSync(join(root, 'bad.mjs'), 'export function {')
+  const localRequire = createRequire(join(process.cwd(), 'package.json'))
+  const electron = localRequire('electron') as string
+  const program = `
+    delete process.env.ELECTRON_RUN_AS_NODE;
+    const { createProjectChecks } = require(process.argv[1]);
+    const checks = createProjectChecks({ timeoutMs: 3000 });
+    const root = process.argv[2];
+    const manifest = JSON.parse(process.argv[3]);
+    (async () => {
+      const valid = await checks.checkScriptSyntax(root, manifest);
+      const invalid = await checks.checkScriptSyntax(root, { ...manifest, entry: 'bad.mjs' });
+      console.log(JSON.stringify({ valid, invalid }));
+    })().catch(error => { console.error(error); process.exitCode = 1 });
+  `
+  const output = execFileSync(electron, [
+    '--require', localRequire.resolve('tsx/cjs'), '-e', program,
+    join(process.cwd(), 'src/main/services/ai/project-checks.ts'), root, JSON.stringify(manifest)
+  ], { env: { ...process.env, ELECTRON_RUN_AS_NODE: '1', NODE_OPTIONS: '' }, encoding: 'utf8', windowsHide: true, timeout: 15_000 })
+  const result = JSON.parse(output.trim())
+  assert.equal(result.valid.status, 'passed', output)
+  assert.equal(result.invalid.code, 'javascript_syntax', output)
+  assert.equal(existsSync(sentinel), false)
 })
 
 test('uses the configured Python command when the syntax check is run', async (t) => {

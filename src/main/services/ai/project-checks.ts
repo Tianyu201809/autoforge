@@ -13,6 +13,7 @@ const PYTHON_AST_CHECK =
 interface CommandOptions {
   timeoutMs: number
   cwd: string
+  env?: NodeJS.ProcessEnv
 }
 
 interface CommandResult {
@@ -44,7 +45,7 @@ function defaultRunCommand(executable: string, args: string[], options: CommandO
       maxBuffer: MAX_DIAGNOSTIC_BYTES,
       windowsHide: true,
       encoding: 'utf8',
-      env: { ...process.env, NODE_OPTIONS: '' }
+      env: { ...process.env, ...options.env, NODE_OPTIONS: '' }
     }, (error, stdout, stderr) => {
       if (error) {
         Object.assign(error, { stdout, stderr })
@@ -168,7 +169,7 @@ export function createProjectChecks(options: ProjectChecksOptions = {}) {
     }
 
     try {
-      await runCommand(executable!, args, { timeoutMs, cwd: projectPath })
+      await runCommand(executable!, args, { timeoutMs, cwd: projectPath, env: { ELECTRON_RUN_AS_NODE: '1' } })
       return checkResult('passed', 'syntax_valid', 'JavaScript 语法检查通过')
     } catch (error) {
       return mapCommandError(error, 'javascript')
