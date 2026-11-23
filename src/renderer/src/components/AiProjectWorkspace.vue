@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed, nextTick, onMounted, onUnmounted, ref, watch } from 'vue'
-import { Bot, Check, ChevronDown, CircleAlert, Download, FolderOpen, LoaderCircle, MoreHorizontal, PanelRightClose, PanelRightOpen, Pencil, Pin, PinOff, Plus, Paperclip, X, RotateCcw, Send, Square, Trash2 } from 'lucide-vue-next'
+import { Bot, Check, ChevronDown, CircleAlert, Code2, Download, FolderOpen, LoaderCircle, MoreHorizontal, PanelRightClose, PanelRightOpen, Pencil, Pin, PinOff, Plus, Paperclip, X, RotateCcw, Send, Square, Trash2 } from 'lucide-vue-next'
 import { renderAiMarkdown } from '../lib/ai-markdown'
 import { useAiProjectWorkspace } from '../composables/useAiProjectWorkspace'
 import { askConfirm } from '../composables/useConfirmDialog'
@@ -119,6 +119,19 @@ async function renameProject(project: (typeof state.projects.value)[number]): Pr
   if (name !== null) await state.renameProject(project.id, name)
 }
 
+async function openProjectInEditor(project: (typeof state.projects.value)[number]): Promise<void> {
+  openProjectActionsId.value = null
+  try {
+    const result = await window.autoforge.system.openInExternalEditor(project.rootPath)
+    if (!result.ok && result.reason !== 'cancelled') {
+      const messages: Record<string, string> = { 'invalid-path': '项目目录不存在或无法访问', 'invalid-editor': '配置的编辑器不可用，请在设置中重新选择', 'spawn-failed': '无法启动编辑器' }
+      pushToast({ type: 'error', title: '打开编辑器失败', message: messages[result.reason ?? ''] ?? '无法打开项目目录' })
+    }
+  } catch (error) {
+    pushToast({ type: 'error', title: '打开编辑器失败', message: error instanceof Error ? error.message : '无法打开项目目录' })
+  }
+}
+
 async function toggleProjectPinned(project: (typeof state.projects.value)[number]): Promise<void> {
   openProjectActionsId.value = null
   await state.setProjectPinned(project.id, !project.pinned)
@@ -187,6 +200,7 @@ async function confirmRemoveProject(project: (typeof state.projects.value)[numbe
           v-for="project in state.projects.value"
           :key="project.id"
           class="ai-project-list-row"
+          @contextmenu.prevent.stop="openProjectActionsId = project.id"
           :class="state.activeProject.value?.id === project.id && 'is-active'"
         >
           <button type="button" class="ai-project-list-item" @click="openProjectActionsId = null; state.openProject(project.id)">
@@ -206,6 +220,7 @@ async function confirmRemoveProject(project: (typeof state.projects.value)[numbe
             @keydown.esc="openProjectActionsId = null"
           ><MoreHorizontal :size="16" /></button>
           <div v-if="openProjectActionsId === project.id" class="ai-project-actions-menu" role="menu" @click.stop>
+            <button type="button" role="menuitem" @click="openProjectInEditor(project)"><Code2 :size="14" />使用编辑器打开</button>
             <button type="button" role="menuitem" @click="renameProject(project)"><Pencil :size="14" />重命名</button>
             <button type="button" role="menuitem" @click="toggleProjectPinned(project)">
               <PinOff v-if="project.pinned" :size="14" />
@@ -340,7 +355,7 @@ async function confirmRemoveProject(project: (typeof state.projects.value)[numbe
           <ul v-else><li v-for="path in state.fileChanges.value" :key="path"><Check :size="13" />{{ path }}</li></ul>
         </section>
         <section>
-          <h3>包与语法检查</h3>
+          <h3>构建与检查</h3>
           <p v-if="!state.checkResults.value.length" class="ai-inspector-empty">检查结果会显示在这里</p>
           <article v-for="(check, index) in state.checkResults.value" :key="`${check.code}-${index}`" class="ai-check-result" :class="check.status === 'passed' ? 'is-passed' : 'is-failed'">
             <div><Check v-if="check.status === 'passed'" :size="14" /><CircleAlert v-else :size="14" /><strong>{{ check.code ?? '检查' }}</strong></div>
@@ -355,7 +370,7 @@ async function confirmRemoveProject(project: (typeof state.projects.value)[numbe
             @click="state.analyzeProject()"
           >
             <LoaderCircle v-if="state.busy.value" class="ai-spin" :size="14" />
-            <span>{{ state.busy.value ? '正在分析和检查…' : state.checkResults.value.length ? '重新分析、检查并导入' : 'AI 分析、检查并导入' }}</span>
+            <span>{{ state.busy.value ? '正在分析、构建和检查…' : state.checkResults.value.length ? '重新分析、构建并导入' : 'AI 分析、构建并导入' }}</span>
           </button>
         </section>
         <section>
@@ -364,8 +379,8 @@ async function confirmRemoveProject(project: (typeof state.projects.value)[numbe
             <Check v-if="state.importResult.value.ok" :size="14" /><CircleAlert v-else :size="14" />
             <span>{{ state.importResult.value.message }}</span>
           </div>
-          <p v-else-if="state.checkResults.value.some((check) => check.status === 'passed') && state.checkResults.value.every((check) => check.status === 'passed')" class="ai-inspector-empty">检查通过，等待手动导入</p>
-          <p v-else class="ai-inspector-empty">手动触发分析与检查后，才会导入脚本</p>
+          <p v-else-if="state.busy.value && state.checkResults.value.length" class="ai-inspector-empty">完成构建和全部检查后自动导入</p>
+          <p v-else class="ai-inspector-empty">手动触发分析、构建与检查后，才会导入脚本</p>
         </section>
       </aside>
     </div>

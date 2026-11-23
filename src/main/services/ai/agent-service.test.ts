@@ -119,6 +119,7 @@ test('normal chat writes files without checking or importing them', async (t) =>
       yield { type: 'complete', finishReason: 'stop' }
     }
   })(), {
+    buildProject: async () => { checkCalls.push('build'); return { status: 'passed', code: 'build_passed', message: 'ok', diagnostics: [] } },
     checks: {
       checkScriptPackage: async () => { checkCalls.push('package'); return { status: 'passed' as const, code: 'package_valid', message: 'ok', diagnostics: [] } },
       checkScriptSyntax: async () => { checkCalls.push('syntax'); return { status: 'passed' as const, code: 'syntax_valid', message: 'ok', diagnostics: [] } }
@@ -145,6 +146,7 @@ test('explicit project analysis checks and imports after the agent finishes', as
     ], { 'autoforge.json': null, 'index.mjs': null })
     else yield { type: 'complete', finishReason: 'stop' }
   })(), {
+    buildProject: async () => { order.push('build'); return { status: 'passed', code: 'build_passed', message: 'ok', diagnostics: [] } },
     checks: {
       checkScriptPackage: async () => { order.push('package'); return { status: 'passed' as const, code: 'package_valid', message: 'ok', diagnostics: [] } },
       checkScriptSyntax: async () => { order.push('syntax'); return { status: 'passed' as const, code: 'syntax_valid', message: 'ok', diagnostics: [] } }
@@ -160,9 +162,28 @@ test('explicit project analysis checks and imports after the agent finishes', as
 
   const turn = await service.analyzeProject(project.id)
 
-  assert.deepEqual(order, ['package', 'syntax', 'import'])
+  assert.deepEqual(order, ['build', 'package', 'syntax', 'import'])
   assert.equal(turn.importedScriptId, 'new-script')
   assert.equal(projects.get(project.id)?.importedScriptId, 'new-script')
+})
+
+test('a failed build blocks import and sends diagnostics back for repair', async (t) => {
+  let builds = 0
+  const { root, service, imported, calls } = createHarness(async function* () {
+    yield { type: 'complete', finishReason: 'stop' }
+  }, {
+    maxToolRounds: 2,
+    buildProject: async () => {
+      builds++
+      return { status: 'failed', code: 'build_failed', message: '项目构建失败', diagnostics: ['missing dependency in build'] }
+    }
+  })
+  t.after(() => rmSync(root, { recursive: true, force: true }))
+  const project = await service.createProject({ rootPath: root, name: 'Demo', language: 'javascript', profileId: 'profile-1' })
+  await service.analyzeProject(project.id)
+  assert.equal(builds, 2)
+  assert.deepEqual(imported, [])
+  assert.match(JSON.stringify(calls[1].messages), /missing dependency in build/)
 })
 
 test('fails analysis instead of silently reimporting when the linked script is missing', async (t) => {

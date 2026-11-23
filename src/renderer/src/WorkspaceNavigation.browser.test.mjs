@@ -56,7 +56,7 @@ test('page navigation preserves a running chat and analysis until completion or 
     await input.waitFor()
     await page.waitForFunction(()=>!document.querySelector('textarea').disabled)
     assert.match(await page.locator('.ai-conversation').textContent(),/Completed 1/)
-    await page.getByRole('button',{name:'AI 分析、检查并导入',exact:true}).click()
+    await page.getByRole('button',{name:'AI 分析、构建并导入',exact:true}).click()
     await page.locator('#away').click()
     await page.locator('#back').click()
     assert.equal(await input.isDisabled(),true,'analysis must remain busy across navigation')

@@ -21,14 +21,14 @@ describe('Sidebar category actions', () => {
 })
 
 describe('script sidebar layout', () => {
-  it('places script upload above search and navigation while keeping shortcuts at the bottom', () => {
+  it('places script upload above search and navigation without duplicate bottom shortcuts', () => {
     const uploadIndex = sidebarSource.indexOf('上传脚本')
     const searchIndex = sidebarSource.indexOf('id="sidebar-search"')
     const navigationIndex = sidebarSource.indexOf('<nav class="flex-shrink-0 px-2 space-y-0.5">')
     const shortcutsIndex = sidebarSource.indexOf('title="脚本中心"')
     assert.ok(uploadIndex > 0 && uploadIndex < searchIndex)
     assert.ok(uploadIndex < navigationIndex)
-    assert.ok(shortcutsIndex > navigationIndex)
+    assert.equal(shortcutsIndex, -1)
   })
 
   it('uses the full context sidebar width instead of keeping a second independent width', () => {

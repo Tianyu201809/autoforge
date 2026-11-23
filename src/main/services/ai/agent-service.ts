@@ -18,6 +18,7 @@ import { createAgentTools } from './agent-tools'
 import type { ProjectCheckResult } from './project-checks'
 import { validateProjectRoot, createProjectWorkspace } from './project-workspace'
 import { createProjectChecks } from './project-checks'
+import { createProjectBuilder } from './project-builder'
 
 const MAX_TOOL_ROUNDS = 8
 const MAX_TOOL_CALLS = 24
@@ -46,6 +47,7 @@ interface ProjectRegistry {
 }
 
 export interface AgentServiceOptions {
+  buildProject?: ReturnType<typeof createProjectBuilder>
   attachments?: ReturnType<typeof createProjectAttachmentStore>
   repository: AgentRepository
   profiles: { resolveProvider(profileId: string): ResolvedProvider }
@@ -76,7 +78,7 @@ function makeSystemPrompt(project: AiProject, analyze: boolean): string {
     'Only use the provided safe project file tools. Never request shell, arbitrary network, or script execution.',
     'Use relative paths, read files before changing them, and send the exact SHA-256 values returned by file reads when writing.',
     analyze
-      ? 'Inspect the current project and repair issues you find using the provided file tools. Do not attempt package checks, syntax checks, or script import; the application will run these checks and import after you finish.'
+      ? 'Inspect the current project and repair issues you find using the provided file tools. The application will run npm run build when package.json defines scripts.build, validate the autoforge.json entry and syntax, then import after you finish. Repair any build or validation diagnostics returned by the application.'
       : 'Create or modify files requested by the user. Do not run package checks, syntax checks, or import scripts; the user can start the separate analysis and import workflow when ready.',
     'Do not place credentials, API keys, or environment values in generated files.'
   ].join('\n')
@@ -94,6 +96,7 @@ function parseManifest(content: string): ScriptManifest {
 }
 
 export function createAgentService(options: AgentServiceOptions) {
+  const buildProject = options.buildProject ?? createProjectBuilder()
   const idFactory = options.idFactory ?? randomUUID
   const now = options.now ?? (() => new Date().toISOString())
   const maxToolRounds = options.maxToolRounds ?? MAX_TOOL_ROUNDS
@@ -121,16 +124,20 @@ export function createAgentService(options: AgentServiceOptions) {
     signal?: AbortSignal
   ): Promise<ProjectCheckResult[]> {
     if (signal?.aborted) throw new Error('turn cancelled')
+    const buildCheck = await buildProject(project.rootPath, signal)
+    emitCheck(callback, project.id, turnId, buildCheck)
+    if (signal?.aborted) throw new Error('turn cancelled')
+    if (buildCheck.status !== 'passed') return [buildCheck]
     const packageCheck = await options.checks.checkScriptPackage(project.rootPath)
     emitCheck(callback, project.id, turnId, packageCheck)
     if (signal?.aborted) throw new Error('turn cancelled')
-    if (packageCheck.status !== 'passed') return [packageCheck]
+    if (packageCheck.status !== 'passed') return [buildCheck, packageCheck]
     const manifestFile = options.workspace.readProjectFile(project.id, 'autoforge.json')
     const manifest = parseManifest(manifestFile.content)
     const syntaxCheck = await options.checks.checkScriptSyntax(project.rootPath, manifest)
     emitCheck(callback, project.id, turnId, syntaxCheck)
     if (signal?.aborted) throw new Error('turn cancelled')
-    return [packageCheck, syntaxCheck]
+    return [buildCheck, packageCheck, syntaxCheck]
   }
 
   async function importProject(projectId: string, turnId: string, callback?: (event: AiAgentEvent) => void): Promise<{ id: string; name: string }> {

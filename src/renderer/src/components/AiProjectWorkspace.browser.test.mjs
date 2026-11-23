@@ -28,8 +28,8 @@ test('workspace renders Markdown, attaches previews, sends and restores history'
       let turns=[{id:'first',projectId:project.id,role:'assistant',content:'# Plan\n\n- First\n- Second\n\n```js\nconst value = 1\n```',status:'complete'}]
       turns=JSON.parse(sessionStorage.getItem('turns') || 'null') ?? turns
       let listener=()=>{}
-      window.autoforge={ai:{
-        listProjects:async()=>[project],getProject:async()=>project,listProjectTurns:async()=>structuredClone(turns),
+      window.autoforge={system:{openInExternalEditor:async path=>{window.editorPath=path;return {ok:true}}},ai:{
+        listProjects:async()=>[project,{...project,id:'project-b',name:'Other project',rootPath:'C:/other-project'}],getProject:async()=>project,listProjectTurns:async()=>structuredClone(turns),
         listProfiles:async()=>({profiles:[{id:'p',name:'Vision',hasCredentials:true}],activeProfileId:'p',credentialPersistent:true}),
         onAgentEvent:cb=>{listener=cb;return()=>{}},
         pickAttachments:async()=>[asset],previewAttachment:async()=>({metadata:asset,dataUrl:img}),removeAttachment:async()=>true,
@@ -47,6 +47,11 @@ test('workspace renders Markdown, attaches previews, sends and restores history'
     await page.goto(server.resolvedUrls.local[0]+'ai-test')
     await page.locator('.ai-markdown h1').waitFor()
     assert.equal(await page.locator('.ai-markdown li').count(),2)
+    await page.getByRole('button',{name:'Other project',exact:false}).click({button:'right'})
+    await page.getByRole('menuitem',{name:'使用编辑器打开',exact:true}).click({timeout:2000})
+    assert.equal(await page.evaluate(()=>window.editorPath),'C:/other-project')
+    assert.equal(await page.getByRole('menu').count(),0)
+    assert.equal(await page.locator('.ai-project-title').textContent(),'Test workspace')
     await page.getByRole('button',{name:'添加素材',exact:true}).click()
     await page.locator('.ai-composer .ai-attachment img').waitFor()
     assert.equal(await page.getByRole('button',{name:'发送消息',exact:true}).isEnabled(),true)

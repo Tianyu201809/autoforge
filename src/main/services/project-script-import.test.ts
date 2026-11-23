@@ -7,6 +7,8 @@ import { closeDatabase, initDatabase } from '../db/database'
 import { ScriptRegistry } from './script-registry'
 import { ScriptStore } from './script-store'
 import { ScriptWorkspace } from './script-workspace'
+import { createProjectBuilder } from './ai/project-builder'
+import { createProjectChecks } from './ai/project-checks'
 
 function writePackage(root: string, entry: string, content: string, version: string): void {
   mkdirSync(root, { recursive: true })
@@ -31,6 +33,21 @@ test('imports a project, updates it in place, and restores the prior script afte
   const store = new ScriptStore()
   const workspace = new ScriptWorkspace(() => userData)
   const registry = new ScriptRegistry(store, workspace)
+  const builtSource = join(root, 'built-project')
+  mkdirSync(builtSource)
+  writeFileSync(join(builtSource, 'autoforge.json'), JSON.stringify({
+    autoforge: '1.0', name: 'Built Project', version: '1.0.0', entry: 'dist/index.mjs', language: 'javascript'
+  }))
+  writeFileSync(join(builtSource, 'package.json'), JSON.stringify({ scripts: { build: 'node build.cjs' } }))
+  writeFileSync(join(builtSource, 'build.cjs'), "const fs=require('fs');fs.mkdirSync('dist',{recursive:true});fs.writeFileSync('dist/index.mjs','export function run() { return 42 }')")
+  const checks = createProjectChecks()
+  assert.notEqual((await checks.checkScriptPackage(builtSource)).status, 'passed')
+  assert.equal((await createProjectBuilder()(builtSource)).status, 'passed')
+  assert.equal((await checks.checkScriptPackage(builtSource)).status, 'passed')
+  assert.equal((await checks.checkScriptSyntax(builtSource, workspace.validatePackageDirectory(builtSource))).status, 'passed')
+  const built = registry.importFromPath(builtSource)
+  assert.equal(readFileSync(join(built.workspacePath, 'dist/index.mjs'), 'utf8'), 'export function run() { return 42 }')
+
   writePackage(source, 'index.mjs', 'export const version = 1', '1.0.0')
   const imported = registry.importFromPath(source)
   store.setPreference(imported.id, {

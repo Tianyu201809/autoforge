@@ -546,11 +546,7 @@ onUnmounted(() => {
             @category="setCategoryFilter"
             @manage-categories="openCategoryManager"
             @import="importScript"
-            @settings="navigateWorkspace('settings')"
-            @dev-guide="navigateWorkspace('guide')"
-            @execution-history="navigateWorkspace('history')"
             @categories-changed="refresh()"
-            @plugin-center="navigateWorkspace('hub')"
           />
         </WorkspaceContextSidebar>
       </template>

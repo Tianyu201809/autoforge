@@ -29,11 +29,6 @@ const primaryItems: Array<{ id: WorkspaceView; label: string; icon: typeof Folde
 
 <template>
   <nav class="workspace-navigation" aria-label="主导航">
-    <div class="workspace-brand" :class="collapsed && 'workspace-brand--collapsed'">
-      <span class="workspace-brand-mark" aria-hidden="true">A</span>
-      <span v-if="!collapsed" class="workspace-brand-name">Autoforge</span>
-    </div>
-
     <div class="workspace-navigation-group">
       <button
         v-for="item in primaryItems"
@@ -110,37 +105,6 @@ const primaryItems: Array<{ id: WorkspaceView; label: string; icon: typeof Folde
   padding: 10px 8px 8px;
   border-right: 1px solid var(--sb-border-subtle);
   background: var(--sb-bg-panel);
-}
-
-.workspace-brand {
-  display: flex;
-  align-items: center;
-  gap: 9px;
-  height: 40px;
-  padding: 0 8px;
-  margin-bottom: 14px;
-  color: var(--sb-text-primary);
-  font-family: Syne, var(--font-sans);
-  font-size: 14px;
-  font-weight: 700;
-  white-space: nowrap;
-}
-
-.workspace-brand--collapsed {
-  justify-content: center;
-  padding: 0;
-}
-
-.workspace-brand-mark {
-  display: grid;
-  width: 24px;
-  height: 24px;
-  place-items: center;
-  border-radius: 6px;
-  background: var(--sb-logo-bg);
-  color: var(--sb-logo-text);
-  font-size: 13px;
-  font-weight: 800;
 }
 
 .workspace-navigation-group {

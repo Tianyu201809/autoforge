@@ -2,16 +2,12 @@
 import { onMounted, onUnmounted } from 'vue'
 import {
   Archive,
-  BookOpen,
   Clock,
-  History,
   LayoutGrid,
   Pencil,
   PlayCircle,
   Search,
-  Settings,
   Star,
-  Store,
   Timer,
   Upload
 } from 'lucide-vue-next'
@@ -36,11 +32,7 @@ const emit = defineEmits<{
   category: [key: string | null]
   manageCategories: []
   import: []
-  settings: []
-  devGuide: []
-  executionHistory: []
   categoriesChanged: []
-  pluginCenter: []
 }>()
 
 const navIcons = {
@@ -58,10 +50,6 @@ function onKeydown(e: KeyboardEvent): void {
     const input = document.getElementById('sidebar-search') as HTMLInputElement | null
     input?.focus()
   }
-}
-
-async function openAutoforgeHub(): Promise<void> {
-  emit('pluginCenter')
 }
 
 async function onCreateChild(item: CategoryItem): Promise<void> {
@@ -215,41 +203,5 @@ onUnmounted(() => window.removeEventListener('keydown', onKeydown))
       </div>
     </div>
 
-    <div class="flex-shrink-0 p-3 border-t sb-border-subtle">
-      <div class="flex items-center justify-around gap-0.5 pt-0.5">
-        <button
-          type="button"
-          class="w-8 h-8 flex items-center justify-center rounded-md hover:bg-violet-500/10 transition-colors"
-          title="脚本中心"
-          @click="openAutoforgeHub"
-        >
-          <Store class="w-4 h-4 text-violet-500" :stroke-width="1.5" />
-        </button>
-        <button
-          type="button"
-          class="w-8 h-8 flex items-center justify-center rounded-md hover:bg-emerald-500/10 transition-colors"
-          title="脚本开发指南"
-          @click="emit('devGuide')"
-        >
-          <BookOpen class="w-4 h-4 text-emerald-500" :stroke-width="1.5" />
-        </button>
-        <button
-          type="button"
-          class="w-8 h-8 flex items-center justify-center rounded-md hover:bg-amber-500/10 transition-colors"
-          title="执行历史"
-          @click="emit('executionHistory')"
-        >
-          <History class="w-4 h-4 text-amber-500" :stroke-width="1.5" />
-        </button>
-        <button
-          type="button"
-          class="w-8 h-8 flex items-center justify-center rounded-md hover:bg-sky-500/10 transition-colors"
-          title="设置"
-          @click="emit('settings')"
-        >
-          <Settings class="w-4 h-4 text-sky-500" :stroke-width="1.5" />
-        </button>
-      </div>
-    </div>
   </aside>
 </template>
