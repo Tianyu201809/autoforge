@@ -14,7 +14,7 @@
 
 ## Global Constraints
 
-- The user chooses an existing, writable, empty directory for initial project creation.
+- The user chooses an existing, writable directory for initial project creation. Existing files may be present.
 - Reject a symlink project root and all path traversal or symlink escapes.
 - Agent can only list/read/write ordinary text files under the project root.
 - No arbitrary shell, package install, user script execution, or project-defined build commands.

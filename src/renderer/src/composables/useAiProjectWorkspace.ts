@@ -3,7 +3,8 @@ import type { AiAgentEvent, AiProject, AiProjectLanguage, AiProjectSummary, AiPr
 import type { LlmProfileView } from '../../../shared/ai-types'
 
 type AiWorkspaceApi = Pick<Window['autoforge']['ai'],
-  'pickProjectFolder' | 'listProjects' | 'getProject' | 'listProjectTurns' | 'createProject' | 'removeProject' |
+  'pickProjectFolder' | 'listProjects' | 'getProject' | 'listProjectTurns' | 'createProject' | 'renameProject' |
+  'setProjectPinned' | 'exportProjectTurns' | 'removeProject' |
   'startTurn' | 'cancelTurn' | 'retryChecks' | 'onAgentEvent' | 'listProfiles'>
 
 interface AiWorkspaceDraft {
@@ -152,9 +153,53 @@ export function useAiProjectWorkspace(
     projects.value = await api.listProjects()
   }
 
+  async function renameProject(id: string, name: string): Promise<void> {
+    const normalizedName = name.trim()
+    if (!normalizedName || normalizedName.length > 100) {
+      error.value = '项目名称必须为 1 到 100 个字符'
+      return
+    }
+    try {
+      const renamed = await api.renameProject(id, normalizedName)
+      if (!renamed) throw new Error('项目不存在或无法重命名')
+      if (activeProject.value?.id === id) activeProject.value = renamed
+      await loadProjects()
+      error.value = ''
+    } catch (cause) {
+      error.value = cause instanceof Error ? cause.message : '无法重命名项目'
+    }
+  }
+
+  async function setProjectPinned(id: string, pinned: boolean): Promise<void> {
+    try {
+      const updated = await api.setProjectPinned(id, pinned)
+      if (!updated) throw new Error('项目不存在，无法更改置顶状态')
+      if (activeProject.value?.id === id) activeProject.value = updated
+      await loadProjects()
+      error.value = ''
+    } catch (cause) {
+      error.value = cause instanceof Error ? cause.message : '无法更改项目置顶状态'
+    }
+  }
+
+  async function exportProjectTurns(id: string): Promise<string | null> {
+    try {
+      error.value = ''
+      return await api.exportProjectTurns(id)
+    } catch (cause) {
+      error.value = cause instanceof Error ? cause.message : '无法导出项目对话'
+      return null
+    }
+  }
+
   async function removeProject(id: string): Promise<void> {
     try {
-      await api.removeProject(id)
+      const removed = await api.removeProject(id)
+      if (!removed) {
+        error.value = '项目当前无法移除。请等待运行中的任务完成或取消任务后重试。'
+        return
+      }
+      error.value = ''
       await loadProjects()
       if (activeProject.value?.id === id) {
         activeProject.value = null
@@ -234,6 +279,7 @@ export function useAiProjectWorkspace(
   return {
     projects, activeProject, turns, profiles, activeProfileId, credentialPersistent, loading, busy, error,
     prompt, streamingText, activeTurnId, fileChanges, checkResults, importResult, creating, projectDraft, pendingFolder,
-    load, openProject, chooseProjectFolder, createProject, removeProject, sendMessage, cancelTurn, retryChecks
+    load, openProject, chooseProjectFolder, createProject, renameProject, setProjectPinned, exportProjectTurns,
+    removeProject, sendMessage, cancelTurn, retryChecks
   }
 }

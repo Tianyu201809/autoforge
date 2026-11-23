@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict'
 import { createHash } from 'node:crypto'
-import { mkdtempSync, rmSync } from 'node:fs'
+import { mkdtempSync, realpathSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { test } from 'node:test'
@@ -22,7 +22,7 @@ function createHarness(
   const repository = {
     createProject(input: { id: string; name: string; rootPath: string; language: AiProject['language']; profileId: string }) {
       const now = '2026-11-22T00:00:00.000Z'
-      const project: AiProject = { ...input, status: 'ready', createdAt: now, updatedAt: now }
+      const project: AiProject = { ...input, pinned: false, status: 'ready', createdAt: now, updatedAt: now }
       projects.set(project.id, project)
       turns.set(project.id, [])
       return project
@@ -128,6 +128,40 @@ test('runs a multi-step tool loop and automatically imports after both checks pa
   assert.equal(turn.status, 'complete')
 })
 
+test('lists saved project turns so a selected project can restore its conversation', async (t) => {
+  const { root, service, serviceOptions } = createHarness(async function* () {})
+  t.after(() => rmSync(root, { recursive: true, force: true }))
+  const project = await service.createProject({ rootPath: root, name: 'Demo', language: 'javascript', profileId: 'profile-1' })
+  serviceOptions.repository.appendTurn(project.id, {
+    id: 'turn-1', role: 'user', content: 'saved prompt', status: 'complete', createdAt: '2026-11-22T00:00:00.000Z'
+  })
+
+  assert.equal(service.listTurns(project.id)[0]?.content, 'saved prompt')
+})
+
+test('creates a project in a writable folder that already contains files', async (t) => {
+  const { root, service } = createHarness(async function* () {})
+  t.after(() => rmSync(root, { recursive: true, force: true }))
+  writeFileSync(join(root, 'README.md'), 'Existing project notes')
+
+  const project = await service.createProject({ rootPath: root, name: 'Existing project', language: 'javascript', profileId: 'profile-1' })
+
+  assert.equal(project.rootPath, realpathSync.native(root))
+  assert.equal(project.name, 'Existing project')
+})
+
+test('renames a project and changes its pinned state through the project service', async (t) => {
+  const { root, service } = createHarness(async function* () {})
+  t.after(() => rmSync(root, { recursive: true, force: true }))
+  const project = await service.createProject({ rootPath: root, name: 'Before', language: 'javascript', profileId: 'profile-1' })
+
+  const renamed = service.renameProject(project.id, 'After')
+  const pinned = service.setProjectPinned(project.id, true)
+
+  assert.equal(renamed?.name, 'After')
+  assert.equal(pinned?.pinned, true)
+})
+
 test('repairs a failed syntax check before importing', async (t) => {
   const manifest = JSON.stringify({ autoforge: '1.0', name: 'Demo', entry: 'index.mjs', language: 'javascript' }, null, 2)
   let syntaxChecks = 0
@@ -215,7 +249,7 @@ test('recovers running turns as interrupted after service restart', (t) => {
   const now = '2026-11-22T00:00:00.000Z'
   const project: AiProject = {
     id: 'recover', name: 'Recovery', rootPath: root, language: 'javascript', profileId: 'profile-1',
-    status: 'generating', createdAt: now, updatedAt: now
+    pinned: false, status: 'generating', createdAt: now, updatedAt: now
   }
   projects.set(project.id, project)
   turns.set(project.id, [{ id: 'turn-running', projectId: project.id, role: 'assistant', content: '', status: 'running', createdAt: now }])

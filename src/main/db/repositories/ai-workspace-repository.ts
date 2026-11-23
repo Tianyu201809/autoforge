@@ -18,6 +18,7 @@ interface AiProjectRow {
   language: AiProject['language']
   profile_id: string
   imported_script_id: string | null
+  pinned: number
   status: AiProjectStatus
   created_at: string
   updated_at: string
@@ -69,6 +70,7 @@ function projectFromRow(row: AiProjectRow): AiProject {
     language: row.language,
     profileId: row.profile_id,
     importedScriptId: row.imported_script_id ?? undefined,
+    pinned: row.pinned === 1,
     status: row.status,
     createdAt: row.created_at,
     updatedAt: row.updated_at
@@ -103,13 +105,13 @@ export class AiWorkspaceRepository {
   constructor(private readonly db: SqliteDatabase, private readonly now = () => new Date().toISOString()) {}
 
   listProjects(): AiProject[] {
-    const rows = this.db.prepare('SELECT * FROM ai_projects ORDER BY updated_at DESC, id').all() as unknown as AiProjectRow[]
+    const rows = this.db.prepare('SELECT * FROM ai_projects ORDER BY pinned DESC, updated_at DESC, id').all() as unknown as AiProjectRow[]
     return rows.map(projectFromRow)
   }
 
   listProjectSummaries(): AiProjectSummary[] {
-    return this.listProjects().map(({ id, name, rootPath, language, status, updatedAt }) => ({
-      id, name, rootPath, language, status, updatedAt
+    return this.listProjects().map(({ id, name, rootPath, language, status, updatedAt, pinned }) => ({
+      id, name, rootPath, language, status, updatedAt, pinned
     }))
   }
 
@@ -131,7 +133,7 @@ export class AiWorkspaceRepository {
     return this.getProject(input.id)!
   }
 
-  updateProject(id: string, patch: Partial<Pick<AiProject, 'name' | 'profileId' | 'importedScriptId' | 'status'>>): AiProject | null {
+  updateProject(id: string, patch: Partial<Pick<AiProject, 'name' | 'profileId' | 'importedScriptId' | 'status' | 'pinned'>>): AiProject | null {
     const current = this.getProject(id)
     if (!current) return null
     if (patch.status && patch.status !== current.status && !PROJECT_TRANSITIONS[current.status].includes(patch.status)) {
@@ -142,13 +144,18 @@ export class AiWorkspaceRepository {
       profileId: patch.profileId ?? current.profileId,
       importedScriptId: patch.importedScriptId ?? current.importedScriptId ?? null,
       status: patch.status ?? current.status,
+      pinned: patch.pinned ?? current.pinned,
       updatedAt: this.now()
     }
     this.db.prepare(`
-      UPDATE ai_projects SET name = ?, profile_id = ?, imported_script_id = ?, status = ?, updated_at = ?
+      UPDATE ai_projects SET name = ?, profile_id = ?, imported_script_id = ?, status = ?, pinned = ?, updated_at = ?
       WHERE id = ?
-    `).run(next.name, next.profileId, next.importedScriptId, next.status, next.updatedAt, id)
+    `).run(next.name, next.profileId, next.importedScriptId, next.status, next.pinned ? 1 : 0, next.updatedAt, id)
     return this.getProject(id)
+  }
+
+  setProjectPinned(id: string, pinned: boolean): AiProject | null {
+    return this.updateProject(id, { pinned })
   }
 
   removeProject(id: string): boolean {

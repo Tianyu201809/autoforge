@@ -32,7 +32,7 @@ evidence:
   - src/main/services/ai/project-checks.test.ts
   - src/main/services/ai/model-profile-service.test.ts
   - src/renderer/src/composables/useAiProjectWorkspace.test.ts
-content_hash: sha256:77e2d0868df30a2e319243680d6e9c3047858abe82c443d8998d2f6013bcefc4
+content_hash: sha256:a044141ca1c37e0c529756cf0b360c6f8a09e4007d3f738902c1235edcde50c1
 ---
 
 # AI 项目工作区与脚本自动导入
@@ -94,16 +94,17 @@ flowchart TB
 | AiProject.language | javascript / python | 生成包的脚本语言 |
 | AiProject.profileId | string | 项目关联的模型配置 |
 | AiProject.importedScriptId | string? | 已导入脚本 ID，用于后续原位更新 |
+| AiProject.pinned | boolean | 项目是否置顶，SQLite migration 008 持久化 |
 | AiProjectTurn.status | running / complete / cancelled / error | 对话轮次状态 |
 | AiAgentEvent.type | discriminated union | assistant_delta、tool、file_changes、check_result、import_result、turn_finished |
 
-项目表和轮次表由迁移 007-ai-workspace.ts 建立。密钥与额外请求头值不进入 SQLite。
+项目表和轮次表由迁移 007-ai-workspace.ts 建立。迁移 008-ai-project-pinned.ts 增加置顶字段和排序索引。密钥与额外请求头值不进入 SQLite。
 
 ## 3. 入口流程
 
-1. 用户在项目工作区选择一个本机空文件夹、项目语言和已配置凭据的模型。
+1. 用户在项目工作区选择一个本机文件夹（允许已有文件）、项目语言和已配置凭据的模型。
 2. 渲染进程通过 preload 的 pickProjectFolder 与 createProject 请求主进程创建项目。
-3. AgentService.createProject 验证模型配置，并调用 validateProjectRoot 检查目录、空状态、写权限和符号链接。
+3. AgentService.createProject 验证模型配置，并调用 validateProjectRoot 检查目录、写权限和符号链接。已有普通文件会留在原位，Agent 只通过受限工具访问文件。
 4. AiWorkspaceRepository 保存规范化目录、语言、模型 ID 和状态。目录内容仍留在用户选择的位置。
 5. 发送提示词时，IPC handler 为发起请求的窗口转发 Agent 事件。
 
@@ -135,7 +136,7 @@ WorkspaceShell 提供导航轨、上下文侧栏、主工作区和检查器尺�
 
 AiProjectWorkspace 显示项目列表、持久化对话、流式 Agent 输出、取消操作和提示词输入。检查器汇总文件变更、冲突、包与语法检查、自动导入结果。
 
-模型 profile 在设置的“模型”分区编辑。API key 和额外请求头值都是只写输入，保存后不从 IPC 回显。历史、Hub、指南与设置作为工作区主内容渲染，脚本列表和运行服务仍由 App.vue 根组件持有。
+模型 profile 在设置的“模型”分区编辑。API key 和额外请求头值都是只写输入，保存后不从 IPC 回显。项目条目单击仍打开对话，独立操作菜单支持重命名、置顶、导出对话和删除。删除需通过两次确认。轮次导出为 JSON，包含轮次状态、文件变更、检查和导入关联，不包括项目文件、项目根路径或模型凭据。历史、Hub、指南与设置作为工作区主内容渲染，脚本列表和运行服务仍由 App.vue 根组件持有。
 
 ## 7. 代码路径速查
 
@@ -149,15 +150,16 @@ AiProjectWorkspace 显示项目列表、持久化对话、流式 Agent 输出、
 | 项目文件读写和冲突保护 | src/main/services/ai/project-workspace.ts |
 | 包与语法校验 | src/main/services/ai/project-checks.ts |
 | Agent 编排和工具白名单 | src/main/services/ai/agent-service.ts、agent-tools.ts |
-| preload API 类型 | src/preload/index.ts、src/renderer/src/env.d.ts |
+| preload API 类型 | src/preload/index.ts、src/renderer/src/env.d.ts、src/main/ipc/ai-workspace-handlers.ts |
 | AI 项目视图与状态 | src/renderer/src/components/AiProjectWorkspace.vue、src/renderer/src/composables/useAiProjectWorkspace.ts |
+| 项目持久化与轮次导出 | src/main/db/migrations/008-ai-project-pinned.ts、src/main/db/repositories/ai-workspace-repository.ts、src/main/services/ai/project-conversation-export.ts |
 | 模型设置视图 | src/renderer/src/components/ModelProfilesView.vue、src/renderer/src/composables/useModelProfiles.ts |
 | UI 路由工作台 | src/renderer/src/App.vue、WorkspaceShell.vue、useWorkspaceNavigation.ts |
 
 ## 8. 调试建议
 
 1. 配置问题先检查模型设置里的 provider、endpoint、model、密钥状态和连接测试结果。不要将真实密钥写入日志或测试输出。
-2. 项目目录校验失败时，在 validateProjectRoot 和 createProjectWorkspace 处检查规范化路径、空目录和符号链接判定。
+2. 项目目录校验失败时，在 validateProjectRoot 和 createProjectWorkspace 处检查规范化路径、写入权限和符号链接判定。
 3. Agent 工具拒绝请求时，在 createAgentTools.execute 检查工具名、JSON 参数和期望哈希。该白名单不应通过新增任意 shell 工具扩展。
 4. 检查失败时读取 check_result event 的稳定 code 与 diagnostics。入口检查应确认调用 node --check 或 Python AST，不应执行脚本。
 5. 自动导入失败时在 importProject 与 ScriptRegistry.updateFromProject 检查检查状态、关联脚本 ID 和注册表事务。

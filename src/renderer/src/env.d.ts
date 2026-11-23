@@ -109,7 +109,10 @@ export interface AutoforgeApi {
     getProject: (id: string) => Promise<AiProject | null>
     listProjectTurns: (id: string) => Promise<AiProjectTurn[]>
     createProject: (input: Omit<AiProjectCreateInput, 'id'>) => Promise<AiProject>
+    renameProject: (id: string, name: string) => Promise<AiProject | null>
+    setProjectPinned: (id: string, pinned: boolean) => Promise<AiProject | null>
     removeProject: (id: string) => Promise<boolean>
+    exportProjectTurns: (id: string) => Promise<string | null>
     startTurn: (projectId: string, message: string) => Promise<AiProjectTurn>
     cancelTurn: (projectId: string) => Promise<boolean>
     retryChecks: (projectId: string) => Promise<AiProjectTurn>

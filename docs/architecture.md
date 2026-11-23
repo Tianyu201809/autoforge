@@ -92,7 +92,9 @@ userData/                     # autoforge-development 或 autoforge-production
 
 ## AI 项目 Agent 数据流
 
-工作区选择本机空文件夹 → preload IPC → 主进程校验目录并将项目与模型关联写入 SQLite → Agent Service 调用 ModelProfileService 和 Provider Adapter → Agent 使用受限工具列出、读取、写入、检查和导入 → 哈希冲突检查及文件变更 → 固定包校验与 JavaScript / Python 语法检查 → ScriptRegistry 导入或更新并返回脚本关联结果。
+工作区选择本机文件夹（允许已有文件）→ preload IPC → 主进程校验目录并将项目与模型关联写入 SQLite → Agent Service 调用 ModelProfileService 和 Provider Adapter → Agent 使用受限工具列出、读取、写入、检查和导入 → 哈希冲突检查及文件变更 → 固定包校验与 JavaScript / Python 语法检查 → ScriptRegistry 导入或更新并返回脚本关联结果。
+
+AI 项目列表支持重命名、SQLite 置顶、两步删除确认和本机 JSON 对话导出。导出包含轮次状态、检查及文件变更元数据，不包含项目目录内容、绝对目录路径或模型凭据。
 
 Agent 工具不能执行 shell 或生成的脚本。API 密钥和额外请求头值存放在主进程凭据存储中。移除项目只移除 Autoforge 元数据和会话。
 

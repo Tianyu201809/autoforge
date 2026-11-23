@@ -22,11 +22,11 @@ function fixture(t: { after(callback: () => void): void }) {
   return { root, outside }
 }
 
-test('accepts an empty writable project root and rejects a nonempty root', (t) => {
+test('accepts writable project roots with or without existing files', (t) => {
   const { root } = fixture(t)
   assert.equal(validateProjectRoot(root).empty, true)
   writeFileSync(join(root, 'existing.txt'), 'existing')
-  assert.throws(() => validateProjectRoot(root), /目录必须为空/)
+  assert.equal(validateProjectRoot(root).empty, false)
 })
 
 test('rejects a symlink selected as the project root', (t) => {

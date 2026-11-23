@@ -1,6 +1,6 @@
 import { dialog, ipcMain, shell, type BrowserWindow } from 'electron'
 import { createHash, randomBytes } from 'crypto'
-import { existsSync, statSync } from 'fs'
+import { existsSync, statSync, writeFileSync } from 'fs'
 import { IPC } from '../../shared/ipc-channels'
 import { appEnv } from '../../shared/app-env'
 import { MANIFEST_FILENAME } from '../../shared/script-contract'
@@ -34,6 +34,7 @@ import { createGeminiProvider } from '../services/ai/gemini-provider'
 import { OPENAI_COMPATIBLE_PRESETS } from '../services/ai/provider-presets'
 import { registerModelProfileIpcHandlers } from '../services/ai/model-profile-ipc'
 import { createAgentService } from '../services/ai/agent-service'
+import type { AiProjectConversationExport } from '../../shared/ai-workspace-types'
 import { createProjectWorkspace } from '../services/ai/project-workspace'
 import { createProjectChecks } from '../services/ai/project-checks'
 import { AiWorkspaceRepository } from '../db/repositories/ai-workspace-repository'
@@ -172,6 +173,17 @@ export function registerIpcHandlers(
       if (!window) return null
       const result = await dialog.showOpenDialog(window, { properties: ['openDirectory'] })
       return result.canceled ? null : result.filePaths[0] ?? null
+    },
+    async (conversation: AiProjectConversationExport) => {
+      const safeName = conversation.project.name.replace(/[<>:"/\\|?*\u0000-\u001f]/g, '_').trim() || '项目'
+      const result = await dialog.showSaveDialog(getWindow() ?? undefined, {
+        title: '导出项目对话',
+        defaultPath: `${safeName}-对话.json`,
+        filters: [{ name: 'JSON 文件', extensions: ['json'] }]
+      })
+      if (result.canceled || !result.filePath) return null
+      writeFileSync(result.filePath, `${JSON.stringify(conversation, null, 2)}\n`, 'utf8')
+      return result.filePath
     }
   )
   ipcMain.handle(IPC.HUB_LOGOUT, () => hubClient.logout())

@@ -198,6 +198,20 @@ export function createAgentService(options: AgentServiceOptions) {
     return options.repository.getProject(id)
   }
 
+  function listTurns(projectId: string): AiProjectTurn[] {
+    return options.repository.listTurns(projectId)
+  }
+
+  function renameProject(id: string, name: string): AiProject | null {
+    const normalizedName = name.trim()
+    if (!normalizedName || normalizedName.length > 100) throw new Error('项目名称必须为 1 到 100 个字符')
+    return options.repository.updateProject(id, { name: normalizedName })
+  }
+
+  function setProjectPinned(id: string, pinned: boolean): AiProject | null {
+    return options.repository.updateProject(id, { pinned })
+  }
+
   function removeProject(id: string): boolean {
     if (activeTurns.has(id)) return false
     return options.repository.removeProject(id)
@@ -416,7 +430,10 @@ export function createAgentService(options: AgentServiceOptions) {
     return true
   }
 
-  return { createProject, listProjects, getProject, removeProject, startTurn, cancelTurn, retryChecks }
+  return {
+    createProject, listProjects, getProject, listTurns, renameProject, setProjectPinned,
+    removeProject, startTurn, cancelTurn, retryChecks
+  }
 }
 
 function serializeToolError(error: unknown): string {

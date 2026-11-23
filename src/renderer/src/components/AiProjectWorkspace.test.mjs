@@ -18,4 +18,17 @@ describe('AI project workspace view', () => {
     assert.match(source, /retryChecks/)
     assert.match(source, /toggleInspector/)
   })
+
+  it('keeps project selection separate from rename, pin, export, and delete actions', () => {
+    assert.match(source, /aria-label="项目操作"/)
+    assert.match(source, /重命名项目/)
+    assert.match(source, /置顶项目/)
+    assert.match(source, /导出对话/)
+    assert.match(source, /删除项目/)
+    assert.match(source, /@click="openProjectActionsId = null; state\.openProject\(project\.id\)"/)
+  })
+
+  it('requires two independent confirmations before removing a project', () => {
+    assert.equal((source.match(/await askConfirm\(/g) ?? []).length, 2)
+  })
 })

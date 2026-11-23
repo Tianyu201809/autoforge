@@ -3,6 +3,7 @@ import { onMounted, watch } from 'vue'
 import { ref } from 'vue'
 import { Check, CircleAlert, CircleCheck, LoaderCircle, Plus, Save, Trash2, X } from 'lucide-vue-next'
 import { useModelProfiles } from '../composables/useModelProfiles'
+import AppFeatureModal from './AppFeatureModal.vue'
 
 const props = defineProps<{ active: boolean }>()
 const state = useModelProfiles()
@@ -63,7 +64,7 @@ watch(() => props.active, (active) => {
         <h2>模型</h2>
         <p>管理提供商、模型和连接凭据。</p>
       </div>
-      <button type="button" class="model-primary-button" @click="startNewProfile">
+      <button v-if="state.profiles.value.length" type="button" class="model-primary-button" @click="startNewProfile">
         <Plus :size="15" /> 新建配置
       </button>
     </header>
@@ -73,10 +74,23 @@ watch(() => props.active, (active) => {
     </p>
     <p v-if="state.error.value" class="model-error" role="alert">{{ state.error.value }}</p>
 
-    <div class="model-profile-layout">
+    <p v-if="state.loading.value" class="model-loading">正在读取模型配置…</p>
+
+    <section v-else-if="!state.profiles.value.length" class="model-empty-state">
+      <div class="model-empty-mark" aria-hidden="true"><Plus :size="21" /></div>
+      <h3>还没有模型配置</h3>
+      <p>添加一个模型服务后，就可以在 AI 项目中选择它来创建和修改脚本。</p>
+      <button type="button" class="model-primary-button" @click="startNewProfile">
+        <Plus :size="15" /> 新建模型配置
+      </button>
+    </section>
+
+    <div v-else class="model-profile-layout">
       <div class="model-profile-list" aria-label="模型配置列表">
-        <p v-if="state.loading.value" class="model-muted">正在读取配置…</p>
-        <p v-else-if="!state.profiles.value.length" class="model-muted">尚无模型配置</p>
+        <div class="model-profile-list-heading">
+          <h3>已配置模型</h3>
+          <span>{{ state.profiles.value.length }}</span>
+        </div>
         <article
           v-for="profile in state.profiles.value"
           :key="profile.id"
@@ -105,16 +119,21 @@ watch(() => props.active, (active) => {
           </div>
         </article>
       </div>
+    </div>
 
-      <form v-if="formOpen || !state.profiles.value.length" class="model-profile-form" @submit.prevent="state.saveProfile()">
-        <template>
-          <div class="model-form-heading">
-            <h3>{{ state.editingProfileId.value ? '编辑配置' : '新建配置' }}</h3>
-            <button type="button" aria-label="关闭编辑" title="关闭编辑" @click="closeForm()">
-              <X :size="16" />
-            </button>
+    <AppFeatureModal :open="formOpen" max-width="lg" aria-labelledby="model-profile-form-title" @close="closeForm()">
+      <form class="model-profile-form" @submit.prevent="state.saveProfile()">
+        <header class="model-form-heading">
+          <div>
+            <h3 id="model-profile-form-title">{{ state.editingProfileId.value ? '编辑模型配置' : '新建模型配置' }}</h3>
+            <p>填写服务信息并保存凭据。密钥只写入本机安全存储。</p>
           </div>
+          <button type="button" aria-label="关闭编辑" title="关闭编辑" @click="closeForm()">
+            <X :size="17" />
+          </button>
+        </header>
 
+        <div class="model-form-fields">
           <label>配置名称<input v-model="state.profileDraft.name" required maxlength="80" placeholder="例如：DeepSeek 工作模型"></label>
           <label>提供商
             <select v-model="state.profileDraft.provider" @change="state.profileDraft.presetId = undefined">
@@ -159,43 +178,51 @@ watch(() => props.active, (active) => {
             <span>{{ state.testResult.value.message }}</span>
             <span v-if="state.testResult.value.latencyMs !== undefined">{{ state.testResult.value.latencyMs }} ms</span>
           </div>
+        </div>
 
-          <div class="model-form-actions">
-            <button
-              v-if="state.editingProfileId.value && state.profiles.value.find((profile) => profile.id === state.editingProfileId.value)?.hasCredentials"
-              type="button"
-              class="model-secondary-button"
-              @click="state.clearCredentials(state.editingProfileId.value!)"
-            >清除密钥</button>
-            <button
-              v-if="state.editingProfileId.value"
-              type="button"
-              class="model-secondary-button"
-              :disabled="state.testingProfileId.value === state.editingProfileId.value"
-              @click="state.testProfile(state.editingProfileId.value!)"
-            >
-              <LoaderCircle v-if="state.testingProfileId.value === state.editingProfileId.value" class="model-spin" :size="14" />
-              测试连接
-            </button>
-            <button type="submit" class="model-primary-button" :disabled="state.saving.value">
-              <LoaderCircle v-if="state.saving.value" class="model-spin" :size="14" />
-              <Save v-else :size="14" /> 保存
-            </button>
-          </div>
-        </template>
+        <footer class="model-form-actions">
+          <button type="button" class="model-secondary-button" @click="closeForm()">取消</button>
+          <button
+            v-if="state.editingProfileId.value && state.profiles.value.find((profile) => profile.id === state.editingProfileId.value)?.hasCredentials"
+            type="button"
+            class="model-secondary-button"
+            @click="state.clearCredentials(state.editingProfileId.value!)"
+          >清除凭据</button>
+          <button
+            v-if="state.editingProfileId.value"
+            type="button"
+            class="model-secondary-button"
+            :disabled="state.testingProfileId.value === state.editingProfileId.value"
+            @click="state.testProfile(state.editingProfileId.value!)"
+          >
+            <LoaderCircle v-if="state.testingProfileId.value === state.editingProfileId.value" class="model-spin" :size="14" />
+            测试连接
+          </button>
+          <button type="submit" class="model-primary-button" :disabled="state.saving.value">
+            <LoaderCircle v-if="state.saving.value" class="model-spin" :size="14" />
+            <Save v-else :size="14" /> {{ state.saving.value ? '正在保存' : '保存配置' }}
+          </button>
+        </footer>
       </form>
-      <div v-else class="model-form-empty">选择一个模型配置，或新建配置。</div>
-    </div>
+    </AppFeatureModal>
   </section>
 </template>
 
 <style scoped>
-.model-profiles { display: flex; flex-direction: column; gap: 16px; color: var(--sb-text-primary); }
+.model-profiles { display: flex; min-height: 100%; flex-direction: column; gap: 18px; color: var(--sb-text-primary); }
 .model-profiles-header, .model-form-heading, .model-header-heading, .model-form-actions { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
 .model-profiles-header h2 { margin: 0; font-size: 18px; font-weight: 600; }
 .model-profiles-header p, .model-muted { margin: 4px 0 0; color: var(--sb-text-muted); font-size: 12px; }
-.model-profile-layout { display: grid; grid-template-columns: minmax(190px, 0.8fr) minmax(300px, 1.2fr); gap: 20px; align-items: start; }
-.model-profile-list { display: grid; gap: 4px; min-width: 0; }
+.model-loading { padding: 18px 0; color: var(--sb-text-muted); font-size: 13px; }
+.model-empty-state { display: flex; width: min(100%, 620px); min-height: 300px; flex: 1; flex-direction: column; align-items: center; justify-content: center; align-self: center; padding: 36px 24px; text-align: center; }
+.model-empty-mark { display: grid; width: 46px; height: 46px; place-items: center; border: 1px solid var(--sb-border-subtle); border-radius: 12px; background: var(--sb-bg-panel); color: var(--sb-accent-solid); }
+.model-empty-state h3 { margin: 17px 0 0; color: var(--sb-text-primary); font-size: 16px; font-weight: 600; }
+.model-empty-state p { max-width: 360px; margin: 7px 0 18px; color: var(--sb-text-muted); font-size: 13px; line-height: 1.55; }
+.model-profile-layout { display: grid; grid-template-columns: minmax(0, 760px); gap: 12px; align-content: start; }
+.model-profile-list { display: grid; gap: 5px; min-width: 0; }
+.model-profile-list-heading { display: flex; align-items: center; gap: 8px; padding: 4px 8px 9px; }
+.model-profile-list-heading h3 { margin: 0; font-size: 13px; font-weight: 600; }
+.model-profile-list-heading span { display: grid; min-width: 20px; height: 20px; place-items: center; border-radius: 10px; background: var(--sb-bg-hover); color: var(--sb-text-muted); font-size: 11px; }
 .model-profile-row { display: flex; min-width: 0; align-items: center; gap: 6px; padding: 8px; border: 1px solid transparent; border-radius: 6px; }
 .model-profile-row--active { border-color: var(--sb-border-subtle); background: var(--sb-bg-panel); }
 .model-profile-select { display: grid; flex: 1; min-width: 0; gap: 3px; border: 0; background: transparent; color: inherit; text-align: left; cursor: pointer; }
@@ -206,9 +233,12 @@ watch(() => props.active, (active) => {
 .model-profile-actions button:hover, .model-form-heading button:hover, .model-header-row button:hover { background: var(--sb-bg-hover); color: var(--sb-text-primary); }
 .model-profile-actions button:disabled { color: var(--sb-accent-solid); cursor: default; }
 .model-active-empty { width: 13px; height: 13px; border: 1px solid var(--sb-border-subtle); border-radius: 50%; }
-.model-profile-form { display: grid; min-width: 0; gap: 12px; padding: 14px; border: 1px solid var(--sb-border-subtle); border-radius: 7px; background: var(--sb-bg-panel); }
-.model-form-heading h3 { margin: 0; font-size: 14px; font-weight: 600; }
-.model-profile-form > label { display: grid; gap: 5px; color: var(--sb-text-muted); font-size: 12px; }
+.model-profile-form { display: flex; width: 100%; max-height: min(84vh, 760px); min-height: 0; flex-direction: column; overflow: hidden; color: var(--sb-text-primary); }
+.model-form-heading { flex: 0 0 auto; padding: 18px 20px; border-bottom: 1px solid var(--sb-border-subtle); }
+.model-form-heading h3 { margin: 0; font-size: 16px; font-weight: 600; }
+.model-form-heading p { margin: 5px 0 0; color: var(--sb-text-muted); font-size: 12px; line-height: 1.45; }
+.model-form-fields { display: grid; min-height: 0; gap: 13px; overflow-y: auto; padding: 18px 20px; }
+.model-form-fields > label { display: grid; gap: 5px; color: var(--sb-text-muted); font-size: 12px; }
 .model-profile-form input, .model-profile-form select { width: 100%; min-width: 0; height: 34px; padding: 0 9px; border: 1px solid var(--sb-border-subtle); border-radius: 5px; background: var(--sb-bg-base); color: var(--sb-text-primary); font: inherit; font-size: 12px; }
 .model-profile-form input:focus-visible, .model-profile-form select:focus-visible { outline: 2px solid var(--sb-ring); outline-offset: 1px; }
 .model-header-section { display: grid; gap: 8px; }
@@ -219,16 +249,15 @@ watch(() => props.active, (active) => {
 .model-primary-button, .model-secondary-button { display: inline-flex; min-height: 32px; align-items: center; justify-content: center; gap: 6px; padding: 0 10px; border: 1px solid var(--sb-border-subtle); border-radius: 5px; background: var(--sb-bg-elevated); color: var(--sb-text-primary); font: inherit; font-size: 12px; cursor: pointer; }
 .model-primary-button { border-color: var(--sb-accent-solid); background: var(--sb-accent-solid); color: var(--sb-accent-contrast, white); }
 .model-primary-button:disabled, .model-secondary-button:disabled { opacity: 0.55; cursor: wait; }
-.model-form-actions { justify-content: flex-end; flex-wrap: wrap; margin-top: 2px; }
+.model-form-actions { flex: 0 0 auto; justify-content: flex-end; flex-wrap: wrap; padding: 12px 20px; border-top: 1px solid var(--sb-border-subtle); background: var(--sb-bg-panel); }
 .model-notice, .model-error, .model-test-result { display: flex; align-items: center; gap: 7px; font-size: 12px; }
 .model-notice { margin: 0; color: var(--sb-text-muted); }
 .model-error, .is-error { color: var(--sb-danger, #d65d5d); }
 .model-test-result { min-width: 0; padding: 8px 9px; border-radius: 5px; background: var(--sb-bg-base); }
 .model-test-result span:nth-child(2) { flex: 1; }
 .is-success { color: var(--sb-success, #2d9864); }
-.model-form-empty { padding: 24px 12px; color: var(--sb-text-muted); font-size: 13px; }
 .model-spin { animation: model-spin 1s linear infinite; }
 @keyframes model-spin { to { transform: rotate(360deg); } }
-@media (max-width: 720px) { .model-profile-layout { grid-template-columns: minmax(0, 1fr); } .model-profile-list { max-height: 180px; overflow: auto; } }
+@media (max-width: 560px) { .model-empty-state { min-height: 240px; padding: 24px 14px; } .model-form-heading, .model-form-fields { padding-right: 14px; padding-left: 14px; } .model-form-actions { padding-right: 14px; padding-left: 14px; } .model-header-row { grid-template-columns: minmax(70px, 1fr) minmax(80px, 1fr) 28px; } }
 @media (prefers-reduced-motion: reduce) { .model-spin { animation-duration: 2s; } }
 </style>

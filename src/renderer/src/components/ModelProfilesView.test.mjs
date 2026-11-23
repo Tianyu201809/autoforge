@@ -17,6 +17,18 @@ describe('AI model settings view', () => {
     assert.match(source, /hasApiKey/)
     assert.match(source, /find\(\(profile\) => profile\.id === state\.editingProfileId\.value\)\?\.hasCredentials/)
     assert.match(source, /保存/)
-    assert.match(source, /清除密钥/)
+    assert.match(source, /清除凭据/)
+  })
+
+  it('opens the profile form only after the user starts creating or editing a profile', () => {
+    assert.match(source, /<AppFeatureModal :open="formOpen"/)
+    assert.match(source, /@close="closeForm\(\)"/)
+    assert.match(source, /class="model-profile-form"/)
+  })
+
+  it('shows a dedicated empty state instead of an empty profile form', () => {
+    assert.match(source, /还没有模型配置/)
+    assert.match(source, /v-else-if="!state\.profiles\.value\.length"/)
+    assert.match(source, /v-if="state\.profiles\.value\.length" type="button" class="model-primary-button" @click="startNewProfile"/)
   })
 })

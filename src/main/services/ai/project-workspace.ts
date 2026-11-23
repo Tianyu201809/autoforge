@@ -55,7 +55,7 @@ function canonicalRoot(rootPath: string): string {
 
 export function validateProjectRoot(rootPath: string): ProjectRootInfo {
   const canonicalPath = canonicalRoot(rootPath)
-  if (readdirSync(canonicalPath).length > 0) throw new Error('项目目录必须为空')
+  const empty = readdirSync(canonicalPath).length === 0
   const probePath = join(canonicalPath, `.autoforge-write-${randomUUID()}.tmp`)
   let descriptor: number | undefined
   let probeFailed = false
@@ -79,7 +79,7 @@ export function validateProjectRoot(rootPath: string): ProjectRootInfo {
     }
   }
   if (probeFailed) throw new Error('项目目录不可写或无法完成写入检查')
-  return { canonicalPath, writable: true, empty: true }
+  return { canonicalPath, writable: true, empty }
 }
 
 function normalizeRelativePath(input: string): string {

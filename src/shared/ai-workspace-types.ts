@@ -18,6 +18,7 @@ export interface AiProject {
   language: AiProjectLanguage
   profileId: string
   importedScriptId?: string
+  pinned: boolean
   status: AiProjectStatus
   createdAt: string
   updatedAt: string
@@ -35,7 +36,7 @@ export interface AiProjectTurn {
   createdAt: string
 }
 
-export type AiProjectSummary = Pick<AiProject, 'id' | 'name' | 'rootPath' | 'language' | 'status' | 'updatedAt'>
+export type AiProjectSummary = Pick<AiProject, 'id' | 'name' | 'rootPath' | 'language' | 'status' | 'updatedAt' | 'pinned'>
 
 export interface AiProjectCreateInput {
   id: string
@@ -57,10 +58,18 @@ export interface AiProjectTurnInput {
   createdAt: string
 }
 
+export interface AiProjectConversationExport {
+  format: 'autoforge-ai-conversation'
+  version: 1
+  exportedAt: string
+  project: Pick<AiProject, 'id' | 'name' | 'language' | 'status' | 'pinned' | 'createdAt' | 'updatedAt'>
+  turns: AiProjectTurn[]
+}
+
 export interface ProjectRootInfo {
   canonicalPath: string
   writable: true
-  empty: true
+  empty: boolean
 }
 
 export interface ProjectFile {

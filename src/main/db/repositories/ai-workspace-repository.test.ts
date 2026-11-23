@@ -5,6 +5,7 @@ import { basename, join } from 'node:path'
 import { test } from 'node:test'
 import { MIGRATION_001 } from '../migrations/001-initial'
 import { MIGRATION_007 } from '../migrations/007-ai-workspace'
+import { MIGRATION_008 } from '../migrations/008-ai-project-pinned'
 import { openSqliteDatabase } from '../sqlite-adapter'
 import { AiWorkspaceRepository } from './ai-workspace-repository'
 
@@ -16,6 +17,7 @@ async function setup(t: { after(callback: () => void): void }) {
   const db = await openSqliteDatabase(join(data, 'test.db'))
   db.exec(MIGRATION_001)
   db.exec(MIGRATION_007)
+  db.exec(MIGRATION_008)
   const repository = new AiWorkspaceRepository(db)
   t.after(() => {
     db.close()
@@ -35,6 +37,19 @@ test('persists project metadata and conversation turns', async (t) => {
 
   assert.deepEqual(repository.getProject('project-1'), project)
   assert.equal(repository.listTurns('project-1')[0].content, 'Create a scraper')
+})
+
+test('persists pin state and sorts pinned projects before recent projects', async (t) => {
+  const { repository, projectRoot } = await setup(t)
+  repository.createProject({ id: 'project-old', name: 'Older', rootPath: projectRoot, language: 'javascript', profileId: 'profile-1' })
+  const newerRoot = join(projectRoot, 'newer')
+  mkdirSync(newerRoot)
+  repository.createProject({ id: 'project-new', name: 'Newer', rootPath: newerRoot, language: 'javascript', profileId: 'profile-1' })
+
+  assert.equal(repository.getProject('project-old')?.pinned, false)
+  assert.equal(repository.setProjectPinned('project-old', true)?.pinned, true)
+  assert.deepEqual(repository.listProjectSummaries().map((project) => project.id), ['project-old', 'project-new'])
+  assert.equal(repository.setProjectPinned('project-old', false)?.pinned, false)
 })
 
 test('rejects duplicate canonical project roots', async (t) => {

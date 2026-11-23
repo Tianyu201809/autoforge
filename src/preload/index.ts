@@ -117,7 +117,12 @@ const autoforge = {
     listProjectTurns: (id: string): Promise<AiProjectTurn[]> => ipcRenderer.invoke(IPC.AI_PROJECT_TURNS_LIST, id),
     createProject: (input: Omit<AiProjectCreateInput, 'id'>): Promise<AiProject> =>
       ipcRenderer.invoke(IPC.AI_PROJECT_CREATE, input),
+    renameProject: (id: string, name: string): Promise<AiProject | null> =>
+      ipcRenderer.invoke(IPC.AI_PROJECT_RENAME, id, name),
+    setProjectPinned: (id: string, pinned: boolean): Promise<AiProject | null> =>
+      ipcRenderer.invoke(IPC.AI_PROJECT_SET_PINNED, id, pinned),
     removeProject: (id: string): Promise<boolean> => ipcRenderer.invoke(IPC.AI_PROJECT_REMOVE, id),
+    exportProjectTurns: (id: string): Promise<string | null> => ipcRenderer.invoke(IPC.AI_PROJECT_EXPORT_TURNS, id),
     startTurn: (projectId: string, message: string): Promise<AiProjectTurn> =>
       ipcRenderer.invoke(IPC.AI_PROJECT_START_TURN, projectId, message),
     cancelTurn: (projectId: string): Promise<boolean> => ipcRenderer.invoke(IPC.AI_PROJECT_CANCEL_TURN, projectId),

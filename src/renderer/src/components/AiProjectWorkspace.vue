@@ -1,11 +1,16 @@
 <script setup lang="ts">
-import { computed, onMounted } from 'vue'
-import { Bot, Check, ChevronDown, CircleAlert, FolderOpen, LoaderCircle, PanelRightClose, PanelRightOpen, Plus, Send, Square, Trash2 } from 'lucide-vue-next'
+import { computed, onMounted, ref } from 'vue'
+import { Bot, Check, ChevronDown, CircleAlert, Download, FolderOpen, LoaderCircle, MoreHorizontal, PanelRightClose, PanelRightOpen, Pencil, Pin, PinOff, Plus, Send, Square, Trash2 } from 'lucide-vue-next'
 import { useAiProjectWorkspace } from '../composables/useAiProjectWorkspace'
+import { askConfirm } from '../composables/useConfirmDialog'
+import { askPrompt } from '../composables/usePromptDialog'
+import { useToast } from '../composables/useToast'
 
 const props = defineProps<{ inspectorOpen: boolean; activeProjectId: string | null }>()
 const emit = defineEmits<{ toggleInspector: []; activeProjectChange: [id: string | null] }>()
 const state = useAiProjectWorkspace(window.autoforge.ai, () => crypto.randomUUID(), (id) => emit('activeProjectChange', id))
+const openProjectActionsId = ref<string | null>(null)
+const { pushToast } = useToast()
 const currentProfile = computed(() => state.profiles.value.find((profile) => profile.id === state.activeProfileId.value))
 const conversation = computed(() => state.turns.value.filter((turn) => turn.role === 'user' || turn.content))
 
@@ -33,6 +38,51 @@ async function submitProject(): Promise<void> {
   }
   await state.createProject({ ...state.projectDraft, profileId })
 }
+
+async function renameProject(project: (typeof state.projects.value)[number]): Promise<void> {
+  openProjectActionsId.value = null
+  const name = await askPrompt({
+    title: '重命名项目',
+    message: '更改项目在 Autoforge 中显示的名称。',
+    label: '项目名称',
+    defaultValue: project.name,
+    placeholder: '输入项目名称',
+    confirmLabel: '保存名称'
+  })
+  if (name !== null) await state.renameProject(project.id, name)
+}
+
+async function toggleProjectPinned(project: (typeof state.projects.value)[number]): Promise<void> {
+  openProjectActionsId.value = null
+  await state.setProjectPinned(project.id, !project.pinned)
+}
+
+async function exportProjectTurns(project: (typeof state.projects.value)[number]): Promise<void> {
+  openProjectActionsId.value = null
+  const filePath = await state.exportProjectTurns(project.id)
+  if (filePath) {
+    pushToast({ type: 'success', title: '对话已导出', message: filePath })
+  }
+}
+
+async function confirmRemoveProject(project: (typeof state.projects.value)[number]): Promise<void> {
+  openProjectActionsId.value = null
+  const firstConfirmed = await askConfirm({
+    title: '删除项目记录？',
+    message: `将移除“${project.name}”在 Autoforge 中的项目记录和对话。本机文件夹及其中的文件会保留。`,
+    confirmLabel: '继续',
+    variant: 'danger'
+  })
+  if (!firstConfirmed) return
+
+  const secondConfirmed = await askConfirm({
+    title: '再次确认删除',
+    message: `确认移除“${project.name}”的项目记录和全部对话？此操作无法在 Autoforge 中撤销。`,
+    confirmLabel: '确认删除项目',
+    variant: 'danger'
+  })
+  if (secondConfirmed) await state.removeProject(project.id)
+}
 </script>
 
 <template>
@@ -47,9 +97,6 @@ async function submitProject(): Promise<void> {
         <span v-else class="ai-project-title">项目工作区</span>
       </div>
       <div class="ai-project-toolbar-actions">
-        <button v-if="state.activeProject.value" type="button" title="移除项目记录" aria-label="移除项目记录" @click="state.removeProject(state.activeProject.value.id)">
-          <Trash2 :size="15" />
-        </button>
         <button type="button" class="ai-toolbar-new" @click="startProject"><Plus :size="15" /> 新建项目</button>
         <button
           type="button"
@@ -69,17 +116,39 @@ async function submitProject(): Promise<void> {
           <span>项目</span>
           <button type="button" aria-label="新建项目" title="新建项目" @click="startProject"><Plus :size="15" /></button>
         </div>
-        <button
+        <div
           v-for="project in state.projects.value"
           :key="project.id"
-          type="button"
-          class="ai-project-list-item"
+          class="ai-project-list-row"
           :class="state.activeProject.value?.id === project.id && 'is-active'"
-          @click="state.openProject(project.id)"
         >
-          <span class="ai-project-list-name">{{ project.name }}</span>
-          <span class="ai-project-list-path">{{ folderName(project.rootPath) }}</span>
-        </button>
+          <button type="button" class="ai-project-list-item" @click="openProjectActionsId = null; state.openProject(project.id)">
+            <span class="ai-project-list-name">
+              <Pin v-if="project.pinned" :size="12" aria-label="已置顶" />
+              {{ project.name }}
+            </span>
+            <span class="ai-project-list-path">{{ folderName(project.rootPath) }}</span>
+          </button>
+          <button
+            type="button"
+            class="ai-project-actions-trigger"
+            aria-label="项目操作"
+            title="项目操作"
+            :aria-expanded="openProjectActionsId === project.id"
+            @click.stop="openProjectActionsId = openProjectActionsId === project.id ? null : project.id"
+            @keydown.esc="openProjectActionsId = null"
+          ><MoreHorizontal :size="16" /></button>
+          <div v-if="openProjectActionsId === project.id" class="ai-project-actions-menu" role="menu" @click.stop>
+            <button type="button" role="menuitem" @click="renameProject(project)"><Pencil :size="14" />重命名</button>
+            <button type="button" role="menuitem" @click="toggleProjectPinned(project)">
+              <PinOff v-if="project.pinned" :size="14" />
+              <Pin v-else :size="14" />
+              {{ project.pinned ? '取消置顶' : '置顶项目' }}
+            </button>
+            <button type="button" role="menuitem" @click="exportProjectTurns(project)"><Download :size="14" />导出对话</button>
+            <button type="button" role="menuitem" class="ai-project-actions-delete" @click="confirmRemoveProject(project)"><Trash2 :size="14" />删除项目</button>
+          </div>
+        </div>
         <p v-if="!state.projects.value.length && !state.loading.value" class="ai-project-list-empty">没有项目</p>
       </aside>
 
@@ -206,8 +275,19 @@ async function submitProject(): Promise<void> {
 .ai-project-body { position: relative; display: flex; flex: 1; min-width: 0; min-height: 0; }
 .ai-project-list { display: flex; width: 208px; flex: 0 0 208px; min-height: 0; flex-direction: column; gap: 3px; padding: 10px 8px; border-right: 1px solid var(--sb-border-subtle); background: var(--sb-bg-panel); overflow-y: auto; }
 .ai-project-list-heading { display: flex; align-items: center; justify-content: space-between; padding: 0 5px 7px; color: var(--sb-text-muted); font-size: 11px; font-weight: 600; }
-.ai-project-list-item { display: grid; gap: 3px; width: 100%; min-width: 0; padding: 8px; border: 0; border-radius: 5px; background: transparent; color: var(--sb-text-muted); text-align: left; cursor: pointer; }
-.ai-project-list-item:hover, .ai-project-list-item.is-active { background: var(--sb-bg-inset); color: var(--sb-text-primary); }
+.ai-project-list-row { position: relative; display: flex; min-width: 0; align-items: stretch; border-radius: 5px; }
+.ai-project-list-row.is-active { background: var(--sb-bg-inset); }
+.ai-project-list-item { display: grid; flex: 1; gap: 3px; width: 0; min-width: 0; padding: 8px; border: 0; border-radius: 5px; background: transparent; color: var(--sb-text-muted); text-align: left; cursor: pointer; }
+.ai-project-list-item:hover, .ai-project-list-row.is-active .ai-project-list-item { color: var(--sb-text-primary); }
+.ai-project-list-name { display: flex; min-width: 0; align-items: center; gap: 5px; }
+.ai-project-list-name svg { flex: 0 0 auto; color: var(--sb-accent-solid); }
+.ai-project-actions-trigger { display: grid; width: 27px; flex: 0 0 27px; place-items: center; align-self: center; border: 0; border-radius: 4px; background: transparent; color: var(--sb-text-faint); cursor: pointer; }
+.ai-project-actions-trigger:hover, .ai-project-actions-trigger[aria-expanded="true"] { background: var(--sb-bg-hover); color: var(--sb-text-primary); }
+.ai-project-actions-menu { position: absolute; z-index: 10; top: calc(100% - 3px); right: 2px; display: grid; width: 164px; gap: 2px; padding: 5px; border: 1px solid var(--sb-border-subtle); border-radius: 7px; background: var(--sb-bg-elevated); box-shadow: 0 9px 24px rgba(0,0,0,.2); }
+.ai-project-actions-menu button { display: flex; min-width: 0; align-items: center; gap: 8px; padding: 7px 8px; border: 0; border-radius: 4px; background: transparent; color: var(--sb-text-secondary); font: inherit; font-size: 11px; text-align: left; cursor: pointer; }
+.ai-project-actions-menu button:hover { background: var(--sb-bg-hover); color: var(--sb-text-primary); }
+.ai-project-actions-menu button svg { flex: 0 0 auto; }
+.ai-project-actions-menu .ai-project-actions-delete { color: var(--sb-danger, #c44); }
 .ai-project-list-name, .ai-project-list-path { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .ai-project-list-name { font-size: 12px; }
 .ai-project-list-path { color: var(--sb-text-faint); font-size: 10px; }

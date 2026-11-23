@@ -8,7 +8,8 @@
 
 ### 新增
 
-- **AI 项目工作区**：在选定的本机空文件夹中通过 Agent 创建或修改 JavaScript / Python 脚本，支持流式对话、取消、检查重试与历史恢复。
+- **AI 项目工作区**：在选定的本机文件夹中（包括已有文件的目录）通过 Agent 创建或修改 JavaScript / Python 脚本，支持流式对话、取消、检查重试与历史恢复。
+- **项目管理操作**：支持重命名、持久化置顶、两步删除确认和对话轮次 JSON 导出。
 - **自动校验和导入**：包校验及固定语法检查通过后自动导入或更新 Autoforge 脚本，不会自动运行生成的脚本。
 - **模型配置**：支持 OpenAI、Anthropic、Gemini，以及 OpenAI-compatible 的 OpenAI、DeepSeek、Qwen、GLM、Kimi、SiliconFlow 和自定义端点。
 - **统一工作台**：新增项目优先的主导航、脚本上下文侧栏、可调整布局，以及工作区内的历史、Hub、指南与设置页面。
