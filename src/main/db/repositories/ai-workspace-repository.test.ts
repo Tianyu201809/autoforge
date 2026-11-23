@@ -9,6 +9,8 @@ import { MIGRATION_008 } from '../migrations/008-ai-project-pinned'
 import { MIGRATION_009 } from '../migrations/009-ai-turn-attachments'
 import { openSqliteDatabase } from '../sqlite-adapter'
 import { AiWorkspaceRepository } from './ai-workspace-repository'
+import { createAgentService } from '../../services/ai/agent-service'
+import { createProjectWorkspace } from '../../services/ai/project-workspace'
 
 async function setup(t: { after(callback: () => void): void }) {
   const root = mkdtempSync(join(tmpdir(), 'autoforge-ai-workspace-'))
@@ -78,6 +80,57 @@ test('validates project status transitions', async (t) => {
 
   assert.throws(() => repository.updateProject('project-1', { status: 'importing' }), /项目状态转换无效/)
   assert.equal(repository.updateProject('project-1', { status: 'generating' })?.status, 'generating')
+})
+
+test('manual imports and retries use valid transitions in the persistent repository', async (t) => {
+  const { repository, projectRoot } = await setup(t)
+  const project = repository.createProject({ id: 'import-project', name: 'Demo', rootPath: projectRoot, language: 'javascript', profileId: 'offline' })
+  writeFileSync(join(projectRoot, 'autoforge.json'), JSON.stringify({ entry: 'index.mjs', language: 'javascript' }))
+  let buildFails = false
+  let importFails = false
+  let imports = 0
+  let updates = 0
+  const service = createAgentService({
+    repository,
+    profiles: { resolveProvider: () => { throw new Error('Import must not resolve a model') } },
+    workspace: createProjectWorkspace(id => repository.getProject(id)?.rootPath ?? null),
+    buildProject: async () => ({ status: buildFails ? 'failed' : 'passed', code: 'build_result', message: 'build', diagnostics: [] }),
+    checks: {
+      checkScriptPackage: async () => ({ status: 'passed', code: 'package_valid', message: 'ok', diagnostics: [] }),
+      checkScriptSyntax: async () => ({ status: 'passed', code: 'syntax_valid', message: 'ok', diagnostics: [] })
+    },
+    registry: {
+      importFromPath: () => { imports++; return { id: 'script', name: 'Demo' } },
+      updateFromProject: () => {
+        if (importFails) throw new Error('Import failed')
+        updates++
+        return { id: 'script', name: 'Demo' }
+      },
+      getById: () => ({ id: 'script' })
+    }
+  })
+  assert.equal((await service.importProject(project.id)).status, 'complete')
+  assert.equal((await service.importProject(project.id)).status, 'complete')
+  assert.equal(imports, 1)
+  assert.equal(updates, 1)
+  buildFails = true
+  assert.equal((await service.importProject(project.id)).status, 'error')
+  assert.equal(repository.getProject(project.id)?.status, 'blocked')
+  buildFails = false
+  assert.equal((await service.importProject(project.id)).status, 'complete')
+  const cancelled = await service.importProject(project.id, event => {
+    if (event.type === 'check_result') service.cancelTurn(project.id)
+  })
+  assert.equal(cancelled.status, 'cancelled')
+  assert.equal(repository.getProject(project.id)?.status, 'interrupted')
+  assert.equal((await service.importProject(project.id)).status, 'complete')
+  importFails = true
+  assert.equal((await service.importProject(project.id)).status, 'error')
+  assert.equal(repository.getProject(project.id)?.status, 'error')
+  importFails = false
+  assert.equal((await service.importProject(project.id)).status, 'complete')
+  assert.equal(repository.getProject(project.id)?.status, 'ready')
+  assert.equal(repository.listTurns(project.id).some(turn => turn.status === 'running'), false)
 })
 
 test('resumes generation after a check phase so the agent can repair files', async (t) => {
