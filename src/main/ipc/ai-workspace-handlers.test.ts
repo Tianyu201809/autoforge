@@ -30,11 +30,15 @@ function harness() {
         createdAt: '2026-11-22T00:00:00.000Z'
       }
     },
+    analyzeProject: async (id: string, onEvent: (event: AiAgentEvent) => void) => {
+      calls.push(`analyze:${id}`)
+      onEvent({ type: 'tool_started', projectId: id, turnId: 'turn-2', toolName: 'list_project_files' })
+      return {
+        id: 'turn-2', projectId: id, role: 'assistant' as const, content: 'Analyzed', status: 'complete' as const,
+        createdAt: '2026-11-22T00:00:00.000Z'
+      }
+    },
     cancelTurn: (id: string) => { calls.push(`cancel:${id}`); return true },
-    retryChecks: async () => ({
-      id: 'turn-2', projectId: project.id, role: 'assistant' as const, content: '', status: 'complete' as const,
-      createdAt: '2026-11-22T00:00:00.000Z'
-    })
   }
   const register = (channel: string, handler: Handler) => handlers.set(channel, handler)
   registerAiWorkspaceIpcHandlers(register, service, async () => null, async (exportData) => {
@@ -57,6 +61,18 @@ test('routes Agent events to the renderer that started the turn', async () => {
 
   await handlers.get(IPC.AI_PROJECT_START_TURN)!(event, 'project-1', 'Create a script')
   assert.deepEqual(received, [{ type: 'assistant_delta', projectId: 'project-1', turnId: 'turn-1', text: 'hello' }])
+})
+
+test('routes explicit analysis to the service and streams its Agent events', async () => {
+  const { handlers, calls } = harness()
+  const received: AiAgentEvent[] = []
+  const event: Event = { sender: { send: (_channel, payload) => received.push(payload) } }
+
+  const result = await handlers.get(IPC.AI_PROJECT_ANALYZE)!(event, 'project-1') as { content: string }
+
+  assert.equal(result.content, 'Analyzed')
+  assert.deepEqual(calls, ['analyze:project-1'])
+  assert.equal(received[0]?.type, 'tool_started')
 })
 
 test('routes cancellation to the requested project turn', () => {

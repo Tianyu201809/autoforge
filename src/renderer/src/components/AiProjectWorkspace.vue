@@ -1,20 +1,65 @@
 <script setup lang="ts">
-import { computed, onMounted, ref } from 'vue'
+import { computed, onMounted, onUnmounted, ref } from 'vue'
 import { Bot, Check, ChevronDown, CircleAlert, Download, FolderOpen, LoaderCircle, MoreHorizontal, PanelRightClose, PanelRightOpen, Pencil, Pin, PinOff, Plus, Send, Square, Trash2 } from 'lucide-vue-next'
 import { useAiProjectWorkspace } from '../composables/useAiProjectWorkspace'
 import { askConfirm } from '../composables/useConfirmDialog'
 import { askPrompt } from '../composables/usePromptDialog'
 import { useToast } from '../composables/useToast'
 
-const props = defineProps<{ inspectorOpen: boolean; activeProjectId: string | null }>()
-const emit = defineEmits<{ toggleInspector: []; activeProjectChange: [id: string | null] }>()
+const props = defineProps<{ inspectorOpen: boolean; inspectorWidth: number; activeProjectId: string | null }>()
+const emit = defineEmits<{ toggleInspector: []; resizeInspector: [width: number]; activeProjectChange: [id: string | null] }>()
 const state = useAiProjectWorkspace(window.autoforge.ai, () => crypto.randomUUID(), (id) => emit('activeProjectChange', id))
 const openProjectActionsId = ref<string | null>(null)
+const narrow = ref(false)
+const inspectorResizeCleanup = ref<(() => void) | null>(null)
 const { pushToast } = useToast()
 const currentProfile = computed(() => state.profiles.value.find((profile) => profile.id === state.activeProfileId.value))
 const conversation = computed(() => state.turns.value.filter((turn) => turn.role === 'user' || turn.content))
 
-onMounted(() => void state.load(props.activeProjectId))
+function startInspectorResize(event: PointerEvent): void {
+  if (event.button !== 0) return
+  event.preventDefault()
+  const startX = event.clientX
+  const startWidth = props.inspectorWidth
+  const onMove = (moveEvent: PointerEvent): void => emit('resizeInspector', startWidth + startX - moveEvent.clientX)
+  const onUp = (): void => {
+    window.removeEventListener('pointermove', onMove)
+    window.removeEventListener('pointerup', onUp)
+    document.body.style.cursor = ''
+    document.body.style.userSelect = ''
+    inspectorResizeCleanup.value = null
+  }
+  inspectorResizeCleanup.value?.()
+  inspectorResizeCleanup.value = onUp
+  document.body.style.cursor = 'col-resize'
+  document.body.style.userSelect = 'none'
+  window.addEventListener('pointermove', onMove)
+  window.addEventListener('pointerup', onUp, { once: true })
+}
+
+function resizeInspectorByKeyboard(event: KeyboardEvent): void {
+  const step = event.shiftKey ? 24 : 8
+  if (event.key === 'ArrowLeft') emit('resizeInspector', props.inspectorWidth + step)
+  else if (event.key === 'ArrowRight') emit('resizeInspector', props.inspectorWidth - step)
+  else return
+  event.preventDefault()
+}
+
+function updateViewport(): void {
+  narrow.value = window.innerWidth < 1180
+}
+
+onMounted(() => {
+  updateViewport()
+  window.addEventListener('resize', updateViewport)
+  void state.load(props.activeProjectId)
+})
+onUnmounted(() => {
+  window.removeEventListener('resize', updateViewport)
+  inspectorResizeCleanup.value?.()
+  document.body.style.cursor = ''
+  document.body.style.userSelect = ''
+})
 
 function folderName(path: string): string {
   return path.replace(/\\/g, '/').split('/').filter(Boolean).at(-1) ?? path
@@ -233,7 +278,18 @@ async function confirmRemoveProject(project: (typeof state.projects.value)[numbe
         </div>
         <p v-if="state.error.value" class="ai-project-error" role="alert"><CircleAlert :size="15" />{{ state.error.value }}</p>
       </main>
-      <aside v-if="props.inspectorOpen" class="ai-inspector">
+      <div
+        v-if="props.inspectorOpen && !narrow"
+        class="ai-inspector-resizer"
+        role="separator"
+        aria-orientation="vertical"
+        aria-label="调整检查面板宽度"
+        tabindex="0"
+        @pointerdown="startInspectorResize"
+        @keydown="resizeInspectorByKeyboard"
+      />
+      <button v-if="props.inspectorOpen && narrow" type="button" class="ai-inspector-backdrop" aria-label="关闭检查面板" @click="emit('toggleInspector')" />
+      <aside v-if="props.inspectorOpen" class="ai-inspector" :class="narrow && 'ai-inspector--drawer'" :style="{ width: narrow ? 'min(360px, calc(100vw - 72px))' : `${props.inspectorWidth}px` }">
         <header><strong>检查结果</strong><span v-if="state.activeProject.value?.status">{{ state.activeProject.value.status }}</span></header>
         <section>
           <h3>本轮文件</h3>
@@ -248,7 +304,16 @@ async function confirmRemoveProject(project: (typeof state.projects.value)[numbe
             <p>{{ check.message ?? check.status }}</p>
             <pre v-if="check.diagnostics?.length">{{ check.diagnostics.join('\n') }}</pre>
           </article>
-          <button v-if="state.activeProject.value && !state.busy.value" type="button" class="ai-retry-button" @click="state.retryChecks()">重新检查</button>
+          <button
+            v-if="state.activeProject.value"
+            type="button"
+            class="ai-analyze-button"
+            :disabled="state.busy.value"
+            @click="state.analyzeProject()"
+          >
+            <LoaderCircle v-if="state.busy.value" class="ai-spin" :size="14" />
+            <span>{{ state.busy.value ? '正在分析和检查…' : state.checkResults.value.length ? '重新分析、检查并导入' : 'AI 分析、检查并导入' }}</span>
+          </button>
         </section>
         <section>
           <h3>Autoforge 导入</h3>
@@ -256,7 +321,8 @@ async function confirmRemoveProject(project: (typeof state.projects.value)[numbe
             <Check v-if="state.importResult.value.ok" :size="14" /><CircleAlert v-else :size="14" />
             <span>{{ state.importResult.value.message }}</span>
           </div>
-          <p v-else class="ai-inspector-empty">校验通过后会自动导入</p>
+          <p v-else-if="state.checkResults.value.some((check) => check.status === 'passed') && state.checkResults.value.every((check) => check.status === 'passed')" class="ai-inspector-empty">检查通过，等待手动导入</p>
+          <p v-else class="ai-inspector-empty">手动触发分析与检查后，才会导入脚本</p>
         </section>
       </aside>
     </div>
@@ -334,7 +400,13 @@ async function confirmRemoveProject(project: (typeof state.projects.value)[numbe
 .ai-create-actions { display: flex; justify-content: flex-end; gap: 8px; margin-top: 3px; }
 .ai-project-warning, .ai-project-error { display: flex; align-items: center; gap: 6px; color: var(--sb-danger, #c44); font-size: 11px; }
 .ai-project-error { margin: 0; padding: 9px 14px; }
-.ai-inspector { display: flex; width: 320px; flex: 0 0 320px; min-width: 260px; flex-direction: column; gap: 18px; padding: 14px 12px; border-left: 1px solid var(--sb-border-subtle); background: var(--sb-bg-panel); overflow: auto; color: var(--sb-text-primary); }
+.ai-inspector-resizer { position: relative; z-index: 2; width: 9px; flex: 0 0 9px; margin-inline: -4px; cursor: col-resize; touch-action: none; }
+.ai-inspector-resizer::after { position: absolute; top: 0; bottom: 0; left: 4px; width: 1px; background: transparent; content: ''; }
+.ai-inspector-resizer:hover::after, .ai-inspector-resizer:focus-visible::after { background: var(--sb-accent-solid); }
+.ai-inspector-resizer:focus-visible { outline: none; }
+.ai-inspector { display: flex; flex: 0 0 auto; min-width: 260px; flex-direction: column; gap: 18px; padding: 14px 12px; border-left: 1px solid var(--sb-border-subtle); background: var(--sb-bg-panel); overflow: auto; color: var(--sb-text-primary); }
+.ai-inspector-backdrop { position: absolute; z-index: 2; inset: 0; border: 0; background: rgba(0,0,0,.28); }
+.ai-inspector--drawer { position: absolute; z-index: 3; top: 0; right: 0; bottom: 0; min-width: 0; box-shadow: -16px 0 40px rgba(0,0,0,.2); }
 .ai-inspector > header { display: flex; align-items: center; justify-content: space-between; font-size: 13px; }
 .ai-inspector > header span { padding: 3px 6px; border-radius: 4px; background: var(--sb-bg-inset); color: var(--sb-text-muted); font-size: 10px; }
 .ai-inspector section { display: grid; gap: 8px; }
@@ -348,11 +420,11 @@ async function confirmRemoveProject(project: (typeof state.projects.value)[numbe
 .ai-check-result p, .ai-check-result pre { margin: 0; color: var(--sb-text-muted); font-size: 10px; line-height: 1.5; overflow-wrap: anywhere; white-space: pre-wrap; }
 .is-passed > div, .ai-import-result.is-passed { color: var(--sb-success, #2d9864); }
 .is-failed > div, .ai-import-result.is-failed { color: var(--sb-danger, #c44); }
-.ai-retry-button { display: inline-flex; min-height: 30px; align-items: center; justify-content: center; gap: 5px; border: 1px solid var(--sb-border-subtle); border-radius: 5px; background: var(--sb-bg-panel); color: var(--sb-text-secondary); font: inherit; font-size: 11px; cursor: pointer; }
+.ai-analyze-button { display: inline-flex; min-height: 34px; align-items: center; justify-content: center; gap: 6px; padding: 5px 8px; border: 1px solid var(--sb-accent-solid); border-radius: 5px; background: var(--sb-accent-solid); color: var(--sb-accent-contrast, white); font: inherit; font-size: 11px; cursor: pointer; }
+.ai-analyze-button:disabled { opacity: .55; cursor: default; }
 .ai-spin { animation: ai-spin .9s linear infinite; }
 @keyframes ai-spin { to { transform: rotate(360deg); } }
 @keyframes ai-caret { to { visibility: hidden; } }
-@media (max-width: 1180px) { .ai-inspector { width: 270px; flex-basis: 270px; min-width: 260px; } }
-@media (max-width: 760px) { .ai-project-list { width: 150px; flex-basis: 150px; } .ai-inspector { width: 260px; flex-basis: 260px; } .ai-composer { width: calc(100% - 24px); margin: 0 12px 12px; } .ai-project-toolbar { padding-inline: 9px; } }
+@media (max-width: 760px) { .ai-project-list { width: 150px; flex-basis: 150px; } .ai-composer { width: calc(100% - 24px); margin: 0 12px 12px; } .ai-project-toolbar { padding-inline: 9px; } }
 @media (prefers-reduced-motion: reduce) { .ai-spin, .ai-stream-caret { animation-duration: 2s; } }
 </style>

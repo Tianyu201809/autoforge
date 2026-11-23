@@ -65,13 +65,15 @@ function safeEmit(callback: ((event: AiAgentEvent) => void) | undefined, event: 
   }
 }
 
-function makeSystemPrompt(project: AiProject): string {
+function makeSystemPrompt(project: AiProject, analyze: boolean): string {
   return [
     'You create Autoforge scripts in the selected project directory.',
     `Project language: ${project.language}.`,
-    'Only use the provided project file and check/import tools. Never request shell, arbitrary network, or script execution.',
+    'Only use the provided safe project file tools. Never request shell, arbitrary network, or script execution.',
     'Use relative paths, read files before changing them, and send the exact SHA-256 values returned by file reads when writing.',
-    'Create a valid autoforge.json and matching entry file. After changes, check the package and syntax, then call import_script.',
+    analyze
+      ? 'Inspect the current project and repair issues you find using the provided file tools. Do not attempt package checks, syntax checks, or script import; the application will run these checks and import after you finish.'
+      : 'Create or modify files requested by the user. Do not run package checks, syntax checks, or import scripts; the user can start the separate analysis and import workflow when ready.',
     'Do not place credentials, API keys, or environment values in generated files.'
   ].join('\n')
 }
@@ -145,6 +147,7 @@ export function createAgentService(options: AgentServiceOptions) {
     setStatus(projectId, 'importing')
     try {
       const linkedScript = project.importedScriptId ? options.registry.getById(project.importedScriptId) : undefined
+      if (project.importedScriptId && !linkedScript) throw new Error('关联的 Autoforge 脚本不存在，请修复项目关联后重试')
       const script = linkedScript
         ? options.registry.updateFromProject(linkedScript.id, project.rootPath)
         : options.registry.importFromPath(project.rootPath)
@@ -217,10 +220,11 @@ export function createAgentService(options: AgentServiceOptions) {
     return options.repository.removeProject(id)
   }
 
-  async function startTurn(
+  async function runTurn(
     projectId: string,
     message: string,
-    onEvent?: (event: AiAgentEvent) => void
+    onEvent?: (event: AiAgentEvent) => void,
+    analyze = false
   ): Promise<AiProjectTurn> {
     if (activeTurns.has(projectId)) throw new Error('项目已有正在运行的任务')
     if (typeof message !== 'string' || !message.trim() || message.length > MAX_USER_MESSAGE_CHARS) {
@@ -246,13 +250,13 @@ export function createAgentService(options: AgentServiceOptions) {
         const script = await importProject(currentProject.id, assistantTurn.id, onEvent)
         return { scriptId: script.id, name: script.name }
       }
-    })
+    }, { allowChecks: false, allowImport: false })
     let accumulatedText = ''
     const allChecks: ProjectCheckResult[] = []
-    let changedFiles = false
     let imported = false
     let toolCallCount = 0
     const messages = buildMessages(project, history, userTurn.content)
+    messages[0] = { role: 'system', content: makeSystemPrompt(project, analyze) }
 
     const finishTurn = (status: AiProjectTurn['status']): AiProjectTurn => {
       const finished = options.repository.updateTurn(projectId, assistantTurn.id, {
@@ -295,7 +299,7 @@ export function createAgentService(options: AgentServiceOptions) {
 
         messages.push({ role: 'assistant', content: assistantText.value, toolCalls: toolCalls.length ? toolCalls : undefined })
         if (toolCalls.length === 0) {
-          if (changedFiles && !imported) {
+          if (analyze && !imported) {
             setStatus(projectId, 'checking')
             const checks = await runChecks(options.repository.getProject(projectId)!, assistantTurn.id, onEvent, controller.signal)
             allChecks.push(...checks)
@@ -336,7 +340,6 @@ export function createAgentService(options: AgentServiceOptions) {
             resultText = result.content
             if (result.fileChanges) {
               safeEmit(onEvent, { type: 'file_changes', projectId, turnId: assistantTurn.id, changes: result.fileChanges })
-              if (result.fileChanges.applied.length > 0) changedFiles = true
             }
             for (const check of result.checks ?? []) {
               allChecks.push(check)
@@ -383,44 +386,12 @@ export function createAgentService(options: AgentServiceOptions) {
     }
   }
 
-  async function retryChecks(projectId: string): Promise<AiProjectTurn> {
-    if (activeTurns.has(projectId)) throw new Error('项目已有正在运行的任务')
-    const project = options.repository.getProject(projectId)
-    if (!project) throw new Error('AI 项目不存在')
-    const turn = options.repository.appendTurn(projectId, {
-      id: idFactory(), role: 'assistant', content: '重新检查项目文件', status: 'running', createdAt: now()
-    })
-    const controller = new AbortController()
-    activeTurns.set(projectId, { controller, turnId: turn.id })
-    const currentStatus = options.repository.getProject(projectId)?.status
-    if (currentStatus === 'ready' || currentStatus === 'interrupted') setStatus(projectId, 'generating')
-    try {
-      setStatus(projectId, 'checking')
-      const checks = await runChecks(project, turn.id, undefined, controller.signal)
-      if (controller.signal.aborted) throw new Error('turn cancelled')
-      const failed = checks.some((check) => check.status !== 'passed')
-      let importedScriptId: string | undefined
-      if (failed) {
-        setStatus(projectId, 'blocked')
-      } else {
-        const script = await importProject(projectId, turn.id)
-        importedScriptId = script.id
-      }
-      return options.repository.updateTurn(projectId, turn.id, {
-        status: 'complete', checks, importedScriptId
-      }) ?? { ...turn, status: 'complete', checks, importedScriptId }
-    } catch (error) {
-      if (isAbort(error, controller.signal)) {
-        options.repository.updateProject(projectId, { status: 'interrupted' })
-        return options.repository.updateTurn(projectId, turn.id, { status: 'cancelled' }) ?? { ...turn, status: 'cancelled' }
-      }
-      options.repository.updateProject(projectId, { status: 'error' })
-      return options.repository.updateTurn(projectId, turn.id, {
-        status: 'error', content: error instanceof Error ? error.message : '检查失败'
-      }) ?? { ...turn, status: 'error' }
-    } finally {
-      activeTurns.delete(projectId)
-    }
+  function startTurn(projectId: string, message: string, onEvent?: (event: AiAgentEvent) => void): Promise<AiProjectTurn> {
+    return runTurn(projectId, message, onEvent)
+  }
+
+  function analyzeProject(projectId: string, onEvent?: (event: AiAgentEvent) => void): Promise<AiProjectTurn> {
+    return runTurn(projectId, '分析当前项目文件并修复发现的问题，然后等待应用执行检查与导入。', onEvent, true)
   }
 
   function cancelTurn(projectId: string): boolean {
@@ -432,7 +403,7 @@ export function createAgentService(options: AgentServiceOptions) {
 
   return {
     createProject, listProjects, getProject, listTurns, renameProject, setProjectPinned,
-    removeProject, startTurn, cancelTurn, retryChecks
+    removeProject, startTurn, analyzeProject, cancelTurn
   }
 }
 

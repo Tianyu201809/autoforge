@@ -15,8 +15,17 @@ describe('AI project workspace view', () => {
   it('provides conversation controls, retry, and an inspector toggle', () => {
     assert.match(source, /sendMessage/)
     assert.match(source, /cancelTurn/)
-    assert.match(source, /retryChecks/)
+    assert.match(source, /analyzeProject/)
+    assert.match(source, /AI 分析、检查并导入/)
     assert.match(source, /toggleInspector/)
+    assert.match(source, /调整检查面板宽度/)
+    assert.match(source, /ai-inspector--drawer/)
+    assert.match(source, /aria-label="关闭检查面板"/)
+  })
+
+  it('keeps check success separate from explicit import and removes automatic import wording', () => {
+    assert.match(source, /检查通过，等待手动导入/)
+    assert.doesNotMatch(source, /校验通过后会自动导入/)
   })
 
   it('keeps project selection separate from rename, pin, export, and delete actions', () => {

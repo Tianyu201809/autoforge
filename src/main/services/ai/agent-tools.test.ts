@@ -2,7 +2,7 @@ import assert from 'node:assert/strict'
 import { test } from 'node:test'
 import { createAgentTools } from './agent-tools'
 
-function createTools(fileContent = '') {
+function createTools(fileContent = '', options?: { allowImport?: boolean }) {
   let writes = 0
   const tools = createAgentTools({
     workspace: {
@@ -18,7 +18,7 @@ function createTools(fileContent = '') {
       checkScriptSyntax: async () => ({ status: 'passed' as const, code: 'syntax_valid', message: 'ok', diagnostics: [] })
     },
     importScript: async () => ({ scriptId: 'script-1', name: 'Script' })
-  })
+  }, options)
   return { tools, getWrites: () => writes }
 }
 
@@ -36,6 +36,12 @@ const project = {
 test('rejects agent tools that are not in the allowlist', async () => {
   const { tools } = createTools()
   await assert.rejects(() => tools.execute('run_command', '{}', project), /Agent 工具不允许/)
+})
+
+test('does not expose or execute script import when import is disabled', async () => {
+  const { tools } = createTools('', { allowImport: false })
+  assert.equal(tools.definitions.some((definition) => definition.name === 'import_script'), false)
+  await assert.rejects(() => tools.execute('import_script', '{}', project), /Agent 工具不允许/)
 })
 
 test('rejects malformed write arguments before touching project files', async () => {

@@ -5,7 +5,7 @@ import type { LlmProfileView } from '../../../shared/ai-types'
 type AiWorkspaceApi = Pick<Window['autoforge']['ai'],
   'pickProjectFolder' | 'listProjects' | 'getProject' | 'listProjectTurns' | 'createProject' | 'renameProject' |
   'setProjectPinned' | 'exportProjectTurns' | 'removeProject' |
-  'startTurn' | 'cancelTurn' | 'retryChecks' | 'onAgentEvent' | 'listProfiles'>
+  'startTurn' | 'analyzeProject' | 'cancelTurn' | 'onAgentEvent' | 'listProfiles'>
 
 interface AiWorkspaceDraft {
   name: string
@@ -104,7 +104,8 @@ export function useAiProjectWorkspace(
       streamingText.value = ''
       activeTurnId.value = null
       fileChanges.value = []
-      checkResults.value = []
+      const checkedTurn = [...savedTurns].reverse().find((turn) => turn.checks?.length)
+      checkResults.value = checkedTurn?.checks as CheckSummary[] ?? []
       importResult.value = project.importedScriptId
         ? { ok: true, scriptId: project.importedScriptId, message: '已关联 Autoforge 脚本' }
         : null
@@ -261,18 +262,34 @@ export function useAiProjectWorkspace(
     }
   }
 
-  async function retryChecks(): Promise<void> {
-    if (!activeProject.value) return
+  async function analyzeProject(): Promise<void> {
+    const projectId = activeProject.value?.id
+    if (!projectId || busy.value) return
     busy.value = true
     error.value = ''
+    streamingText.value = ''
+    activeTurnId.value = null
+    fileChanges.value = []
+    checkResults.value = []
+    importResult.value = null
     try {
-      const result = await api.retryChecks(activeProject.value.id)
+      const result = await api.analyzeProject(projectId)
+      if (activeProject.value?.id !== projectId) return
       turns.value.push(result)
-      checkResults.value = result.checks as CheckSummary[] ?? []
+      if (result.checks?.length) checkResults.value = result.checks as CheckSummary[]
+      if (result.importedScriptId) importResult.value = { ok: true, scriptId: result.importedScriptId, message: '脚本已导入 Autoforge' }
     } catch (cause) {
-      error.value = cause instanceof Error ? cause.message : '重新检查失败'
+      if (activeProject.value?.id === projectId) error.value = cause instanceof Error ? cause.message : 'AI 分析与检查失败'
     } finally {
       busy.value = false
+      if (activeTurnId.value && streamingText.value) {
+        const existing = turns.value.find((turn) => turn.id === activeTurnId.value)
+        if (existing) Object.assign(existing, { content: streamingText.value, status: 'complete' })
+        else turns.value.push({
+          id: activeTurnId.value, projectId: activeProject.value?.id ?? '', role: 'assistant',
+          content: streamingText.value, status: 'complete', createdAt: new Date().toISOString()
+        })
+      }
     }
   }
 
@@ -280,6 +297,6 @@ export function useAiProjectWorkspace(
     projects, activeProject, turns, profiles, activeProfileId, credentialPersistent, loading, busy, error,
     prompt, streamingText, activeTurnId, fileChanges, checkResults, importResult, creating, projectDraft, pendingFolder,
     load, openProject, chooseProjectFolder, createProject, renameProject, setProjectPinned, exportProjectTurns,
-    removeProject, sendMessage, cancelTurn, retryChecks
+    removeProject, sendMessage, cancelTurn, analyzeProject
   }
 }

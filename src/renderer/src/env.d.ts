@@ -114,8 +114,8 @@ export interface AutoforgeApi {
     removeProject: (id: string) => Promise<boolean>
     exportProjectTurns: (id: string) => Promise<string | null>
     startTurn: (projectId: string, message: string) => Promise<AiProjectTurn>
+    analyzeProject: (projectId: string) => Promise<AiProjectTurn>
     cancelTurn: (projectId: string) => Promise<boolean>
-    retryChecks: (projectId: string) => Promise<AiProjectTurn>
     onAgentEvent: (callback: (event: AiAgentEvent) => void) => () => void
     listProfiles: () => Promise<LlmProfileListResult>
     listPresets: () => Promise<LlmProviderPreset[]>

@@ -17,8 +17,8 @@ export interface AiWorkspaceIpcService {
   setProjectPinned(id: string, pinned: boolean): AiProject | null
   removeProject(id: string): boolean
   startTurn(projectId: string, message: string, onEvent?: (event: AiAgentEvent) => void): Promise<AiProjectTurn>
+  analyzeProject(projectId: string, onEvent?: (event: AiAgentEvent) => void): Promise<AiProjectTurn>
   cancelTurn(projectId: string): boolean
-  retryChecks(projectId: string): Promise<AiProjectTurn>
 }
 
 export type SaveProjectConversation = (conversation: AiProjectConversationExport) => Promise<string | null>
@@ -78,6 +78,9 @@ export function registerAiWorkspaceIpcHandlers(
     if (typeof message !== 'string' || !message.trim()) throw new Error('Agent 消息无效')
     return service.startTurn(projectId, message, (agentEvent) => event.sender.send(IPC.EVENT_AI_AGENT, agentEvent))
   })
+  register(IPC.AI_PROJECT_ANALYZE, (event, id) => {
+    const projectId = requireId(id)
+    return service.analyzeProject(projectId, (agentEvent) => event.sender.send(IPC.EVENT_AI_AGENT, agentEvent))
+  })
   register(IPC.AI_PROJECT_CANCEL_TURN, (_event, id) => service.cancelTurn(requireId(id)))
-  register(IPC.AI_PROJECT_RETRY_CHECKS, (_event, id) => service.retryChecks(requireId(id)))
 }

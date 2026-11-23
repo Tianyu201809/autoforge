@@ -30,6 +30,11 @@ export interface AgentToolDependencies {
   importScript(project: AiProject): Promise<{ scriptId: string; name: string }>
 }
 
+export interface AgentToolOptions {
+  allowChecks?: boolean
+  allowImport?: boolean
+}
+
 export const AGENT_TOOL_DEFINITIONS: LlmToolDefinition[] = [
   {
     name: 'list_project_files',
@@ -84,8 +89,6 @@ export const AGENT_TOOL_DEFINITIONS: LlmToolDefinition[] = [
   }
 ]
 
-const ALLOWED_TOOL_NAMES = new Set(AGENT_TOOL_DEFINITIONS.map((tool) => tool.name))
-
 function parseArguments(argumentsJson: string): Record<string, unknown> {
   let parsed: unknown
   try {
@@ -112,9 +115,15 @@ function serialize(value: unknown): string {
   return JSON.stringify(value)
 }
 
-export function createAgentTools(dependencies: AgentToolDependencies) {
+export function createAgentTools(dependencies: AgentToolDependencies, options: AgentToolOptions = {}) {
+  const definitions = AGENT_TOOL_DEFINITIONS.filter((tool) =>
+    (options.allowChecks !== false || (tool.name !== 'validate_script_package' && tool.name !== 'check_script_syntax')) &&
+    (options.allowImport !== false || tool.name !== 'import_script')
+  )
+  const allowedToolNames = new Set(definitions.map((tool) => tool.name))
+
   async function execute(toolName: string, argumentsJson: string, project: AiProject): Promise<AgentToolExecution> {
-    if (!ALLOWED_TOOL_NAMES.has(toolName)) throw new Error(`Agent 工具不允许: ${toolName}`)
+    if (!allowedToolNames.has(toolName)) throw new Error(`Agent 工具不允许: ${toolName}`)
     const args = parseArguments(argumentsJson)
 
     if (toolName === 'list_project_files') {
@@ -201,5 +210,5 @@ export function createAgentTools(dependencies: AgentToolDependencies) {
     throw new Error(`Agent 工具不允许: ${toolName}`)
   }
 
-  return { definitions: AGENT_TOOL_DEFINITIONS, execute }
+  return { definitions, execute }
 }

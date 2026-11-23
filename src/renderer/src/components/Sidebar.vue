@@ -1,10 +1,5 @@
 <script setup lang="ts">
-import { onMounted, onUnmounted, ref } from 'vue'
-import {
-  clampMainSidebarWidth,
-  MAIN_SIDEBAR_DEFAULT_WIDTH,
-  MAIN_SIDEBAR_WIDTH_KEY
-} from '../constants/layout'
+import { onMounted, onUnmounted } from 'vue'
 import {
   Archive,
   BookOpen,
@@ -135,74 +130,24 @@ async function onDelete(item: CategoryItem): Promise<void> {
   emit('categoriesChanged')
 }
 
-const sidebarWidth = ref(MAIN_SIDEBAR_DEFAULT_WIDTH)
-const resizing = ref(false)
-
-function loadSidebarWidth(): void {
-  const stored = Number(localStorage.getItem(MAIN_SIDEBAR_WIDTH_KEY))
-  sidebarWidth.value = clampMainSidebarWidth(
-    Number.isFinite(stored) && stored > 0 ? stored : MAIN_SIDEBAR_DEFAULT_WIDTH
-  )
-}
-
-function onWindowResize(): void {
-  sidebarWidth.value = clampMainSidebarWidth(sidebarWidth.value)
-}
-
-function onResizeStart(e: MouseEvent): void {
-  e.preventDefault()
-  resizing.value = true
-  const startX = e.clientX
-  const startWidth = sidebarWidth.value
-
-  const onMove = (ev: MouseEvent): void => {
-    sidebarWidth.value = clampMainSidebarWidth(startWidth + (ev.clientX - startX))
-  }
-
-  const onUp = (): void => {
-    resizing.value = false
-    localStorage.setItem(MAIN_SIDEBAR_WIDTH_KEY, String(sidebarWidth.value))
-    document.removeEventListener('mousemove', onMove)
-    document.removeEventListener('mouseup', onUp)
-    document.body.style.cursor = ''
-    document.body.style.userSelect = ''
-  }
-
-  document.body.style.cursor = 'col-resize'
-  document.body.style.userSelect = 'none'
-  document.addEventListener('mousemove', onMove)
-  document.addEventListener('mouseup', onUp)
-}
-
-function onResizeReset(): void {
-  sidebarWidth.value = MAIN_SIDEBAR_DEFAULT_WIDTH
-  localStorage.setItem(MAIN_SIDEBAR_WIDTH_KEY, String(MAIN_SIDEBAR_DEFAULT_WIDTH))
-}
-
-onMounted(() => {
-  loadSidebarWidth()
-  window.addEventListener('keydown', onKeydown)
-  window.addEventListener('resize', onWindowResize)
-})
-onUnmounted(() => {
-  window.removeEventListener('keydown', onKeydown)
-  window.removeEventListener('resize', onWindowResize)
-})
+onMounted(() => window.addEventListener('keydown', onKeydown))
+onUnmounted(() => window.removeEventListener('keydown', onKeydown))
 </script>
 
 <template>
   <aside
-    class="relative flex-shrink-0 border-r sb-border sb-bg-panel flex flex-col min-h-0 h-full overflow-hidden"
-    :class="resizing && 'select-none'"
-    :style="{ width: `${sidebarWidth}px` }"
+    class="relative w-full flex-shrink-0 border-r sb-border sb-bg-panel flex flex-col min-h-0 h-full overflow-hidden"
   >
-    <div
-      class="resize-handle-col resize-handle-col--edge-right"
-      :class="resizing && 'is-active'"
-      title="拖拽调节宽度，双击恢复默认"
-      @mousedown="onResizeStart"
-      @dblclick="onResizeReset"
-    />
+    <div class="flex-shrink-0 px-3 pt-3">
+      <button
+        type="button"
+        class="w-full flex items-center justify-center gap-2 h-8 rounded-lg sb-btn-accent text-[12px] font-medium transition-colors"
+        @click="emit('import')"
+      >
+        <Upload class="w-3.5 h-3.5" :stroke-width="1.5" />
+        上传脚本
+      </button>
+    </div>
     <div class="flex-shrink-0 p-3">
       <div class="relative group">
         <Search
@@ -270,15 +215,7 @@ onUnmounted(() => {
       </div>
     </div>
 
-    <div class="flex-shrink-0 p-3 border-t sb-border-subtle space-y-1.5">
-      <button
-        type="button"
-        class="w-full flex items-center justify-center gap-2 h-7 rounded-lg sb-btn-accent text-[12px] font-medium transition-colors"
-        @click="emit('import')"
-      >
-        <Upload class="w-3.5 h-3.5" :stroke-width="1.5" />
-        上传脚本
-      </button>
+    <div class="flex-shrink-0 p-3 border-t sb-border-subtle">
       <div class="flex items-center justify-around gap-0.5 pt-0.5">
         <button
           type="button"

@@ -558,8 +558,10 @@ onUnmounted(() => {
       <AiProjectWorkspace
         v-if="workspaceNavigation.state.view === 'projects'"
         :inspector-open="workspaceNavigation.state.inspectorOpen"
+        :inspector-width="workspaceNavigation.state.inspectorWidth"
         :active-project-id="workspaceNavigation.state.activeProjectId"
         @toggle-inspector="workspaceNavigation.toggleInspector()"
+        @resize-inspector="workspaceNavigation.setWidths({ inspectorWidth: $event })"
         @active-project-change="workspaceNavigation.setActiveProject"
       />
       <div v-else-if="workspaceNavigation.state.view === 'scripts'" class="flex flex-1 min-h-0 min-w-0 overflow-x-auto">

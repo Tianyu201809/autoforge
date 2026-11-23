@@ -86,7 +86,7 @@ onUnmounted(() => {
     <slot name="context" />
     <div
       v-if="slots.context && !layout.contextCollapsed"
-      class="workspace-resizer"
+      class="workspace-resizer workspace-resizer--context-edge"
       role="separator"
       aria-orientation="vertical"
       aria-label="调整上下文侧栏宽度"
@@ -211,6 +211,18 @@ onUnmounted(() => {
 .workspace-resizer:hover::after,
 .workspace-resizer:focus-visible::after {
   background: var(--sb-accent-solid);
+}
+
+.workspace-resizer--context-edge {
+  z-index: 4;
+  width: 9px;
+  flex-basis: 9px;
+  margin-left: -4px;
+  margin-right: -5px;
+}
+
+.workspace-resizer--context-edge::after {
+  left: 4px;
 }
 
 .workspace-resizer:focus-visible {

@@ -125,8 +125,8 @@ const autoforge = {
     exportProjectTurns: (id: string): Promise<string | null> => ipcRenderer.invoke(IPC.AI_PROJECT_EXPORT_TURNS, id),
     startTurn: (projectId: string, message: string): Promise<AiProjectTurn> =>
       ipcRenderer.invoke(IPC.AI_PROJECT_START_TURN, projectId, message),
+    analyzeProject: (projectId: string): Promise<AiProjectTurn> => ipcRenderer.invoke(IPC.AI_PROJECT_ANALYZE, projectId),
     cancelTurn: (projectId: string): Promise<boolean> => ipcRenderer.invoke(IPC.AI_PROJECT_CANCEL_TURN, projectId),
-    retryChecks: (projectId: string): Promise<AiProjectTurn> => ipcRenderer.invoke(IPC.AI_PROJECT_RETRY_CHECKS, projectId),
     onAgentEvent: (callback: (event: AiAgentEvent) => void): (() => void) => {
       const handler = (_event: IpcRendererEvent, payload: AiAgentEvent) => callback(payload)
       ipcRenderer.on(IPC.EVENT_AI_AGENT, handler)

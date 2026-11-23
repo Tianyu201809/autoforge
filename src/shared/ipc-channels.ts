@@ -107,8 +107,8 @@ export const IPC = {
   AI_PROJECT_REMOVE: 'ai:project:remove',
   AI_PROJECT_EXPORT_TURNS: 'ai:project:export-turns',
   AI_PROJECT_START_TURN: 'ai:project:start-turn',
+  AI_PROJECT_ANALYZE: 'ai:project:analyze',
   AI_PROJECT_CANCEL_TURN: 'ai:project:cancel-turn',
-  AI_PROJECT_RETRY_CHECKS: 'ai:project:retry-checks',
   EVENT_AI_AGENT: 'event:ai-agent',
 
   HUB_SESSION: 'hub:session',

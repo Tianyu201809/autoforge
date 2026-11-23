@@ -15,17 +15,21 @@ function createHarness() {
     id: 'project-a', name: 'Work project', rootPath: root, language: 'javascript', profileId: 'profile-a', status: 'ready',
     pinned: false, createdAt: 'now', updatedAt: 'now'
   }
+  const secondProject: AiProject = { ...project, id: 'project-b', name: 'Other project', importedScriptId: undefined }
   let currentProject = project
   const calls: Array<{ method: string; value?: unknown }> = []
   const listeners = new Set<(event: AiAgentEvent) => void>()
   let folder: string | null = root
   let projects: AiProjectSummary[] = []
   let removeResult = true
+  let analysisError = false
+  let analysisDeferred = false
+  let resolveAnalysis: ((turn: AiProjectTurn) => void) | null = null
   const turn: AiProjectTurn = { id: 'turn-a', projectId: project.id, role: 'assistant', content: 'Done.', status: 'complete', checks: [], createdAt: 'now' }
   const api = {
     pickProjectFolder: async () => folder,
     listProjects: async () => projects,
-    getProject: async (id: string) => id === project.id ? project : null,
+    getProject: async (id: string) => id === project.id ? project : id === secondProject.id ? secondProject : null,
     listProjectTurns: async () => [],
     createProject: async (input: Omit<AiProject, 'id' | 'status' | 'createdAt' | 'updatedAt'>) => {
       calls.push({ method: 'createProject', value: input })
@@ -54,16 +58,28 @@ function createHarness() {
       return 'C:/exports/project.json'
     },
     startTurn: async (id: string, message: string) => { calls.push({ method: 'startTurn', value: message }); return turn },
+    analyzeProject: async (id: string) => {
+      calls.push({ method: 'analyzeProject', value: id })
+      if (analysisError) throw new Error('analysis failed')
+      if (analysisDeferred) return new Promise<AiProjectTurn>((resolve) => { resolveAnalysis = resolve })
+      listeners.forEach((listener) => {
+        listener({ type: 'check_result', projectId: id, turnId: turn.id, check: { code: 'package_valid', status: 'passed' } })
+        listener({ type: 'import_result', projectId: id, turnId: turn.id, ok: true, scriptId: 'script-a', message: '已导入' })
+      })
+      return { ...turn, importedScriptId: 'script-a' }
+    },
     cancelTurn: async (id: string) => { calls.push({ method: 'cancelTurn', value: id }); return true },
-    retryChecks: async () => turn,
     onAgentEvent: (callback: (event: AiAgentEvent) => void) => { listeners.add(callback); return () => listeners.delete(callback) },
     listProfiles: async (): Promise<LlmProfileListResult> => ({ profiles, activeProfileId: 'profile-a', credentialPersistent: true }),
     listPresets: async () => [],
     emit: (event: AiAgentEvent) => listeners.forEach((listener) => listener(event)),
     setFolder: (value: string | null) => { folder = value },
-    setRemoveResult: (value: boolean) => { removeResult = value }
+    setRemoveResult: (value: boolean) => { removeResult = value },
+    setAnalysisError: (value: boolean) => { analysisError = value },
+    setAnalysisDeferred: (value: boolean) => { analysisDeferred = value },
+    resolveAnalysis: (value: AiProjectTurn) => resolveAnalysis?.(value)
   }
-  return { api, calls, listeners, project, turn, setRemoveResult: api.setRemoveResult }
+  return { api, calls, listeners, project, secondProject, turn, setRemoveResult: api.setRemoveResult, setAnalysisError: api.setAnalysisError, setAnalysisDeferred: api.setAnalysisDeferred, resolveAnalysis: api.resolveAnalysis }
 }
 
 test('creates a project from the selected folder and restores the saved project', async () => {
@@ -91,6 +107,55 @@ test('updates an active turn from events and cancels it from the workspace', asy
   await state.cancelTurn()
   await sending
   assert.equal(harness.calls.some((call) => call.method === 'cancelTurn'), true)
+  assert.equal(state.importResult.value, null)
+  scope.stop()
+})
+
+test('runs analysis only on explicit request and collects its check and import result', async () => {
+  const harness = createHarness()
+  const scope = effectScope()
+  const state = scope.run(() => useAiProjectWorkspace(harness.api))!
+  await state.load()
+  await state.openProject('project-a')
+
+  await state.analyzeProject()
+
+  assert.deepEqual(harness.calls.map((call) => call.method), ['analyzeProject'])
+  assert.equal(state.checkResults.value[0]?.code, 'package_valid')
+  assert.equal(state.importResult.value?.scriptId, 'script-a')
+  assert.equal(state.busy.value, false)
+  scope.stop()
+})
+
+test('clears analysis busy state and exposes errors when the explicit analysis fails', async () => {
+  const harness = createHarness()
+  harness.setAnalysisError(true)
+  const scope = effectScope()
+  const state = scope.run(() => useAiProjectWorkspace(harness.api))!
+  await state.load()
+  await state.openProject('project-a')
+
+  await state.analyzeProject()
+
+  assert.equal(state.error.value, 'analysis failed')
+  assert.equal(state.busy.value, false)
+  scope.stop()
+})
+
+test('keeps an analysis result attached to its project when the user switches projects', async () => {
+  const harness = createHarness()
+  harness.setAnalysisDeferred(true)
+  const scope = effectScope()
+  const state = scope.run(() => useAiProjectWorkspace(harness.api))!
+  await state.openProject('project-a')
+  const analyzing = state.analyzeProject()
+  await state.openProject('project-b')
+  harness.resolveAnalysis({ ...harness.turn, projectId: 'project-a', importedScriptId: 'script-a' })
+  await analyzing
+
+  assert.equal(state.activeProject.value?.id, 'project-b')
+  assert.equal(state.turns.value.some((turn) => turn.projectId === 'project-a'), false)
+  assert.equal(state.importResult.value, null)
   scope.stop()
 })
 

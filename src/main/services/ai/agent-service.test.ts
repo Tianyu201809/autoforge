@@ -106,8 +106,9 @@ function writeTool(changes: Array<{ path: string; content: string }>, expectedHa
   ]
 }
 
-test('runs a multi-step tool loop and automatically imports after both checks pass', async (t) => {
+test('normal chat writes files without checking or importing them', async (t) => {
   const manifest = JSON.stringify({ autoforge: '1.0', name: 'Demo', entry: 'index.mjs', language: 'javascript' }, null, 2)
+  const checkCalls: string[] = []
   const { root, service, projects, calls, imported } = createHarness((_request, call) => (async function* () {
     if (call === 1) yield* writeTool([
       { path: 'autoforge.json', content: manifest },
@@ -117,15 +118,67 @@ test('runs a multi-step tool loop and automatically imports after both checks pa
       yield { type: 'text_delta', text: '脚本已生成。' }
       yield { type: 'complete', finishReason: 'stop' }
     }
-  })())
+  })(), {
+    checks: {
+      checkScriptPackage: async () => { checkCalls.push('package'); return { status: 'passed' as const, code: 'package_valid', message: 'ok', diagnostics: [] } },
+      checkScriptSyntax: async () => { checkCalls.push('syntax'); return { status: 'passed' as const, code: 'syntax_valid', message: 'ok', diagnostics: [] } }
+    }
+  })
   t.after(() => rmSync(root, { recursive: true, force: true }))
   const project = await service.createProject({ rootPath: root, name: 'Demo', language: 'javascript', profileId: 'profile-1' })
 
   const turn = await service.startTurn(project.id, '创建一个脚本')
   assert.equal(calls.length, 2)
-  assert.equal(imported[0], 'new-script')
-  assert.equal(projects.get(project.id)?.importedScriptId, 'new-script')
+  assert.deepEqual(checkCalls, [])
+  assert.deepEqual(imported, [])
+  assert.equal(projects.get(project.id)?.importedScriptId, undefined)
   assert.equal(turn.status, 'complete')
+})
+
+test('explicit project analysis checks and imports after the agent finishes', async (t) => {
+  const manifest = JSON.stringify({ autoforge: '1.0', name: 'Demo', entry: 'index.mjs', language: 'javascript' }, null, 2)
+  const order: string[] = []
+  const { root, service, projects, imported } = createHarness((_request, call) => (async function* () {
+    if (call === 1) yield* writeTool([
+      { path: 'autoforge.json', content: manifest },
+      { path: 'index.mjs', content: 'export function run() {}' }
+    ], { 'autoforge.json': null, 'index.mjs': null })
+    else yield { type: 'complete', finishReason: 'stop' }
+  })(), {
+    checks: {
+      checkScriptPackage: async () => { order.push('package'); return { status: 'passed' as const, code: 'package_valid', message: 'ok', diagnostics: [] } },
+      checkScriptSyntax: async () => { order.push('syntax'); return { status: 'passed' as const, code: 'syntax_valid', message: 'ok', diagnostics: [] } }
+    },
+    registry: {
+      importFromPath: () => { order.push('import'); imported.push('new-script'); return { id: 'new-script', name: 'Demo' } },
+      updateFromProject: () => { order.push('update'); return { id: 'existing-script', name: 'Demo' } },
+      getById: () => undefined
+    }
+  })
+  t.after(() => rmSync(root, { recursive: true, force: true }))
+  const project = await service.createProject({ rootPath: root, name: 'Demo', language: 'javascript', profileId: 'profile-1' })
+
+  const turn = await service.analyzeProject(project.id)
+
+  assert.deepEqual(order, ['package', 'syntax', 'import'])
+  assert.equal(turn.importedScriptId, 'new-script')
+  assert.equal(projects.get(project.id)?.importedScriptId, 'new-script')
+})
+
+test('fails analysis instead of silently reimporting when the linked script is missing', async (t) => {
+  const { root, service, serviceOptions, imported } = createHarness(async function* () {
+    yield { type: 'complete', finishReason: 'stop' }
+  })
+  t.after(() => rmSync(root, { recursive: true, force: true }))
+  writeFileSync(join(root, 'autoforge.json'), JSON.stringify({ autoforge: '1.0', name: 'Demo', entry: 'index.mjs', language: 'javascript' }))
+  writeFileSync(join(root, 'index.mjs'), 'export function run() {}')
+  const project = await service.createProject({ rootPath: root, name: 'Demo', language: 'javascript', profileId: 'profile-1' })
+  serviceOptions.repository.updateProject(project.id, { importedScriptId: 'deleted-script' })
+
+  const turn = await service.analyzeProject(project.id)
+
+  assert.equal(turn.status, 'error')
+  assert.deepEqual(imported, [])
 })
 
 test('lists saved project turns so a selected project can restore its conversation', async (t) => {
@@ -185,7 +238,7 @@ test('repairs a failed syntax check before importing', async (t) => {
   t.after(() => rmSync(root, { recursive: true, force: true }))
   const project = await service.createProject({ rootPath: root, name: 'Demo', language: 'javascript', profileId: 'profile-1' })
 
-  const turn = await service.startTurn(project.id, '修复语法')
+  const turn = await service.analyzeProject(project.id)
   assert.equal(calls.length, 4)
   assert.equal(syntaxChecks, 2)
   assert.equal(imported[0], 'new-script')
@@ -206,6 +259,7 @@ test('allows only one running turn for a project and cancels before import', asy
   const firstTurn = service.startTurn(project.id, '等待')
   await providerEntered
   await assert.rejects(() => service.startTurn(project.id, '第二轮'), /已有正在运行的任务/)
+  await assert.rejects(() => service.analyzeProject(project.id), /已有正在运行的任务/)
   assert.equal(service.cancelTurn(project.id), true)
   assert.equal((await firstTurn).status, 'cancelled')
   assert.deepEqual(imported, [])
@@ -233,7 +287,7 @@ test('cancels after validation and does not begin the import phase', async (t) =
   t.after(() => rmSync(root, { recursive: true, force: true }))
   const project = await service.createProject({ rootPath: root, name: 'Demo', language: 'javascript', profileId: 'profile-1' })
 
-  const turn = await service.startTurn(project.id, '创建脚本', (event) => {
+  const turn = await service.analyzeProject(project.id, (event) => {
     if (event.type === 'check_result' && (event.check as { code?: string }).code === 'package_valid') {
       service.cancelTurn(project.id)
     }
