@@ -71,15 +71,13 @@ function safeEmit(callback: ((event: AiAgentEvent) => void) | undefined, event: 
   }
 }
 
-function makeSystemPrompt(project: AiProject, analyze: boolean): string {
+function makeSystemPrompt(project: AiProject): string {
   return [
     'You create Autoforge scripts in the selected project directory.',
     `Project language: ${project.language}.`,
     'Only use the provided safe project file tools. Never request shell, arbitrary network, or script execution.',
     'Use relative paths, read files before changing them, and send the exact SHA-256 values returned by file reads when writing.',
-    analyze
-      ? 'Inspect the current project and repair issues you find using the provided file tools. The application will run npm run build when package.json defines scripts.build, validate the autoforge.json entry and syntax, then import after you finish. Repair any build or validation diagnostics returned by the application.'
-      : 'Create or modify files requested by the user. Do not run package checks, syntax checks, or import scripts; the user can start the separate analysis and import workflow when ready.',
+    'Create or modify files requested by the user. Do not build, check, or import scripts; the user starts the separate build and import workflow when ready.',
     'Do not place credentials, API keys, or environment values in generated files.'
   ].join('\n')
 }
@@ -140,7 +138,7 @@ export function createAgentService(options: AgentServiceOptions) {
     return [buildCheck, packageCheck, syntaxCheck]
   }
 
-  async function importProject(projectId: string, turnId: string, callback?: (event: AiAgentEvent) => void): Promise<{ id: string; name: string }> {
+  async function registerProjectScript(projectId: string, turnId: string, callback?: (event: AiAgentEvent) => void): Promise<{ id: string; name: string }> {
     const project = options.repository.getProject(projectId)
     if (!project) throw new Error('AI 项目不存在')
     setStatus(projectId, 'importing')
@@ -217,8 +215,8 @@ export function createAgentService(options: AgentServiceOptions) {
     }
     return { role: 'user', content, parts }
   }
-  function buildMessages(project: AiProject, history: AiProjectTurn[], current: LlmMessage, analyze: boolean): LlmMessage[] {
-    const system: LlmMessage = { role: 'system', content: makeSystemPrompt(project, analyze) }
+  function buildMessages(project: AiProject, history: AiProjectTurn[], current: LlmMessage): LlmMessage[] {
+    const system: LlmMessage = { role: 'system', content: makeSystemPrompt(project) }
     const messages = [system, current]
     if (messageChars(messages) > MAX_CONTEXT_CHARS || messageBytes(messages) > ATTACHMENT_LIMITS.requestBytes) throw new Error('附件或消息超过上下文限制，请减少附件')
     // Failed requests never established model context; omit their user payloads on follow-up.
@@ -284,7 +282,6 @@ export function createAgentService(options: AgentServiceOptions) {
     projectId: string,
     message: string,
     onEvent?: (event: AiAgentEvent) => void,
-    analyze = false,
     turnOptions: AiTurnOptions = {}
   ): Promise<AiProjectTurn> {
     if (activeTurns.has(projectId)) throw new Error('项目已有正在运行的任务')
@@ -311,7 +308,7 @@ export function createAgentService(options: AgentServiceOptions) {
       return options.attachments.read(projectId, id).metadata
     })
     if (attachments.reduce((sum, a) => sum + a.size, 0) > ATTACHMENT_LIMITS.totalBytes) throw new Error('附件总大小超过 20 MB')
-    const messages = buildMessages(project, history, toMessage(projectId, message, attachments), analyze)
+    const messages = buildMessages(project, history, toMessage(projectId, message, attachments))
     if (!retry) options.repository.appendTurn(projectId, {
       id: idFactory(), role: 'user', content: message, attachments: attachments.length ? attachments : undefined, status: 'complete', createdAt: now()
     })
@@ -324,7 +321,7 @@ export function createAgentService(options: AgentServiceOptions) {
       workspace: options.workspace,
       checks: options.checks,
       importScript: async (currentProject) => {
-        const script = await importProject(currentProject.id, assistantTurn.id, onEvent)
+        const script = await registerProjectScript(currentProject.id, assistantTurn.id, onEvent)
         return { scriptId: script.id, name: script.name }
       }
     }, { allowChecks: false, allowImport: false })
@@ -374,27 +371,6 @@ export function createAgentService(options: AgentServiceOptions) {
 
         messages.push({ role: 'assistant', content: assistantText.value, toolCalls: toolCalls.length ? toolCalls : undefined })
         if (toolCalls.length === 0) {
-          if (analyze && !imported) {
-            setStatus(projectId, 'checking')
-            const checks = await runChecks(options.repository.getProject(projectId)!, assistantTurn.id, onEvent, controller.signal)
-            allChecks.push(...checks)
-            if (controller.signal.aborted) throw new Error('turn cancelled')
-            if (checks.some((check) => check.status !== 'passed')) {
-              setStatus(projectId, 'blocked')
-              const diagnostics = checks.filter((check) => check.status !== 'passed')
-                .map((check) => `${check.message}\n${check.diagnostics.join('\n')}`).join('\n')
-              if (round + 1 < maxToolRounds) {
-                messages.push({ role: 'user', content: `自动检查未通过，请修复后再次检查。\n${diagnostics}` })
-                setStatus(projectId, 'generating')
-                continue
-              }
-              return finishTurn('complete')
-            }
-            if (controller.signal.aborted) throw new Error('turn cancelled')
-            const script = await importProject(projectId, assistantTurn.id, onEvent)
-            imported = true
-            options.repository.updateTurn(projectId, assistantTurn.id, { importedScriptId: script.id })
-          }
           const currentStatus = options.repository.getProject(projectId)?.status
           if (currentStatus && currentStatus !== 'ready') setStatus(projectId, 'ready')
           return finishTurn('complete')
@@ -462,11 +438,47 @@ export function createAgentService(options: AgentServiceOptions) {
   }
 
   function startTurn(projectId: string, message: string, onEvent?: (event: AiAgentEvent) => void, turnOptions?: AiTurnOptions): Promise<AiProjectTurn> {
-    return runTurn(projectId, message, onEvent, false, turnOptions)
+    return runTurn(projectId, message, onEvent, turnOptions)
   }
 
-  function analyzeProject(projectId: string, onEvent?: (event: AiAgentEvent) => void): Promise<AiProjectTurn> {
-    return runTurn(projectId, '分析当前项目文件并修复发现的问题，然后等待应用执行检查与导入。', onEvent, true)
+  async function importProject(projectId: string, onEvent?: (event: AiAgentEvent) => void): Promise<AiProjectTurn> {
+    if (activeTurns.has(projectId)) throw new Error('项目已有正在运行的任务')
+    const project = options.repository.getProject(projectId)
+    if (!project) throw new Error('AI 项目不存在')
+    const controller = new AbortController()
+    const turn = options.repository.appendTurn(projectId, {
+      id: idFactory(), role: 'assistant', content: '', status: 'running', createdAt: now(), checks: []
+    })
+    activeTurns.set(projectId, { controller, turnId: turn.id })
+    let checks: ProjectCheckResult[] = []
+    let status: AiProjectTurn['status'] = 'complete'
+    let content: string
+    let importedScriptId: string | undefined
+    try {
+      setStatus(projectId, 'checking')
+      checks = await runChecks(project, turn.id, onEvent, controller.signal)
+      if (controller.signal.aborted) throw new Error('import cancelled')
+      if (checks.some(check => check.status !== 'passed')) {
+        setStatus(projectId, 'blocked')
+        status = 'error'
+        content = '构建或检查未通过，请处理诊断后重新导入。'
+      } else {
+        const script = await registerProjectScript(projectId, turn.id, onEvent)
+        importedScriptId = script.id
+        content = '脚本已导入 Autoforge。'
+      }
+    } catch (error) {
+      status = controller.signal.aborted ? 'cancelled' : 'error'
+      setStatus(projectId, controller.signal.aborted ? 'interrupted' : 'error')
+      content = controller.signal.aborted ? '导入已取消。' : `导入失败：${error instanceof Error ? error.message : '未知错误'}`
+      checks.push({ status: 'blocked', code: controller.signal.aborted ? 'import_cancelled' : 'import_failed', message: content, diagnostics: [] })
+    } finally {
+      activeTurns.delete(projectId)
+    }
+    const patch = { status, content, checks, importedScriptId }
+    const result = options.repository.updateTurn(projectId, turn.id, patch) ?? { ...turn, ...patch }
+    safeEmit(onEvent, { type: 'turn_finished', projectId, turnId: turn.id, status })
+    return result
   }
 
   function cancelTurn(projectId: string): boolean {
@@ -479,7 +491,7 @@ export function createAgentService(options: AgentServiceOptions) {
   return {
     createProject, listProjects, getProject, listTurns, renameProject, setProjectPinned,
     stageAttachments, previewAttachment, removeAttachment,
-    removeProject, startTurn, analyzeProject, cancelTurn
+    removeProject, startTurn, importProject, cancelTurn
   }
 }
 

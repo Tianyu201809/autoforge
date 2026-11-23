@@ -33,11 +33,11 @@ function harness() {
         createdAt: '2026-11-22T00:00:00.000Z'
       }
     },
-    analyzeProject: async (id: string, onEvent: (event: AiAgentEvent) => void) => {
-      calls.push(`analyze:${id}`)
-      onEvent({ type: 'tool_started', projectId: id, turnId: 'turn-2', toolName: 'list_project_files' })
+    importProject: async (id: string, onEvent: (event: AiAgentEvent) => void) => {
+      calls.push(`import:${id}`)
+      onEvent({ type: 'check_result', projectId: id, turnId: 'turn-2', check: { code: 'build_passed', status: 'passed' } })
       return {
-        id: 'turn-2', projectId: id, role: 'assistant' as const, content: 'Analyzed', status: 'complete' as const,
+        id: 'turn-2', projectId: id, role: 'assistant' as const, content: 'Imported', status: 'complete' as const,
         createdAt: '2026-11-22T00:00:00.000Z'
       }
     },
@@ -66,16 +66,16 @@ test('routes Agent events to the renderer that started the turn', async () => {
   assert.deepEqual(received, [{ type: 'assistant_delta', projectId: 'project-1', turnId: 'turn-1', text: 'hello' }])
 })
 
-test('routes explicit analysis to the service and streams its Agent events', async () => {
+test('routes explicit import to the service and streams build events', async () => {
   const { handlers, calls } = harness()
   const received: AiAgentEvent[] = []
   const event: Event = { sender: { send: (_channel, payload) => received.push(payload) } }
 
-  const result = await handlers.get(IPC.AI_PROJECT_ANALYZE)!(event, 'project-1') as { content: string }
+  const result = await handlers.get(IPC.AI_PROJECT_IMPORT)!(event, 'project-1') as { content: string }
 
-  assert.equal(result.content, 'Analyzed')
-  assert.deepEqual(calls, ['analyze:project-1'])
-  assert.equal(received[0]?.type, 'tool_started')
+  assert.equal(result.content, 'Imported')
+  assert.deepEqual(calls, ['import:project-1'])
+  assert.equal(received[0]?.type, 'check_result')
 })
 
 test('routes cancellation to the requested project turn', () => {

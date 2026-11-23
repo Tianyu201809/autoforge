@@ -1,5 +1,4 @@
 import assert from 'node:assert/strict'
-import { createHash } from 'node:crypto'
 import { mkdtempSync, realpathSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
@@ -136,16 +135,10 @@ test('normal chat writes files without checking or importing them', async (t) =>
   assert.equal(turn.status, 'complete')
 })
 
-test('explicit project analysis checks and imports after the agent finishes', async (t) => {
+test('manual import builds and imports without resolving a model', async (t) => {
   const manifest = JSON.stringify({ autoforge: '1.0', name: 'Demo', entry: 'index.mjs', language: 'javascript' }, null, 2)
   const order: string[] = []
-  const { root, service, projects, imported } = createHarness((_request, call) => (async function* () {
-    if (call === 1) yield* writeTool([
-      { path: 'autoforge.json', content: manifest },
-      { path: 'index.mjs', content: 'export function run() {}' }
-    ], { 'autoforge.json': null, 'index.mjs': null })
-    else yield { type: 'complete', finishReason: 'stop' }
-  })(), {
+  const { root, service, serviceOptions, projects, imported, calls } = createHarness(() => { throw new Error('AI must not run') }, {
     buildProject: async () => { order.push('build'); return { status: 'passed', code: 'build_passed', message: 'ok', diagnostics: [] } },
     checks: {
       checkScriptPackage: async () => { order.push('package'); return { status: 'passed' as const, code: 'package_valid', message: 'ok', diagnostics: [] } },
@@ -160,14 +153,18 @@ test('explicit project analysis checks and imports after the agent finishes', as
   t.after(() => rmSync(root, { recursive: true, force: true }))
   const project = await service.createProject({ rootPath: root, name: 'Demo', language: 'javascript', profileId: 'profile-1' })
 
-  const turn = await service.analyzeProject(project.id)
+  writeFileSync(join(root, 'autoforge.json'), manifest)
+  writeFileSync(join(root, 'index.mjs'), 'export function run() {}')
+  serviceOptions.profiles.resolveProvider = () => { throw new Error('model unavailable') }
+  const turn = await service.importProject(project.id)
 
+  assert.equal(calls.length, 0)
   assert.deepEqual(order, ['build', 'package', 'syntax', 'import'])
   assert.equal(turn.importedScriptId, 'new-script')
   assert.equal(projects.get(project.id)?.importedScriptId, 'new-script')
 })
 
-test('a failed build blocks import and sends diagnostics back for repair', async (t) => {
+test('a failed build blocks import without asking AI to repair', async (t) => {
   let builds = 0
   const { root, service, imported, calls } = createHarness(async function* () {
     yield { type: 'complete', finishReason: 'stop' }
@@ -180,13 +177,14 @@ test('a failed build blocks import and sends diagnostics back for repair', async
   })
   t.after(() => rmSync(root, { recursive: true, force: true }))
   const project = await service.createProject({ rootPath: root, name: 'Demo', language: 'javascript', profileId: 'profile-1' })
-  await service.analyzeProject(project.id)
-  assert.equal(builds, 2)
+  const result = await service.importProject(project.id)
+  assert.equal(builds, 1)
   assert.deepEqual(imported, [])
-  assert.match(JSON.stringify(calls[1].messages), /missing dependency in build/)
+  assert.equal(calls.length, 0)
+  assert.match(JSON.stringify(result.checks), /missing dependency in build/)
 })
 
-test('fails analysis instead of silently reimporting when the linked script is missing', async (t) => {
+test('fails import instead of silently reimporting when the linked script is missing', async (t) => {
   const { root, service, serviceOptions, imported } = createHarness(async function* () {
     yield { type: 'complete', finishReason: 'stop' }
   })
@@ -196,10 +194,44 @@ test('fails analysis instead of silently reimporting when the linked script is m
   const project = await service.createProject({ rootPath: root, name: 'Demo', language: 'javascript', profileId: 'profile-1' })
   serviceOptions.repository.updateProject(project.id, { importedScriptId: 'deleted-script' })
 
-  const turn = await service.analyzeProject(project.id)
+  const turn = await service.importProject(project.id)
 
   assert.equal(turn.status, 'error')
   assert.deepEqual(imported, [])
+})
+
+test('a running build locks the project and can be cancelled without AI or import', async (t) => {
+  let entered!: () => void
+  const building = new Promise<void>(resolve => { entered = resolve })
+  const { root, service, imported, calls } = createHarness(() => { throw new Error('AI must not run') }, {
+    buildProject: async (_path, signal) => {
+      entered()
+      await new Promise<void>(resolve => signal!.addEventListener('abort', () => resolve(), { once: true }))
+      return { status: 'blocked', code: 'build_cancelled', message: 'cancelled', diagnostics: [] }
+    }
+  })
+  t.after(() => rmSync(root, { recursive: true, force: true }))
+  const project = await service.createProject({ rootPath: root, name: 'Demo', language: 'javascript', profileId: 'profile-1' })
+  const pending = service.importProject(project.id)
+  await building
+  await assert.rejects(() => service.importProject(project.id), /已有正在运行的任务/)
+  await assert.rejects(() => service.startTurn(project.id, 'edit'), /已有正在运行的任务/)
+  assert.equal(service.cancelTurn(project.id), true)
+  assert.equal((await pending).status, 'cancelled')
+  assert.equal(calls.length, 0)
+  assert.deepEqual(imported, [])
+})
+
+test('manual import updates the linked script without creating another script', async (t) => {
+  const { root, service, serviceOptions, imported, calls } = createHarness(() => { throw new Error('AI must not run') })
+  t.after(() => rmSync(root, { recursive: true, force: true }))
+  writeFileSync(join(root, 'autoforge.json'), JSON.stringify({ entry: 'index.mjs', language: 'javascript' }))
+  const project = await service.createProject({ rootPath: root, name: 'Demo', language: 'javascript', profileId: 'profile-1' })
+  serviceOptions.repository.updateProject(project.id, { importedScriptId: 'existing-script' })
+  serviceOptions.registry.getById = id => ({ id })
+  assert.equal((await service.importProject(project.id)).importedScriptId, 'existing-script')
+  assert.deepEqual(imported, ['existing-script'])
+  assert.equal(calls.length, 0)
 })
 
 test('lists saved project turns so a selected project can restore its conversation', async (t) => {
@@ -236,34 +268,20 @@ test('renames a project and changes its pinned state through the project service
   assert.equal(pinned?.pinned, true)
 })
 
-test('repairs a failed syntax check before importing', async (t) => {
-  const manifest = JSON.stringify({ autoforge: '1.0', name: 'Demo', entry: 'index.mjs', language: 'javascript' }, null, 2)
-  let syntaxChecks = 0
-  const source = 'export function {'
-  const badHash = createHash('sha256').update(source).digest('hex')
-  const { root, service, calls, imported } = createHarness((_request, call) => (async function* () {
-    if (call === 1) yield* writeTool([
-      { path: 'autoforge.json', content: manifest },
-      { path: 'index.mjs', content: source }
-    ], { 'autoforge.json': null, 'index.mjs': null })
-    else if (call === 3) yield* writeTool([{ path: 'index.mjs', content: 'export function run() {}' }], { 'index.mjs': badHash })
-    else yield { type: 'complete', finishReason: 'stop' }
-  })(), {
+test('failed syntax is reported without AI repair or file changes', async (t) => {
+  const { root, service, calls, imported } = createHarness(() => { throw new Error('AI must not run') }, {
     checks: {
-      checkScriptPackage: async () => ({ status: 'passed' as const, code: 'package_valid', message: 'ok', diagnostics: [] }),
-      checkScriptSyntax: async () => ++syntaxChecks === 1
-        ? { status: 'failed' as const, code: 'javascript_syntax', message: 'bad syntax', diagnostics: ['SyntaxError at line 1'] }
-        : { status: 'passed' as const, code: 'syntax_valid', message: 'ok', diagnostics: [] }
+      checkScriptPackage: async () => ({ status: 'passed', code: 'package_valid', message: 'ok', diagnostics: [] }),
+      checkScriptSyntax: async () => ({ status: 'failed', code: 'javascript_syntax', message: 'bad syntax', diagnostics: ['SyntaxError at line 1'] })
     }
   })
   t.after(() => rmSync(root, { recursive: true, force: true }))
+  writeFileSync(join(root, 'autoforge.json'), JSON.stringify({ entry: 'index.mjs', language: 'javascript' }))
   const project = await service.createProject({ rootPath: root, name: 'Demo', language: 'javascript', profileId: 'profile-1' })
-
-  const turn = await service.analyzeProject(project.id)
-  assert.equal(calls.length, 4)
-  assert.equal(syntaxChecks, 2)
-  assert.equal(imported[0], 'new-script')
-  assert.equal(turn.status, 'complete')
+  const turn = await service.importProject(project.id)
+  assert.equal(calls.length, 0)
+  assert.deepEqual(imported, [])
+  assert.match(JSON.stringify(turn.checks), /SyntaxError at line 1/)
 })
 
 test('allows only one running turn for a project and cancels before import', async (t) => {
@@ -280,7 +298,7 @@ test('allows only one running turn for a project and cancels before import', asy
   const firstTurn = service.startTurn(project.id, '等待')
   await providerEntered
   await assert.rejects(() => service.startTurn(project.id, '第二轮'), /已有正在运行的任务/)
-  await assert.rejects(() => service.analyzeProject(project.id), /已有正在运行的任务/)
+  await assert.rejects(() => service.importProject(project.id), /已有正在运行的任务/)
   assert.equal(service.cancelTurn(project.id), true)
   assert.equal((await firstTurn).status, 'cancelled')
   assert.deepEqual(imported, [])
@@ -308,7 +326,9 @@ test('cancels after validation and does not begin the import phase', async (t) =
   t.after(() => rmSync(root, { recursive: true, force: true }))
   const project = await service.createProject({ rootPath: root, name: 'Demo', language: 'javascript', profileId: 'profile-1' })
 
-  const turn = await service.analyzeProject(project.id, (event) => {
+  writeFileSync(join(root, 'autoforge.json'), manifest)
+  writeFileSync(join(root, 'index.mjs'), 'export function run() {}')
+  const turn = await service.importProject(project.id, (event) => {
     if (event.type === 'check_result' && (event.check as { code?: string }).code === 'package_valid') {
       service.cancelTurn(project.id)
     }

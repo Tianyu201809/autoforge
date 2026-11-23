@@ -128,7 +128,7 @@ const autoforge = {
     removeAttachment: (projectId: string, attachmentId: string): Promise<boolean> => ipcRenderer.invoke(IPC.AI_PROJECT_ATTACHMENT_REMOVE, projectId, attachmentId),
     startTurn: (projectId: string, message: string, options?: AiTurnOptions): Promise<AiProjectTurn> =>
       ipcRenderer.invoke(IPC.AI_PROJECT_START_TURN, projectId, message, options),
-    analyzeProject: (projectId: string): Promise<AiProjectTurn> => ipcRenderer.invoke(IPC.AI_PROJECT_ANALYZE, projectId),
+    importProject: (projectId: string): Promise<AiProjectTurn> => ipcRenderer.invoke(IPC.AI_PROJECT_IMPORT, projectId),
     cancelTurn: (projectId: string): Promise<boolean> => ipcRenderer.invoke(IPC.AI_PROJECT_CANCEL_TURN, projectId),
     onAgentEvent: (callback: (event: AiAgentEvent) => void): (() => void) => {
       const handler = (_event: IpcRendererEvent, payload: AiAgentEvent) => callback(payload)

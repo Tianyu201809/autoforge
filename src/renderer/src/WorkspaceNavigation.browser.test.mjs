@@ -39,7 +39,7 @@ test('page navigation preserves a running chat and analysis until completion or 
         }})
       }
       window.testAgent={complete:()=>finish?.('complete'),delta:text=>{for(const cb of listeners)cb({type:'assistant_delta',projectId:'p',turnId:'answer-'+started,text})},calls:()=>started}
-      window.autoforge={ai:{listProjects:async()=>[project],getProject:async()=>project,listProjectTurns:async()=>structuredClone(turns),listProfiles:async()=>({profiles:[],activeProfileId:'model',credentialPersistent:true}),onAgentEvent:cb=>{listeners.add(cb);return()=>listeners.delete(cb)},startTurn:run,analyzeProject:run,cancelTurn:async()=>{finish?.('cancelled');return true}}}
+      window.autoforge={ai:{listProjects:async()=>[project],getProject:async()=>project,listProjectTurns:async()=>structuredClone(turns),listProfiles:async()=>({profiles:[],activeProfileId:'model',credentialPersistent:true}),onAgentEvent:cb=>{listeners.add(cb);return()=>listeners.delete(cb)},startTurn:run,importProject:run,cancelTurn:async()=>{finish?.('cancelled');return true}}}
     })
     await page.goto(server.resolvedUrls.local[0]+'navigation-test')
     page.setDefaultTimeout(8000)
@@ -56,7 +56,7 @@ test('page navigation preserves a running chat and analysis until completion or 
     await input.waitFor()
     await page.waitForFunction(()=>!document.querySelector('textarea').disabled)
     assert.match(await page.locator('.ai-conversation').textContent(),/Completed 1/)
-    await page.getByRole('button',{name:'AI 分析、构建并导入',exact:true}).click()
+    await page.getByRole('button',{name:'导入脚本',exact:true}).click()
     await page.locator('#away').click()
     await page.locator('#back').click()
     assert.equal(await input.isDisabled(),true,'analysis must remain busy across navigation')

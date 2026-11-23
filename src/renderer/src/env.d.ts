@@ -117,7 +117,7 @@ export interface AutoforgeApi {
     previewAttachment: (projectId: string, attachmentId: string) => Promise<AiAttachmentPreview>
     removeAttachment: (projectId: string, attachmentId: string) => Promise<boolean>
     startTurn: (projectId: string, message: string, options?: AiTurnOptions) => Promise<AiProjectTurn>
-    analyzeProject: (projectId: string) => Promise<AiProjectTurn>
+    importProject: (projectId: string) => Promise<AiProjectTurn>
     cancelTurn: (projectId: string) => Promise<boolean>
     onAgentEvent: (callback: (event: AiAgentEvent) => void) => () => void
     listProfiles: () => Promise<LlmProfileListResult>

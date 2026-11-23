@@ -28,7 +28,7 @@ test('workspace renders Markdown, attaches previews, sends and restores history'
       let turns=[{id:'first',projectId:project.id,role:'assistant',content:'# Plan\n\n- First\n- Second\n\n```js\nconst value = 1\n```',status:'complete'}]
       turns=JSON.parse(sessionStorage.getItem('turns') || 'null') ?? turns
       let listener=()=>{}
-      window.autoforge={system:{openInExternalEditor:async path=>{window.editorPath=path;return {ok:true}}},ai:{
+      window.autoforge={system:{openPath:async path=>{window.folderPath=path;return true},openInExternalEditor:async path=>{window.editorPath=path;return {ok:true}}},ai:{
         listProjects:async()=>[project,{...project,id:'project-b',name:'Other project',rootPath:'C:/other-project'}],getProject:async()=>project,listProjectTurns:async()=>structuredClone(turns),
         listProfiles:async()=>({profiles:[{id:'p',name:'Vision',hasCredentials:true}],activeProfileId:'p',credentialPersistent:true}),
         onAgentEvent:cb=>{listener=cb;return()=>{}},
@@ -52,6 +52,10 @@ test('workspace renders Markdown, attaches previews, sends and restores history'
     assert.equal(await page.evaluate(()=>window.editorPath),'C:/other-project')
     assert.equal(await page.getByRole('menu').count(),0)
     assert.equal(await page.locator('.ai-project-title').textContent(),'Test workspace')
+    await page.getByRole('button',{name:'Other project',exact:false}).click({button:'right'})
+    await page.getByRole('menuitem',{name:'打开文件目录',exact:true}).click({timeout:2000})
+    assert.equal(await page.evaluate(()=>window.folderPath),'C:/other-project')
+    assert.equal(await page.getByRole('menu').count(),0)
     await page.getByRole('button',{name:'添加素材',exact:true}).click()
     await page.locator('.ai-composer .ai-attachment img').waitFor()
     assert.equal(await page.getByRole('button',{name:'发送消息',exact:true}).isEnabled(),true)

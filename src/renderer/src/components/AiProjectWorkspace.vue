@@ -132,6 +132,17 @@ async function openProjectInEditor(project: (typeof state.projects.value)[number
   }
 }
 
+async function openProjectFolder(project: (typeof state.projects.value)[number]): Promise<void> {
+  openProjectActionsId.value = null
+  try {
+    if (!await window.autoforge.system.openPath(project.rootPath)) {
+      pushToast({ type: 'error', title: '打开目录失败', message: '项目目录不存在或无法访问' })
+    }
+  } catch (error) {
+    pushToast({ type: 'error', title: '打开目录失败', message: error instanceof Error ? error.message : '无法打开项目目录' })
+  }
+}
+
 async function toggleProjectPinned(project: (typeof state.projects.value)[number]): Promise<void> {
   openProjectActionsId.value = null
   await state.setProjectPinned(project.id, !project.pinned)
@@ -220,6 +231,7 @@ async function confirmRemoveProject(project: (typeof state.projects.value)[numbe
             @keydown.esc="openProjectActionsId = null"
           ><MoreHorizontal :size="16" /></button>
           <div v-if="openProjectActionsId === project.id" class="ai-project-actions-menu" role="menu" @click.stop>
+            <button type="button" role="menuitem" @click="openProjectFolder(project)"><FolderOpen :size="14" />打开文件目录</button>
             <button type="button" role="menuitem" @click="openProjectInEditor(project)"><Code2 :size="14" />使用编辑器打开</button>
             <button type="button" role="menuitem" @click="renameProject(project)"><Pencil :size="14" />重命名</button>
             <button type="button" role="menuitem" @click="toggleProjectPinned(project)">
@@ -277,7 +289,7 @@ async function confirmRemoveProject(project: (typeof state.projects.value)[numbe
             <article v-for="turn in conversation" :key="turn.id" class="ai-turn" :class="`ai-turn--${turn.role}`">
               <div class="ai-turn-avatar"><span v-if="turn.role === 'user'">你</span><Bot v-else :size="15" /></div>
               <div class="ai-turn-content">
-                <div class="ai-turn-role">{{ turn.role === 'user' ? '你' : 'Autoforge Agent' }}</div>
+                <div class="ai-turn-role">{{ turn.role === 'user' ? '你' : turn.checks?.length ? '项目构建与导入' : 'Autoforge Agent' }}</div>
                 <div v-if="turn.role === 'assistant'" class="ai-markdown" @click="openMarkdownLink" v-html="turn.html" />
                 <pre v-else>{{ turn.content }}</pre>
                 <div v-if="turn.attachments?.length" class="ai-attachments">
@@ -367,10 +379,10 @@ async function confirmRemoveProject(project: (typeof state.projects.value)[numbe
             type="button"
             class="ai-analyze-button"
             :disabled="state.busy.value"
-            @click="state.analyzeProject()"
+            @click="state.importProject()"
           >
             <LoaderCircle v-if="state.busy.value" class="ai-spin" :size="14" />
-            <span>{{ state.busy.value ? '正在分析、构建和检查…' : state.checkResults.value.length ? '重新分析、构建并导入' : 'AI 分析、构建并导入' }}</span>
+            <span>{{ state.busy.value ? '任务进行中…' : state.checkResults.value.length ? '重新导入脚本' : '导入脚本' }}</span>
           </button>
         </section>
         <section>
@@ -380,7 +392,7 @@ async function confirmRemoveProject(project: (typeof state.projects.value)[numbe
             <span>{{ state.importResult.value.message }}</span>
           </div>
           <p v-else-if="state.busy.value && state.checkResults.value.length" class="ai-inspector-empty">完成构建和全部检查后自动导入</p>
-          <p v-else class="ai-inspector-empty">手动触发分析、构建与检查后，才会导入脚本</p>
+          <p v-else class="ai-inspector-empty">点击导入脚本，构建（如有）并校验通过后导入 Autoforge</p>
         </section>
       </aside>
     </div>

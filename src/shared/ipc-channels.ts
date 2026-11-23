@@ -110,7 +110,7 @@ export const IPC = {
   AI_PROJECT_ATTACHMENT_PREVIEW: 'ai:project:attachment:preview',
   AI_PROJECT_ATTACHMENT_REMOVE: 'ai:project:attachment:remove',
   AI_PROJECT_START_TURN: 'ai:project:start-turn',
-  AI_PROJECT_ANALYZE: 'ai:project:analyze',
+  AI_PROJECT_IMPORT: 'ai:project:import',
   AI_PROJECT_CANCEL_TURN: 'ai:project:cancel-turn',
   EVENT_AI_AGENT: 'event:ai-agent',
 

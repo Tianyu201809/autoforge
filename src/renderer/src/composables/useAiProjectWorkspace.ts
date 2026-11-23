@@ -5,7 +5,7 @@ import type { LlmProfileView } from '../../../shared/ai-types'
 type AiWorkspaceApi = Pick<Window['autoforge']['ai'],
   'pickProjectFolder' | 'listProjects' | 'getProject' | 'listProjectTurns' | 'createProject' | 'renameProject' |
   'setProjectPinned' | 'exportProjectTurns' | 'removeProject' |
-  'pickAttachments' | 'previewAttachment' | 'removeAttachment' | 'startTurn' | 'analyzeProject' | 'cancelTurn' | 'onAgentEvent' | 'listProfiles'>
+  'pickAttachments' | 'previewAttachment' | 'removeAttachment' | 'startTurn' | 'importProject' | 'cancelTurn' | 'onAgentEvent' | 'listProfiles'>
 
 interface AiWorkspaceDraft {
   name: string
@@ -48,7 +48,7 @@ export function useAiProjectWorkspace(
   let runningProjectId: string | null = null
   let selectionVersion = 0
   let disposed = false
-  const canRetry = computed(() => ['error', 'cancelled'].includes(turns.value.at(-1)?.status ?? '') && turns.value.some(turn => turn.role === 'user'))
+  const canRetry = computed(() => !turns.value.at(-1)?.checks?.length && ['error', 'cancelled'].includes(turns.value.at(-1)?.status ?? '') && turns.value.some(turn => turn.role === 'user'))
   async function previewAttachment(attachment: AiProjectAttachment): Promise<void> {
     const projectId = activeProject.value?.id
     if (!projectId || attachmentPreviews.value[attachment.id]) return
@@ -345,7 +345,7 @@ export function useAiProjectWorkspace(
     }
   }
 
-  async function analyzeProject(): Promise<void> {
+  async function importProject(): Promise<void> {
     const projectId = activeProject.value?.id
     if (!projectId || busy.value) return
     busy.value = true
@@ -357,13 +357,13 @@ export function useAiProjectWorkspace(
     checkResults.value = []
     importResult.value = null
     try {
-      const result = await api.analyzeProject(projectId)
+      const result = await api.importProject(projectId)
       if (activeProject.value?.id !== projectId) return
       turns.value.push(result)
       if (result.checks?.length) checkResults.value = result.checks as CheckSummary[]
       if (result.importedScriptId) importResult.value = { ok: true, scriptId: result.importedScriptId, message: '脚本已导入 Autoforge' }
     } catch (cause) {
-      if (activeProject.value?.id === projectId) error.value = cause instanceof Error ? cause.message : 'AI 分析与检查失败'
+      if (activeProject.value?.id === projectId) error.value = cause instanceof Error ? cause.message : '项目构建与导入失败'
     } finally {
       runningProjectId = null
       busy.value = false
@@ -379,6 +379,6 @@ export function useAiProjectWorkspace(
     prompt, streamingText, activeTurnId, fileChanges, checkResults, importResult, creating, projectDraft, pendingFolder,
     load, openProject, chooseProjectFolder, createProject, renameProject, setProjectPinned, exportProjectTurns,
     pendingAttachments, attachmentPreviews, attaching, addAttachments, removeAttachment, previewAttachment, canRetry, retryMessage,
-    removeProject, sendMessage, cancelTurn, analyzeProject
+    removeProject, sendMessage, cancelTurn, importProject
   }
 }

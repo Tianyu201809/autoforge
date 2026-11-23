@@ -20,7 +20,7 @@ export interface AiWorkspaceIpcService {
   previewAttachment(projectId: string, attachmentId: string): AiAttachmentPreview
   removeAttachment(projectId: string, attachmentId: string): boolean
   startTurn(projectId: string, message: string, onEvent?: (event: AiAgentEvent) => void, options?: AiTurnOptions): Promise<AiProjectTurn>
-  analyzeProject(projectId: string, onEvent?: (event: AiAgentEvent) => void): Promise<AiProjectTurn>
+  importProject(projectId: string, onEvent?: (event: AiAgentEvent) => void): Promise<AiProjectTurn>
   cancelTurn(projectId: string): boolean
 }
 
@@ -91,9 +91,9 @@ export function registerAiWorkspaceIpcHandlers(
     if (typeof message !== 'string' || message.length > 16000 || (!message.trim() && !options.attachmentIds?.length && !options.retryUserTurnId)) throw new Error('Agent 消息无效')
     return service.startTurn(projectId, message, (agentEvent) => event.sender.send(IPC.EVENT_AI_AGENT, agentEvent), options)
   })
-  register(IPC.AI_PROJECT_ANALYZE, (event, id) => {
+  register(IPC.AI_PROJECT_IMPORT, (event, id) => {
     const projectId = requireId(id)
-    return service.analyzeProject(projectId, (agentEvent) => event.sender.send(IPC.EVENT_AI_AGENT, agentEvent))
+    return service.importProject(projectId, (agentEvent) => event.sender.send(IPC.EVENT_AI_AGENT, agentEvent))
   })
   register(IPC.AI_PROJECT_CANCEL_TURN, (_event, id) => service.cancelTurn(requireId(id)))
 }

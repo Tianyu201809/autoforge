@@ -22,9 +22,9 @@ function createHarness() {
   let folder: string | null = root
   let projects: AiProjectSummary[] = []
   let removeResult = true
-  let analysisError = false
-  let analysisDeferred = false
-  let resolveAnalysis: ((turn: AiProjectTurn) => void) | null = null
+  let importError = false
+  let importDeferred = false
+  let resolveImport: ((turn: AiProjectTurn) => void) | null = null
   const turn: AiProjectTurn = { id: 'turn-a', projectId: project.id, role: 'assistant', content: 'Done.', status: 'complete', checks: [], createdAt: 'now' }
   const api = {
     pickAttachments: async () => null,
@@ -61,10 +61,10 @@ function createHarness() {
       return 'C:/exports/project.json'
     },
     startTurn: async (id: string, message: string) => { calls.push({ method: 'startTurn', value: message }); return turn },
-    analyzeProject: async (id: string) => {
-      calls.push({ method: 'analyzeProject', value: id })
-      if (analysisError) throw new Error('analysis failed')
-      if (analysisDeferred) return new Promise<AiProjectTurn>((resolve) => { resolveAnalysis = resolve })
+    importProject: async (id: string) => {
+      calls.push({ method: 'importProject', value: id })
+      if (importError) throw new Error('import failed')
+      if (importDeferred) return new Promise<AiProjectTurn>((resolve) => { resolveImport = resolve })
       listeners.forEach((listener) => {
         listener({ type: 'check_result', projectId: id, turnId: turn.id, check: { code: 'package_valid', status: 'passed' } })
         listener({ type: 'import_result', projectId: id, turnId: turn.id, ok: true, scriptId: 'script-a', message: '已导入' })
@@ -78,11 +78,11 @@ function createHarness() {
     emit: (event: AiAgentEvent) => listeners.forEach((listener) => listener(event)),
     setFolder: (value: string | null) => { folder = value },
     setRemoveResult: (value: boolean) => { removeResult = value },
-    setAnalysisError: (value: boolean) => { analysisError = value },
-    setAnalysisDeferred: (value: boolean) => { analysisDeferred = value },
-    resolveAnalysis: (value: AiProjectTurn) => resolveAnalysis?.(value)
+    setImportError: (value: boolean) => { importError = value },
+    setImportDeferred: (value: boolean) => { importDeferred = value },
+    resolveImport: (value: AiProjectTurn) => resolveImport?.(value)
   }
-  return { api, calls, listeners, project, secondProject, turn, setRemoveResult: api.setRemoveResult, setAnalysisError: api.setAnalysisError, setAnalysisDeferred: api.setAnalysisDeferred, resolveAnalysis: api.resolveAnalysis }
+  return { api, calls, listeners, project, secondProject, turn, setRemoveResult: api.setRemoveResult, setImportError: api.setImportError, setImportDeferred: api.setImportDeferred, resolveImport: api.resolveImport }
 }
 
 test('creates a project from the selected folder and restores the saved project', async () => {
@@ -114,47 +114,62 @@ test('updates an active turn from events and cancels it from the workspace', asy
   scope.stop()
 })
 
-test('runs analysis only on explicit request and collects its check and import result', async () => {
+test('runs import only on explicit request and collects its check and import result', async () => {
   const harness = createHarness()
   const scope = effectScope()
   const state = scope.run(() => useAiProjectWorkspace(harness.api))!
   await state.load()
   await state.openProject('project-a')
 
-  await state.analyzeProject()
+  await state.importProject()
 
-  assert.deepEqual(harness.calls.map((call) => call.method), ['analyzeProject'])
+  assert.deepEqual(harness.calls.map((call) => call.method), ['importProject'])
   assert.equal(state.checkResults.value[0]?.code, 'package_valid')
   assert.equal(state.importResult.value?.scriptId, 'script-a')
   assert.equal(state.busy.value, false)
   scope.stop()
 })
 
-test('clears analysis busy state and exposes errors when the explicit analysis fails', async () => {
+test('clears import busy state and exposes errors when the explicit import fails', async () => {
   const harness = createHarness()
-  harness.setAnalysisError(true)
+  harness.setImportError(true)
   const scope = effectScope()
   const state = scope.run(() => useAiProjectWorkspace(harness.api))!
   await state.load()
   await state.openProject('project-a')
 
-  await state.analyzeProject()
+  await state.importProject()
 
-  assert.equal(state.error.value, 'analysis failed')
+  assert.equal(state.error.value, 'import failed')
   assert.equal(state.busy.value, false)
   scope.stop()
 })
 
-test('keeps an analysis result attached to its project when the user switches projects', async () => {
+test('does not offer AI message retry after a failed manual import', async () => {
   const harness = createHarness()
-  harness.setAnalysisDeferred(true)
   const scope = effectScope()
   const state = scope.run(() => useAiProjectWorkspace(harness.api))!
   await state.openProject('project-a')
-  const analyzing = state.analyzeProject()
+  state.turns.value = [
+    { ...harness.turn, id: 'user-before-import', role: 'user', status: 'complete' },
+    { ...harness.turn, status: 'error', checks: [{ code: 'build_failed', status: 'failed' }] }
+  ]
+  assert.equal(state.canRetry.value, false)
+  await state.retryMessage()
+  assert.deepEqual(harness.calls, [])
+  scope.stop()
+})
+
+test('keeps an import result attached to its project when the user switches projects', async () => {
+  const harness = createHarness()
+  harness.setImportDeferred(true)
+  const scope = effectScope()
+  const state = scope.run(() => useAiProjectWorkspace(harness.api))!
+  await state.openProject('project-a')
+  const importing = state.importProject()
   await state.openProject('project-b')
-  harness.resolveAnalysis({ ...harness.turn, projectId: 'project-a', importedScriptId: 'script-a' })
-  await analyzing
+  harness.resolveImport({ ...harness.turn, projectId: 'project-a', importedScriptId: 'script-a' })
+  await importing
 
   assert.equal(state.activeProject.value?.id, 'project-b')
   assert.equal(state.turns.value.some((turn) => turn.projectId === 'project-a'), false)

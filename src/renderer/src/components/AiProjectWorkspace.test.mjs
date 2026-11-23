@@ -15,8 +15,8 @@ describe('AI project workspace view', () => {
   it('provides conversation controls, retry, and an inspector toggle', () => {
     assert.match(source, /sendMessage/)
     assert.match(source, /cancelTurn/)
-    assert.match(source, /analyzeProject/)
-    assert.match(source, /AI 分析、构建并导入/)
+    assert.match(source, /importProject/)
+    assert.match(source, /导入脚本/)
     assert.match(source, /toggleInspector/)
     assert.match(source, /调整检查面板宽度/)
     assert.match(source, /ai-inspector--drawer/)
@@ -25,7 +25,7 @@ describe('AI project workspace view', () => {
 
   it('describes the explicitly triggered build, check, and import workflow', () => {
     assert.match(source, /完成构建和全部检查后自动导入/)
-    assert.match(source, /手动触发分析、构建与检查后，才会导入脚本/)
+    assert.match(source, /点击导入脚本，构建（如有）并校验通过后导入 Autoforge/)
   })
 
   it('keeps project selection separate from rename, pin, export, and delete actions', () => {
