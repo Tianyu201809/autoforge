@@ -144,7 +144,6 @@ export function createAgentService(options: AgentServiceOptions) {
     setStatus(projectId, 'importing')
     try {
       const linkedScript = project.importedScriptId ? options.registry.getById(project.importedScriptId) : undefined
-      if (project.importedScriptId && !linkedScript) throw new Error('关联的 Autoforge 脚本不存在，请修复项目关联后重试')
       const script = linkedScript
         ? options.registry.updateFromProject(linkedScript.id, project.rootPath)
         : options.registry.importFromPath(project.rootPath)
@@ -153,10 +152,11 @@ export function createAgentService(options: AgentServiceOptions) {
         type: 'import_result', projectId, turnId, ok: true, scriptId: script.id, message: '脚本已导入 Autoforge'
       })
       return script
-    } catch {
+    } catch (error) {
+      const detail = error instanceof Error && error.message.trim() ? error.message.slice(0, 1000) : '导入脚本失败'
       options.repository.updateProject(projectId, { status: 'error' })
-      safeEmit(callback, { type: 'import_result', projectId, turnId, ok: false, message: '导入脚本失败' })
-      throw new Error('导入脚本失败')
+      safeEmit(callback, { type: 'import_result', projectId, turnId, ok: false, message: detail })
+      throw new Error(detail, { cause: error })
     }
   }
 

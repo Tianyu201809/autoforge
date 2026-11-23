@@ -9,6 +9,9 @@ import { ScriptStore } from './script-store'
 import { ScriptWorkspace } from './script-workspace'
 import { createProjectBuilder } from './ai/project-builder'
 import { createProjectChecks } from './ai/project-checks'
+import { createAgentService } from './ai/agent-service'
+import { createProjectWorkspace } from './ai/project-workspace'
+import { AiWorkspaceRepository } from '../db/repositories/ai-workspace-repository'
 
 function writePackage(root: string, entry: string, content: string, version: string): void {
   mkdirSync(root, { recursive: true })
@@ -29,7 +32,7 @@ test('imports a project, updates it in place, and restores the prior script afte
     rmSync(root, { recursive: true, force: true })
   })
 
-  await initDatabase(userData)
+  const database = await initDatabase(userData)
   const store = new ScriptStore()
   const workspace = new ScriptWorkspace(() => userData)
   const registry = new ScriptRegistry(store, workspace)
@@ -50,6 +53,31 @@ test('imports a project, updates it in place, and restores the prior script afte
 
   writePackage(source, 'index.mjs', 'export const version = 1', '1.0.0')
   const imported = registry.importFromPath(source)
+  const projects = new AiWorkspaceRepository(database)
+  const project = projects.createProject({
+    id: 'project-reimport', name: 'Demo', rootPath: source, language: 'javascript', profileId: 'offline', importedScriptId: 'deleted-script'
+  })
+  const agent = createAgentService({
+    repository: projects,
+    profiles: { resolveProvider: () => { throw new Error('Import must not call AI') } },
+    workspace: createProjectWorkspace(id => projects.getProject(id)?.rootPath ?? null),
+    checks,
+    registry
+  })
+  const firstImport = await agent.importProject(project.id)
+  assert.equal(firstImport.status, 'complete', firstImport.content)
+  assert.ok(firstImport.importedScriptId)
+  const linkedId = firstImport.importedScriptId!
+  assert.equal(projects.getProject(project.id)?.importedScriptId, linkedId)
+  assert.equal(readFileSync(join(registry.getById(linkedId)!.workspacePath, 'index.mjs'), 'utf8'), 'export const version = 1')
+  assert.equal(registry.delete(linkedId), true)
+  const reimport = await agent.importProject(project.id)
+  assert.equal(reimport.status, 'complete', reimport.content)
+  assert.ok(reimport.importedScriptId)
+  assert.notEqual(reimport.importedScriptId, linkedId)
+  assert.equal(projects.getProject(project.id)?.importedScriptId, reimport.importedScriptId)
+  const updatedImport = await agent.importProject(project.id)
+  assert.equal(updatedImport.importedScriptId, reimport.importedScriptId)
   store.setPreference(imported.id, {
     starred: true,
     defaultEnvId: 'default',

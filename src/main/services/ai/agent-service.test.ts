@@ -184,7 +184,7 @@ test('a failed build blocks import without asking AI to repair', async (t) => {
   assert.match(JSON.stringify(result.checks), /missing dependency in build/)
 })
 
-test('fails import instead of silently reimporting when the linked script is missing', async (t) => {
+test('reimports and replaces a stale link when the previously imported script was deleted', async (t) => {
   const { root, service, serviceOptions, imported } = createHarness(async function* () {
     yield { type: 'complete', finishReason: 'stop' }
   })
@@ -196,8 +196,27 @@ test('fails import instead of silently reimporting when the linked script is mis
 
   const turn = await service.importProject(project.id)
 
+  assert.equal(turn.status, 'complete')
+  assert.deepEqual(imported, ['new-script'])
+  assert.equal(service.getProject(project.id)?.importedScriptId, 'new-script')
+})
+
+test('preserves the concrete import error in the saved result and renderer event', async (t) => {
+  const { root, service } = createHarness(async function* () { yield { type: 'complete' } }, {
+    registry: {
+      getById: () => undefined,
+      updateFromProject: () => { throw new Error('unexpected update') },
+      importFromPath: () => { throw new Error('EACCES: cannot write script directory') }
+    }
+  })
+  t.after(() => rmSync(root, { recursive: true, force: true }))
+  writeFileSync(join(root, 'autoforge.json'), JSON.stringify({ entry: 'index.mjs', language: 'javascript' }))
+  const project = await service.createProject({ rootPath: root, name: 'Demo', language: 'javascript', profileId: 'profile-1' })
+  const events: Array<{ type: string; message?: string }> = []
+  const turn = await service.importProject(project.id, event => events.push(event))
   assert.equal(turn.status, 'error')
-  assert.deepEqual(imported, [])
+  assert.match(turn.content, /EACCES: cannot write script directory/)
+  assert.match(events.find(event => event.type === 'import_result')?.message ?? '', /EACCES: cannot write script directory/)
 })
 
 test('a running build locks the project and can be cancelled without AI or import', async (t) => {
