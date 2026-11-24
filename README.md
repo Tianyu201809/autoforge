@@ -4,10 +4,10 @@
 
 ### 自动化脚本散落在各处，环境配置重复录入，运行结果难以追溯——Autoforge 把它们收进一个本机桌面工作台。
 
-[![Version](https://img.shields.io/badge/version-2.0.0-blue)](docs/v2.0.0.md)
+[![Version](https://img.shields.io/badge/version-2.1.0-blue)](docs/v2.1.0.md)
 [![License](https://img.shields.io/badge/license-MIT-green)](LICENSE)
 
-[快速开始](#install) · [看示例](#see-it-work) · [AI 项目工作区](docs/v2.0.0.md) · [脚本开发](#脚本开发) · [版本说明](docs/v2.0.0.md) · [更新日志](docs/CHANGELOG.md)
+[快速开始](#install) · [看示例](#see-it-work) · [AI 项目工作区](docs/v2.1.0.md) · [脚本开发](#脚本开发) · [版本说明](docs/v2.1.0.md) · [更新日志](docs/CHANGELOG.md)
 
 </div>
 
@@ -140,7 +140,7 @@ Python 脚本：先在 **设置 → Python** 检测并配置解释器路径，�
 
 ## 功能概览
 
-- **AI 项目工作区** — 选择本机文件夹，以对话方式创建或修改 JavaScript / Python 脚本；通过包校验与语法检查后自动导入，不自动运行生成的脚本
+- **AI 项目工作区** — 选择本机文件夹，以对话方式创建或修改 JavaScript / Python 脚本；手动导入时按需构建、校验并导入，不自动运行生成的脚本
 - **多模型配置** — OpenAI、Anthropic、Gemini 与兼容端点，包含 DeepSeek、Qwen、GLM、Kimi 和自定义服务；密钥由主进程安全存储
 - **统一工作台** — 项目、脚本、运行历史、Autoforge Hub、开发指南与设置集中在可调整侧栏的主窗口
 - **双语言运行时** — JavaScript（主进程）与 Python（子进程），共用 `run(ctx)` 契约
@@ -273,9 +273,10 @@ Electron 34 · Vue 3 · TypeScript · Tailwind CSS 4 · Playwright Core · sql.j
 
 | 文档 | 内容 |
 |------|------|
+| [v2.1.0 版本说明](docs/v2.1.0.md) | AI 项目工作区优化、手动构建导入与 Agent 开发规范 |
 | [v2.0.0 版本说明](docs/v2.0.0.md) | AI Agent、多模型配置与统一工作台 |
-| [AI 项目工作区技术文档](docs/features/ai-agent-workspace.md) | provider、受限文件操作、Agent 与自动导入链路 |
-| [v1.42.0 版本说明](docs/v1.42.0.md) | 当前版本：安装校验、JS 宿主进程、SQLite 原子落盘与环境变量加密 |
+| [AI 项目工作区技术文档](docs/features/ai-agent-workspace.md) | provider、受限文件操作、Agent 与手动构建导入链路 |
+| [v1.42.0 版本说明](docs/v1.42.0.md) | 历史版本：安装校验、JS 宿主进程、SQLite 原子落盘与环境变量加密 |
 | [v1.36.0 版本说明](docs/v1.36.0.md) | 分类筛选规则优化 |
 | [v1.35.0 版本说明](docs/v1.35.0.md) | 插件中心并发安装、分栏缓存与界面主题优化 |
 | [v1.31.0 版本说明](docs/v1.31.0.md) | 原生脚本导出 ZIP、500 MB 导出上限 |
